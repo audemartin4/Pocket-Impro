@@ -1808,9 +1808,14 @@ function BibliothequeTab({ data, update, setTab, isAdmin, currentUser, goToLibra
                   <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">Exercice · {ex.phase}</span>
                   <div className="flex gap-1">
                     <button onClick={() => toggleFavExercise(ex.id)} title="Favori">
-                      <Star size={16} color={ex.favorite ? COLORS.brass : COLORS.textSoft} fill={ex.favorite ? COLORS.brass : "none"} />
+                      <Star size={22} color={ex.favorite ? COLORS.brass : COLORS.textSoft} fill={ex.favorite ? COLORS.brass : "none"} />
                     </button>
-                    {isAdmin && <button onClick={() => setEditingExerciseId(ex.id)}><Pencil size={14} color={COLORS.textSoft} /></button>}
+                    {isAdmin && <Btn small variant="ghost" onClick={() => setEditingExerciseId(ex.id)}>Modifier</Btn>}
+                    {isAdmin && (
+                      <Btn small variant="ghost" onClick={() => update((d) => { d.exercises = d.exercises.filter((x) => x.id !== ex.id); return d; })}>
+                        Supprimer
+                      </Btn>
+                    )}
                   </div>
                 </div>
                 <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-lg font-medium">{ex.title}</h3>
@@ -1844,9 +1849,14 @@ function BibliothequeTab({ data, update, setTab, isAdmin, currentUser, goToLibra
                   <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">Catégorie</span>
                   <div className="flex gap-1">
                     <button onClick={() => toggleFavCategory(c.id)} title="Favori">
-                      <Star size={16} color={c.favorite ? COLORS.brass : COLORS.textSoft} fill={c.favorite ? COLORS.brass : "none"} />
+                      <Star size={22} color={c.favorite ? COLORS.brass : COLORS.textSoft} fill={c.favorite ? COLORS.brass : "none"} />
                     </button>
-                    {isAdmin && <button onClick={() => setEditingCategoryId(c.id)}><Pencil size={14} color={COLORS.textSoft} /></button>}
+                    {isAdmin && <Btn small variant="ghost" onClick={() => setEditingCategoryId(c.id)}>Modifier</Btn>}
+                    {isAdmin && (
+                      <Btn small variant="ghost" onClick={() => update((d) => { d.categories = d.categories.filter((x) => x.id !== c.id); return d; })}>
+                        Supprimer
+                      </Btn>
+                    )}
                   </div>
                 </div>
                 <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-lg font-medium">{c.name}</h3>
@@ -1930,7 +1940,7 @@ function FavorisTab({ data, update, isAdmin, currentUser, setTab }) {
                 <div className="flex justify-between items-start">
                   <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-lg font-medium">{ex.title}</h3>
                   <div className="flex gap-1">
-                    <button onClick={() => toggleFavExercise(ex.id)} title="Retirer des favoris"><Star size={16} color={COLORS.brass} fill={COLORS.brass} /></button>
+                    <button onClick={() => toggleFavExercise(ex.id)} title="Retirer des favoris"><Star size={22} color={COLORS.brass} fill={COLORS.brass} /></button>
                     {isAdmin && <button onClick={() => setEditingExerciseId(ex.id)}><Pencil size={14} color={COLORS.textSoft} /></button>}
                   </div>
                 </div>
@@ -1966,7 +1976,7 @@ function FavorisTab({ data, update, isAdmin, currentUser, setTab }) {
                 <div className="flex justify-between items-start">
                   <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-lg font-medium">{c.name}</h3>
                   <div className="flex gap-1">
-                    <button onClick={() => toggleFavCategory(c.id)} title="Retirer des favoris"><Star size={16} color={COLORS.brass} fill={COLORS.brass} /></button>
+                    <button onClick={() => toggleFavCategory(c.id)} title="Retirer des favoris"><Star size={22} color={COLORS.brass} fill={COLORS.brass} /></button>
                     {isAdmin && <button onClick={() => setEditingCategoryId(c.id)}><Pencil size={14} color={COLORS.textSoft} /></button>}
                   </div>
                 </div>
@@ -2576,7 +2586,7 @@ function ExercicesTab({ data, update, isAdmin, currentUser, onlyUserCreated, ini
           <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-lg font-medium">{ex.title}</h3>
           <div className="flex gap-1">
             <button onClick={() => toggleFavorite(ex.id)} title="Favori">
-              <Star size={16} color={ex.favorite ? COLORS.brass : COLORS.textSoft} fill={ex.favorite ? COLORS.brass : "none"} />
+              <Star size={22} color={ex.favorite ? COLORS.brass : COLORS.textSoft} fill={ex.favorite ? COLORS.brass : "none"} />
             </button>
             {isAdmin && ex.pending && (
               <>
@@ -3415,7 +3425,7 @@ function CategoriesTab({ data, update, isAdmin, currentUser, onlyUserCreated, in
           </h3>
           <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
             <button onClick={() => toggleFavorite(c.id)} title="Favori">
-              <Star size={16} color={c.favorite ? COLORS.brass : COLORS.textSoft} fill={c.favorite ? COLORS.brass : "none"} />
+              <Star size={22} color={c.favorite ? COLORS.brass : COLORS.textSoft} fill={c.favorite ? COLORS.brass : "none"} />
             </button>
             {isAdmin && c.pending && (
               <>
@@ -4757,7 +4767,7 @@ function GenerateurCoursTab({ data, update, goTo, plan, setPlan, currentUser, se
                     <div className="flex items-center gap-2">
                       <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{c.actualDuration ?? c.duration ?? 5} min</span>
                       <button onClick={() => toggleFavCat(c.id)} title="Favori">
-                        <Star size={16} color={c.favorite ? COLORS.brass : COLORS.textSoft} fill={c.favorite ? COLORS.brass : "none"} />
+                        <Star size={22} color={c.favorite ? COLORS.brass : COLORS.textSoft} fill={c.favorite ? COLORS.brass : "none"} />
                       </button>
                     </div>
                     <button onClick={() => removeCat(it.idx)} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
@@ -4867,7 +4877,7 @@ function GenerateurCoursTab({ data, update, goTo, plan, setPlan, currentUser, se
                       </span>
                     )}
                     <button onClick={() => toggleFavEx(it.ex.id)} title="Favori">
-                      <Star size={16} color={it.ex.favorite ? COLORS.brass : COLORS.textSoft} fill={it.ex.favorite ? COLORS.brass : "none"} />
+                      <Star size={22} color={it.ex.favorite ? COLORS.brass : COLORS.textSoft} fill={it.ex.favorite ? COLORS.brass : "none"} />
                     </button>
                   </div>
                   <button onClick={() => remove(it.slot, it.idx)} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
@@ -5305,7 +5315,7 @@ function GenerateurSpectacleTab({ data, update, plan, setPlan, currentUser, setT
                     <div className="flex items-center gap-2">
                       <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{c.actualDuration ?? c.duration ?? 5} min</span>
                       <button onClick={() => toggleFavCat(c.id)} title="Favori">
-                        <Star size={16} color={c.favorite ? COLORS.brass : COLORS.textSoft} fill={c.favorite ? COLORS.brass : "none"} />
+                        <Star size={22} color={c.favorite ? COLORS.brass : COLORS.textSoft} fill={c.favorite ? COLORS.brass : "none"} />
                       </button>
                     </div>
                     <button onClick={() => removeCat("first", i)} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
@@ -5391,7 +5401,7 @@ function GenerateurSpectacleTab({ data, update, plan, setPlan, currentUser, setT
                     <div className="flex items-center gap-2">
                       <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{c.actualDuration ?? c.duration ?? 5} min</span>
                       <button onClick={() => toggleFavCat(c.id)} title="Favori">
-                        <Star size={16} color={c.favorite ? COLORS.brass : COLORS.textSoft} fill={c.favorite ? COLORS.brass : "none"} />
+                        <Star size={22} color={c.favorite ? COLORS.brass : COLORS.textSoft} fill={c.favorite ? COLORS.brass : "none"} />
                       </button>
                     </div>
                     <button onClick={() => removeCat("second", i)} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
@@ -5653,7 +5663,7 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
                   <div className="flex items-center gap-2">
                     <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{e.actualDuration ?? e.duration} min</span>
                     <button onClick={() => toggleFavorite(e.id)} title="Favori">
-                      <Star size={16} color={e.favorite ? COLORS.brass : COLORS.textSoft} fill={e.favorite ? COLORS.brass : "none"} />
+                      <Star size={22} color={e.favorite ? COLORS.brass : COLORS.textSoft} fill={e.favorite ? COLORS.brass : "none"} />
                     </button>
                   </div>
                   <button onClick={() => remove(idx)} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
