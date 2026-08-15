@@ -2049,8 +2049,8 @@ function ProfilTab({ data, update, setTab, currentUser, setCurrentUser }) {
   const stats = [
     { label: "Plans de cours enregistrés", n: data.coursePlans.length, icon: ClipboardList, tab: "plans" },
     { label: "Spectacles enregistrés", n: data.spectaclePlans.length, icon: Theater, tab: "plans" },
-    { label: "Catégories créées", n: data.categories.filter((c) => c.createdByUser).length, icon: Tag, tab: "categories-crees" },
-    { label: "Exercices créés", n: data.exercises.filter((e) => e.createdByUser).length, icon: Users, tab: "exercices-crees" },
+    { label: "Catégories créées", n: data.categories.filter((c) => c.creatorUsername === currentUser).length, icon: Tag, tab: "categories-crees" },
+    { label: "Exercices créés", n: data.exercises.filter((e) => e.creatorUsername === currentUser).length, icon: Users, tab: "exercices-crees" },
     { label: "Favoris", n: nbFavoris, icon: Star, tab: "favoris" },
   ];
 
@@ -2614,7 +2614,7 @@ function ExercicesTab({ data, update, isAdmin, currentUser, onlyUserCreated, ini
   const canCreate = isAdmin || !!currentUser;
   const currentAccount = (data.accounts || []).find((a) => a.username === currentUser);
 
-  const baseExercises = onlyUserCreated ? data.exercises.filter((e) => e.createdByUser) : data.exercises.filter((e) => !e.pending && !e.rejected);
+  const baseExercises = onlyUserCreated ? data.exercises.filter((e) => e.creatorUsername === currentUser) : data.exercises.filter((e) => !e.pending && !e.rejected);
 
   // Stampe les champs de modération/attribution sur une nouvelle fiche : les créations Admin sont
   // publiées directement, les créations d'un compte utilisateur restent "pending" jusqu'à validation.
@@ -2845,6 +2845,23 @@ function ExercicesTab({ data, update, isAdmin, currentUser, onlyUserCreated, ini
       />
     </>
   );
+
+  // Page "Exercices créés" (accessible depuis Mon profil) : liste simple des exercices proposés
+  // par CE compte, sans reprendre toute la navigation par famille/tags de la bibliothèque générale.
+  if (onlyUserCreated) {
+    return (
+      <div>
+        {header}
+        <Toast toast={toastMsg} />
+        {duplicatePrompt}
+        {baseExercises.length === 0 ? (
+          <Empty text="Aucun exercice créé pour l'instant." />
+        ) : (
+          baseExercises.map(renderCard)
+        )}
+      </div>
+    );
+  }
 
   if (view.type === "echauffement-groupe") {
     const exos = groupedEchByGroupe[view.groupe] || [];
@@ -3465,7 +3482,7 @@ function CategoriesTab({ data, update, isAdmin, currentUser, onlyUserCreated, in
   const [toastMsg, showToast] = useToast();
   const [fullSheetId, setFullSheetId] = useState(null); // fiche complète (univers) actuellement ouverte
 
-  const baseCategories = onlyUserCreated ? data.categories.filter((c) => c.createdByUser) : data.categories.filter((c) => !c.pending && !c.rejected);
+  const baseCategories = onlyUserCreated ? data.categories.filter((c) => c.creatorUsername === currentUser) : data.categories.filter((c) => !c.pending && !c.rejected);
 
   const canCreate = isAdmin || !!currentUser;
   const currentAccount = (data.accounts || []).find((a) => a.username === currentUser);
@@ -3736,6 +3753,28 @@ function CategoriesTab({ data, update, isAdmin, currentUser, onlyUserCreated, in
     ...CATEGORY_TAGS.filter((t) => grouped[t]),
     ...Object.keys(grouped).filter((t) => !CATEGORY_TAGS.includes(t)),
   ];
+
+  // Page "Catégories créées" (accessible depuis Mon profil) : liste simple des catégories proposées
+  // par CE compte, sans reprendre toute la navigation par famille/tags de la bibliothèque générale.
+  if (onlyUserCreated) {
+    return (
+      <div>
+        {setTab && <LibraryBackBtn label="Mon profil" onClick={() => setTab("profil")} />}
+        <SectionHeader
+          icon={Tag}
+          title="Catégories créées"
+          subtitle="Genres de scène (Muette, ADC, Show me that…), avec thématiques et archétypes liés."
+        />
+        <Toast toast={toastMsg} />
+        {duplicatePrompt}
+        {baseCategories.length === 0 ? (
+          <Empty text="Aucune catégorie créée pour l'instant." />
+        ) : (
+          baseCategories.map(renderCard)
+        )}
+      </div>
+    );
+  }
 
   if (view.type === "tag") {
     const catsAll = grouped[view.tag] || [];
