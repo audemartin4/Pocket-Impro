@@ -6051,12 +6051,7 @@ function PlansTab({ data, update, setTab }) {
         <IndexCard key={plan.id}>
           <div className="flex justify-between items-start">
             <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-lg font-medium">{plan.name}</h3>
-            <div className="flex gap-2">
-              <button onClick={() => exportPlan(plan)} title="Exporter en PDF"><Download size={15} color={COLORS.ink} /></button>
-              <button onClick={() => update((d) => { d.coursePlans = d.coursePlans.filter((x) => x.id !== plan.id); return d; })}>
-                <Trash2 size={14} color={COLORS.accent} />
-              </button>
-            </div>
+            <button onClick={() => exportPlan(plan)} title="Exporter en PDF" className="p-1 -m-1"><Download size={24} color={COLORS.ink} /></button>
           </div>
           <ol className="text-sm mt-1 list-decimal list-inside" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
             {plan.exerciseIds.map((id) => {
@@ -6068,6 +6063,11 @@ function PlansTab({ data, update, setTab }) {
               return <li key={id}>{c ? `${c.name} (${c.duration || 5} min) — catégorie d'impro` : "(catégorie supprimée)"}</li>;
             })}
           </ol>
+          <div className="flex justify-end mt-2">
+            <button onClick={() => update((d) => { d.coursePlans = d.coursePlans.filter((x) => x.id !== plan.id); return d; })} title="Supprimer" className="p-1 -m-1">
+              <Trash2 size={22} color={COLORS.accent} />
+            </button>
+          </div>
         </IndexCard>
       ))}
 
@@ -6080,12 +6080,7 @@ function PlansTab({ data, update, setTab }) {
               <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-lg font-medium">{plan.name}</h3>
               <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{plan.format} · {plan.duree} min</span>
             </div>
-            <div className="flex gap-2">
-              <button onClick={() => exportSpectaclePlan(plan)} title="Exporter en PDF"><Download size={15} color={COLORS.ink} /></button>
-              <button onClick={() => update((d) => { d.spectaclePlans = d.spectaclePlans.filter((x) => x.id !== plan.id); return d; })}>
-                <Trash2 size={14} color={COLORS.accent} />
-              </button>
-            </div>
+            <button onClick={() => exportSpectaclePlan(plan)} title="Exporter en PDF" className="p-1 -m-1"><Download size={24} color={COLORS.ink} /></button>
           </div>
           <ol className="text-sm mt-1 list-decimal list-inside" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
             {(plan.categoryIds || []).map((id) => {
@@ -6093,6 +6088,11 @@ function PlansTab({ data, update, setTab }) {
               return <li key={id}>{c ? `${c.name} (${c.duration || 5} min)` : "(catégorie supprimée)"}</li>;
             })}
           </ol>
+          <div className="flex justify-end mt-2">
+            <button onClick={() => update((d) => { d.spectaclePlans = d.spectaclePlans.filter((x) => x.id !== plan.id); return d; })} title="Supprimer" className="p-1 -m-1">
+              <Trash2 size={22} color={COLORS.accent} />
+            </button>
+          </div>
         </IndexCard>
       ))}
     </div>
