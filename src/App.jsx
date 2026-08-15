@@ -1783,12 +1783,15 @@ function BibliothequeTab({ data, update, setTab, isAdmin, currentUser, goToLibra
   const [query, setQuery] = useState("");
   const q = normalize(query);
   const detectedNiveau = detectNiveauQuery(query);
-  const sortByNiveau = (arr, getLevel) => {
-    if (!detectedNiveau) return arr;
-    return [...arr].sort((a, b) => (getLevel(a) === detectedNiveau ? 0 : 1) - (getLevel(b) === detectedNiveau ? 0 : 1));
+  // Trie par ordre alphabétique en priorité, puis remonte les fiches du niveau détecté dans la
+  // recherche (tri stable : l'ordre alphabétique est conservé au sein de chaque groupe de niveau).
+  const sortByNiveau = (arr, getLevel, getLabel) => {
+    const alpha = [...arr].sort((a, b) => getLabel(a).localeCompare(getLabel(b), "fr"));
+    if (!detectedNiveau) return alpha;
+    return alpha.sort((a, b) => (getLevel(a) === detectedNiveau ? 0 : 1) - (getLevel(b) === detectedNiveau ? 0 : 1));
   };
-  const matchedExercises = sortByNiveau(q ? data.exercises.filter((e) => matchesKeywords(query, e.title, e.groupe, (e.objectives || []).join(" "), (e.thematiques || []).join(" "), e.level)) : [], (e) => e.level);
-  const matchedCategories = sortByNiveau(q ? data.categories.filter((c) => matchesKeywords(query, c.name, (c.tags || []).join(" "), (c.objectives || []).join(" "), (c.thematiques || []).join(" "), c.level)) : [], (c) => c.level);
+  const matchedExercises = sortByNiveau(q ? data.exercises.filter((e) => matchesKeywords(query, e.title, e.groupe, (e.objectives || []).join(" "), (e.thematiques || []).join(" "), e.level)) : [], (e) => e.level, (e) => e.title);
+  const matchedCategories = sortByNiveau(q ? data.categories.filter((c) => matchesKeywords(query, c.name, (c.tags || []).join(" "), (c.objectives || []).join(" "), (c.thematiques || []).join(" "), c.level)) : [], (c) => c.level, (c) => c.name);
   const matchedObjectifs = q ? data.objectifs.filter((o) => matchesKeywords(query, o)) : [];
   const matchedThematiques = q ? data.thematiques.filter((t) => matchesKeywords(query, t)) : [];
   const familles = [...new Set(data.exercises.map((e) => e.groupe).filter(Boolean))];
@@ -2763,6 +2766,11 @@ function ExercicesTab({ data, update, isAdmin, currentUser, profile, onlyUserCre
                 Supprimer
               </Btn>
             )}
+            {!isAdmin && ex.rejected && ex.creatorUsername === currentUser && (
+              <Btn small variant="ghost" onClick={() => update((d) => { d.exercises = d.exercises.filter((x) => x.id !== ex.id); return d; })}>
+                Supprimer
+              </Btn>
+            )}
           </div>
         </div>
         {ex.pending && (
@@ -2928,7 +2936,7 @@ function ExercicesTab({ data, update, isAdmin, currentUser, profile, onlyUserCre
   if (view.type === "echauffement-groupe") {
     const exos = groupedEchByGroupe[view.groupe] || [];
     const sq = normalize(subQuery);
-    const filteredExos = sq ? echauffements.filter((e) => matchesKeywords(subQuery, e.title, e.groupe, (e.thematiques || []).join(" "), (e.objectives || []).join(" "), e.level)) : exos;
+    const filteredExos = [...(sq ? echauffements.filter((e) => matchesKeywords(subQuery, e.title, e.groupe, (e.thematiques || []).join(" "), (e.objectives || []).join(" "), e.level)) : exos)].sort((a, b) => a.title.localeCompare(b.title, "fr"));
     return (
       <div>
         <BackBtn label="Échauffements" onClick={() => { setView({ type: "echauffement-groupes" }); setSubQuery(""); }} />
@@ -2936,7 +2944,7 @@ function ExercicesTab({ data, update, isAdmin, currentUser, profile, onlyUserCre
         <Toast toast={toastMsg} />
         {adminNotice}
         <div className="flex justify-end mb-3">
-          {canCreate && !adding && <Btn small variant="accent" onClick={() => setAdding(true)}><Plus size={13} /> Ajouter un exercice</Btn>}
+          {canCreate && !adding && <Btn small variant="accent" onClick={() => setAdding(true)}><Plus size={13} /> {isAdmin ? "Ajouter" : "Soumettre"} un exercice</Btn>}
         </div>
         {addForm}
         <input
@@ -2962,7 +2970,7 @@ function ExercicesTab({ data, update, isAdmin, currentUser, profile, onlyUserCre
         <SectionHeader icon={Flame} title="Échauffements" subtitle="Classement par grande famille d'objectifs d'échauffement." />
         <div className="flex items-end justify-between gap-2 mb-3">
           <ClassementToggle active="familles" onFamilles={() => {}} onTout={() => { setShowAllEchauffements(true); setView({ type: "echauffement-tags" }); setTagQuery(""); }} />
-          {canCreate && !adding && <Btn small variant="accent" onClick={() => setAdding(true)}><Plus size={13} /> Ajouter un exercice</Btn>}
+          {canCreate && !adding && <Btn small variant="accent" onClick={() => setAdding(true)}><Plus size={13} /> {isAdmin ? "Ajouter" : "Soumettre"} un exercice</Btn>}
         </div>
         <Toast toast={toastMsg} />
         {adminNotice}
@@ -3001,14 +3009,14 @@ function ExercicesTab({ data, update, isAdmin, currentUser, profile, onlyUserCre
   if (view.type === "echauffement-tag") {
     const exos = grouped[view.tag] || [];
     const sq = normalize(subQuery);
-    const filteredExos = sq ? echauffements.filter((e) => matchesKeywords(subQuery, e.title, e.groupe, (e.thematiques || []).join(" "), (e.objectives || []).join(" "), e.level)) : exos;
+    const filteredExos = [...(sq ? echauffements.filter((e) => matchesKeywords(subQuery, e.title, e.groupe, (e.thematiques || []).join(" "), (e.objectives || []).join(" "), e.level)) : exos)].sort((a, b) => a.title.localeCompare(b.title, "fr"));
     return (
       <div>
         <BackBtn label="Échauffements" onClick={() => { setView({ type: "echauffement-tags" }); setSubQuery(""); }} />
         <SectionHeader icon={Flame} title={view.tag} subtitle={`${exos.length} exercice(s) d'échauffement`} />
         <Toast toast={toastMsg} />
         {adminNotice}
-        {canCreate && !adding && <Btn small variant="accent" onClick={() => setAdding(true)}><Plus size={13} /> Ajouter un exercice</Btn>}
+        {canCreate && !adding && <Btn small variant="accent" onClick={() => setAdding(true)}><Plus size={13} /> {isAdmin ? "Ajouter" : "Soumettre"} un exercice</Btn>}
         {addForm}
         <input
           className={inputClass}
@@ -3038,7 +3046,7 @@ function ExercicesTab({ data, update, isAdmin, currentUser, profile, onlyUserCre
         <SectionHeader icon={Flame} title="Échauffements par objectif" subtitle="Choisis un objectif pour voir les exercices correspondants." />
         <div className="flex items-end justify-between gap-2 mb-3">
           <ClassementToggle active="tout" onFamilles={() => { setShowAllEchauffements(false); setView({ type: "echauffement-groupes" }); setTagQuery(""); }} onTout={() => setShowAllEchauffements(true)} />
-          {canCreate && !adding && <Btn small variant="accent" onClick={() => setAdding(true)}><Plus size={13} /> Ajouter un exercice</Btn>}
+          {canCreate && !adding && <Btn small variant="accent" onClick={() => setAdding(true)}><Plus size={13} /> {isAdmin ? "Ajouter" : "Soumettre"} un exercice</Btn>}
         </div>
         <Toast toast={toastMsg} />
         {adminNotice}
@@ -3094,7 +3102,7 @@ function ExercicesTab({ data, update, isAdmin, currentUser, profile, onlyUserCre
         <Toast toast={toastMsg} />
         {adminNotice}
         <div className="flex justify-end mb-3">
-          {canCreate && !adding && <Btn small variant="accent" onClick={() => setAdding(true)}><Plus size={13} /> Ajouter un exercice</Btn>}
+          {canCreate && !adding && <Btn small variant="accent" onClick={() => setAdding(true)}><Plus size={13} /> {isAdmin ? "Ajouter" : "Soumettre"} un exercice</Btn>}
         </div>
         {addForm}
         <input
@@ -3112,7 +3120,7 @@ function ExercicesTab({ data, update, isAdmin, currentUser, profile, onlyUserCre
   if (view.type === "impro-groupe") {
     const exos = groupedImproByGroupe[view.groupe] || [];
     const sq = normalize(subQuery);
-    const filteredExos = sq ? impro.filter((e) => matchesKeywords(subQuery, e.title, e.groupe, (e.thematiques || []).join(" "), (e.objectives || []).join(" "), e.level)) : exos;
+    const filteredExos = [...(sq ? impro.filter((e) => matchesKeywords(subQuery, e.title, e.groupe, (e.thematiques || []).join(" "), (e.objectives || []).join(" "), e.level)) : exos)].sort((a, b) => a.title.localeCompare(b.title, "fr"));
     return (
       <div>
         <BackBtn label="Exercices Impro" onClick={() => { setView({ type: "impro-groupes" }); setSubQuery(""); }} />
@@ -3120,7 +3128,7 @@ function ExercicesTab({ data, update, isAdmin, currentUser, profile, onlyUserCre
         <Toast toast={toastMsg} />
         {adminNotice}
         <div className="flex justify-end mb-3">
-          {canCreate && !adding && <Btn small variant="accent" onClick={() => setAdding(true)}><Plus size={13} /> Ajouter un exercice</Btn>}
+          {canCreate && !adding && <Btn small variant="accent" onClick={() => setAdding(true)}><Plus size={13} /> {isAdmin ? "Ajouter" : "Soumettre"} un exercice</Btn>}
         </div>
         {addForm}
         <input
@@ -3146,7 +3154,7 @@ function ExercicesTab({ data, update, isAdmin, currentUser, profile, onlyUserCre
         <SectionHeader icon={Theater} title="Exercices Impro" subtitle="Classement par grande famille d'objectifs de travail." />
         <div className="flex items-end justify-between gap-2 mb-3">
           <ClassementToggle active="familles" onFamilles={() => {}} onTout={() => { setShowAllImpro(true); setView({ type: "impro-tags" }); setTagQuery(""); }} />
-          {canCreate && !adding && <Btn small variant="accent" onClick={() => setAdding(true)}><Plus size={13} /> Ajouter un exercice</Btn>}
+          {canCreate && !adding && <Btn small variant="accent" onClick={() => setAdding(true)}><Plus size={13} /> {isAdmin ? "Ajouter" : "Soumettre"} un exercice</Btn>}
         </div>
         <Toast toast={toastMsg} />
         {adminNotice}
@@ -3198,7 +3206,7 @@ function ExercicesTab({ data, update, isAdmin, currentUser, profile, onlyUserCre
         <SectionHeader icon={Theater} title="Exercices Impro par objectif" subtitle="Choisis un objectif pour voir les exercices correspondants." />
         <div className="flex items-end justify-between gap-2 mb-3">
           <ClassementToggle active="tout" onFamilles={() => { setShowAllImpro(false); setView({ type: "impro-groupes" }); setTagQuery(""); }} onTout={() => setShowAllImpro(true)} />
-          {canCreate && !adding && <Btn small variant="accent" onClick={() => setAdding(true)}><Plus size={13} /> Ajouter un exercice</Btn>}
+          {canCreate && !adding && <Btn small variant="accent" onClick={() => setAdding(true)}><Plus size={13} /> {isAdmin ? "Ajouter" : "Soumettre"} un exercice</Btn>}
         </div>
         <Toast toast={toastMsg} />
         {adminNotice}
@@ -3243,14 +3251,14 @@ function ExercicesTab({ data, update, isAdmin, currentUser, profile, onlyUserCre
   if (view.type === "impro-tag") {
     const exos = groupedImpro[view.tag] || [];
     const sq = normalize(subQuery);
-    const filteredExos = sq ? impro.filter((e) => matchesKeywords(subQuery, e.title, e.groupe, (e.thematiques || []).join(" "), (e.objectives || []).join(" "), e.level)) : exos;
+    const filteredExos = [...(sq ? impro.filter((e) => matchesKeywords(subQuery, e.title, e.groupe, (e.thematiques || []).join(" "), (e.objectives || []).join(" "), e.level)) : exos)].sort((a, b) => a.title.localeCompare(b.title, "fr"));
     return (
       <div>
         <BackBtn label="Exercices Impro" onClick={() => { setView({ type: "impro-tags" }); setSubQuery(""); }} />
         <SectionHeader icon={Theater} title={view.tag} subtitle={`${exos.length} exercice(s) impro`} />
         <Toast toast={toastMsg} />
         {adminNotice}
-        {canCreate && !adding && <Btn small variant="accent" onClick={() => setAdding(true)}><Plus size={13} /> Ajouter un exercice</Btn>}
+        {canCreate && !adding && <Btn small variant="accent" onClick={() => setAdding(true)}><Plus size={13} /> {isAdmin ? "Ajouter" : "Soumettre"} un exercice</Btn>}
         {addForm}
         <input
           className={inputClass}
@@ -3271,7 +3279,7 @@ function ExercicesTab({ data, update, isAdmin, currentUser, profile, onlyUserCre
       {adminNotice}
       {canCreate && !adding && (
         <div className="flex justify-end mb-3">
-          <Btn small variant="accent" onClick={() => setAdding(true)}><Plus size={13} /> Ajouter un exercice</Btn>
+          <Btn small variant="accent" onClick={() => setAdding(true)}><Plus size={13} /> {isAdmin ? "Ajouter" : "Soumettre"} un exercice</Btn>
         </div>
       )}
       {addForm}
@@ -3293,7 +3301,7 @@ function ExercicesTab({ data, update, isAdmin, currentUser, profile, onlyUserCre
             const matchingImp = objectifKeysImpro.filter((o) => matchesKeywords(searchQuery, o));
             const matchingEchFam = echGroupOrder.filter((g) => matchesKeywords(searchQuery, g));
             const matchingImpFam = improGroupOrder.filter((g) => matchesKeywords(searchQuery, g));
-            const results = baseExercises.filter((e) => matchesKeywords(searchQuery, e.title, e.groupe, (e.objectives || []).join(" "), (e.thematiques || []).join(" "), e.level));
+            const results = baseExercises.filter((e) => matchesKeywords(searchQuery, e.title, e.groupe, (e.objectives || []).join(" "), (e.thematiques || []).join(" "), e.level)).sort((a, b) => a.title.localeCompare(b.title, "fr"));
             return (
               <>
                 {matchingEchFam.map((g) => (
@@ -3848,7 +3856,7 @@ function CategoriesTab({ data, update, isAdmin, currentUser, onlyUserCreated, in
         <Toast toast={toastMsg} />
         {adminNotice}
         <div className="flex justify-end mb-3">
-          {canCreate && !adding && <Btn small variant="accent" onClick={() => setAdding(true)}><Plus size={13} /> Ajouter une catégorie</Btn>}
+          {canCreate && !adding && <Btn small variant="accent" onClick={() => setAdding(true)}><Plus size={13} /> {isAdmin ? "Ajouter" : "Soumettre"} une catégorie</Btn>}
         </div>
         {addForm}
         <input
@@ -3877,7 +3885,7 @@ function CategoriesTab({ data, update, isAdmin, currentUser, onlyUserCreated, in
       {duplicatePrompt}
       <div className="flex items-end justify-between gap-2 mb-3">
         <ClassementToggle active={showAllCategories ? "tout" : "familles"} onFamilles={() => setShowAllCategories(false)} onTout={() => setShowAllCategories(true)} />
-        {canCreate && !adding && <Btn small variant="accent" onClick={() => setAdding(true)}><Plus size={13} /> Ajouter une catégorie</Btn>}
+        {canCreate && !adding && <Btn small variant="accent" onClick={() => setAdding(true)}><Plus size={13} /> {isAdmin ? "Ajouter" : "Soumettre"} une catégorie</Btn>}
       </div>
       <Field label="Chercher la fiche d'une catégorie">
         <input
@@ -3890,7 +3898,7 @@ function CategoriesTab({ data, update, isAdmin, currentUser, onlyUserCreated, in
       </Field>
       {searchQuery.trim() && (() => {
         const matchingSections = tagKeys.filter((t) => matchesKeywords(searchQuery, t));
-        const results = baseCategories.filter((c) => matchesKeywords(searchQuery, c.name, (c.tags || []).join(" "), (c.objectives || []).join(" "), (c.thematiques || []).join(" "), c.level));
+        const results = baseCategories.filter((c) => matchesKeywords(searchQuery, c.name, (c.tags || []).join(" "), (c.objectives || []).join(" "), (c.thematiques || []).join(" "), c.level)).sort((a, b) => a.name.localeCompare(b.name, "fr"));
         return (
           <div className="mb-4">
             {matchingSections.map((t) => (
