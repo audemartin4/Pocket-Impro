@@ -5,6 +5,7 @@ import {
   Save, X, Check, Home, Theater, Pencil, Library, UserCircle, GripVertical, Star, LogIn, LogOut, AlertTriangle, Mail
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
+import { useAuthUser, signIn, signUp, signOut } from "./auth.js";
 
 /* ---------- Tokens ---------- */
 const COLORS = {
@@ -226,8 +227,6 @@ const FORMATS_JEU = ["Solo simultané", "En groupe simultané", "Tour à tour av
 const CONTEXTES_ECHAUFFEMENT = ["Match", "Cabaret", "Format Long", "Spectacle personnalisé"];
 const DUREES_ECHAUFFEMENT = [5, 10, 15, 30];
 const PALIERS_TEMPS_COURS = [0, 5, 10, 15, 20, 25, 30, 35, 40];
-// Code protégeant l'ajout de nouveaux exercices à la bibliothèque (à changer librement).
-const ADMIN_CODE = "impro2026";
 // Nom d'utilisateur "virtuel" utilisé par le bouton "Mode utilisateur" (profil Admin) : simule une
 // session non-admin sans compte réel, pour tester rapidement le point de vue d'un utilisateur lambda.
 const TEST_USER_NAME = "Utilisateur test";
@@ -1480,8 +1479,13 @@ export default function ImproApp() {
   // Remonte en haut de page à chaque changement d'onglet (Accueil/Bibliothèque/Créer un cours…) —
   // même logique que dans les pages famille, pour ne jamais arriver au milieu d'une page.
   useEffect(() => { window.scrollTo(0, 0); }, [tab]);
-  const [currentUser, setCurrentUser] = useState(null); // null | "Admin" | nom de compte — pas connecté par défaut
-  const isAdmin = currentUser === "Admin";
+  // Session réelle Supabase Auth + profil (nom d'utilisateur, troupe, ville, is_admin).
+  const auth = useAuthUser();
+  // "Mode utilisateur" (bouton du profil Admin) : simule une session non-admin sans compte réel,
+  // pour tester rapidement le point de vue d'un membre lambda — voir TEST_USER_NAME.
+  const [simulateMember, setSimulateMember] = useState(false);
+  const currentUser = simulateMember ? TEST_USER_NAME : auth.currentUser;
+  const isAdmin = auth.isAdmin && !simulateMember;
   const [librarySearchSeed, setLibrarySearchSeed] = useState(""); // pré-remplit la recherche en arrivant depuis la Bibliothèque
   const [coursPlan, setCoursPlan] = useState(null); // levé ici pour survivre à la navigation + permettre de "reprendre"
   const [spectaclePlan, setSpectaclePlan] = useState(null); // idem, pour "Reprendre le dernier spectacle généré"
@@ -1555,18 +1559,18 @@ export default function ImproApp() {
         {tab === "gen-echauffement" && <GenerateurEchauffementTab data={publicData} update={update} plan={echauffementPlan} setPlan={setEchauffementPlan} currentUser={currentUser} />}
         {tab === "gen-idees" && <GenererIdeesTab setTab={setTab} />}
         {tab === "bibliotheque" && <BibliothequeTab data={publicData} update={update} setTab={setTab} isAdmin={isAdmin} currentUser={currentUser} goToLibrarySection={goToLibrarySection} />}
-        {tab === "exercices" && <ExercicesTab data={data} update={update} isAdmin={isAdmin} currentUser={currentUser} initialSearchQuery={librarySearchSeed} setTab={setTab} />}
-        {tab === "exercices-crees" && <ExercicesTab data={data} update={update} isAdmin={isAdmin} currentUser={currentUser} onlyUserCreated setTab={setTab} />}
-        {tab === "categories" && <CategoriesTab data={data} update={update} isAdmin={isAdmin} currentUser={currentUser} initialSearchQuery={librarySearchSeed} setTab={setTab} />}
-        {tab === "categories-crees" && <CategoriesTab data={data} update={update} isAdmin={isAdmin} currentUser={currentUser} onlyUserCreated setTab={setTab} />}
+        {tab === "exercices" && <ExercicesTab data={data} update={update} isAdmin={isAdmin} currentUser={currentUser} profile={auth.profile} initialSearchQuery={librarySearchSeed} setTab={setTab} />}
+        {tab === "exercices-crees" && <ExercicesTab data={data} update={update} isAdmin={isAdmin} currentUser={currentUser} profile={auth.profile} onlyUserCreated setTab={setTab} />}
+        {tab === "categories" && <CategoriesTab data={data} update={update} isAdmin={isAdmin} currentUser={currentUser} profile={auth.profile} initialSearchQuery={librarySearchSeed} setTab={setTab} />}
+        {tab === "categories-crees" && <CategoriesTab data={data} update={update} isAdmin={isAdmin} currentUser={currentUser} profile={auth.profile} onlyUserCreated setTab={setTab} />}
         {tab === "spectacles" && <SpectaclesTab data={publicData} update={update} setTab={setTab} />}
         {tab === "entrainement" && <EntrainementTab data={publicData} />}
         {tab === "plans" && <PlansTab data={publicData} update={update} setTab={setTab} />}
-        {tab === "moderation" && <ModerationTab data={data} update={update} setTab={setTab} />}
-        {tab === "messages" && <MessagesTab data={data} update={update} setTab={setTab} />}
+        {tab === "moderation" && <ModerationTab data={data} update={update} setTab={setTab} isAdmin={isAdmin} />}
+        {tab === "messages" && <MessagesTab data={data} update={update} setTab={setTab} isAdmin={isAdmin} />}
         {tab === "mes-messages" && <MesMessagesTab data={data} update={update} setTab={setTab} currentUser={currentUser} />}
         {tab === "favoris" && <FavorisTab data={publicData} update={update} isAdmin={isAdmin} currentUser={currentUser} setTab={setTab} />}
-        {tab === "profil" && <ProfilTab data={data} update={update} setTab={setTab} currentUser={currentUser} setCurrentUser={setCurrentUser} />}
+        {tab === "profil" && <ProfilTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} realIsAdmin={auth.isAdmin} simulateMember={simulateMember} setSimulateMember={setSimulateMember} />}
       </div>
       {LIBRARY_TABS.includes(tab) && <BackToTopButton />}
     </div>
@@ -2031,11 +2035,12 @@ function FavorisTab({ data, update, isAdmin, currentUser, setTab }) {
   );
 }
 
-function ProfilTab({ data, update, setTab, currentUser, setCurrentUser }) {
-  const [mode, setMode] = useState("login"); // "login" | "signup"
-  const [username, setUsername] = useState("");
+function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIsAdmin, simulateMember, setSimulateMember }) {
+  const [mode, setMode] = useState("login"); // "login" | "signup" | "signup-done"
+  const [loginEmail, setLoginEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loginError, setLoginError] = useState(false);
+  const [loginError, setLoginError] = useState("");
+  const [loginBusy, setLoginBusy] = useState(false);
 
   const [signupEmail, setSignupEmail] = useState("");
   const [signupUsername, setSignupUsername] = useState("");
@@ -2043,6 +2048,7 @@ function ProfilTab({ data, update, setTab, currentUser, setCurrentUser }) {
   const [signupTroupe, setSignupTroupe] = useState("");
   const [signupVille, setSignupVille] = useState("");
   const [signupError, setSignupError] = useState("");
+  const [signupBusy, setSignupBusy] = useState(false);
 
   const nbFavoris = data.exercises.filter((e) => e.favorite).length + data.categories.filter((c) => c.favorite).length;
 
@@ -2054,9 +2060,6 @@ function ProfilTab({ data, update, setTab, currentUser, setCurrentUser }) {
     { label: "Favoris", n: nbFavoris, icon: Star, tab: "favoris" },
   ];
 
-  const accounts = data.accounts || [];
-  const currentAccount = accounts.find((a) => a.username === currentUser);
-  const isAdmin = currentUser === "Admin";
   const nbPending = data.exercises.filter((e) => e.pending).length + data.categories.filter((c) => c.pending).length;
   const nbUnreadMessages = (data.messages || []).filter((m) => !m.read).length;
   const nbUnreadReplies = (data.messages || []).filter((m) =>
@@ -2075,7 +2078,7 @@ function ProfilTab({ data, update, setTab, currentUser, setCurrentUser }) {
       d.messages.push({
         id: uid(),
         from: currentUser,
-        troupe: currentAccount?.troupe || "",
+        troupe: profile?.troupe || "",
         text,
         createdAt: Date.now(),
         read: false,
@@ -2115,24 +2118,25 @@ function ProfilTab({ data, update, setTab, currentUser, setCurrentUser }) {
     return d;
   });
 
-  const login = () => {
-    if (normalize(username) === "admin" && password === ADMIN_CODE) {
-      setCurrentUser("Admin");
-      setLoginError(false);
-      setPassword("");
+  const login = async () => {
+    const email = loginEmail.trim();
+    if (!email || !password) { setLoginError("Merci de remplir les 2 champs."); return; }
+    setLoginBusy(true);
+    const { error } = await signIn({ email, password });
+    setLoginBusy(false);
+    if (error) {
+      setLoginError(
+        error.message === "Email not confirmed"
+          ? "Confirme d'abord ton adresse mail (lien reçu par email) avant de te connecter."
+          : "Email ou mot de passe incorrect."
+      );
       return;
     }
-    const account = accounts.find((a) => normalize(a.username) === normalize(username));
-    if (account && account.password === password) {
-      setCurrentUser(account.username);
-      setLoginError(false);
-      setPassword("");
-      return;
-    }
-    setLoginError(true);
+    setLoginError("");
+    setPassword("");
   };
 
-  const signup = () => {
+  const signup = async () => {
     const email = signupEmail.trim();
     const uname = signupUsername.trim();
     if (!email || !uname || !signupPassword) {
@@ -2143,20 +2147,23 @@ function ProfilTab({ data, update, setTab, currentUser, setCurrentUser }) {
       setSignupError("Adresse mail invalide.");
       return;
     }
-    if (normalize(uname) === "admin" || accounts.some((a) => normalize(a.username) === normalize(uname))) {
-      setSignupError("Cet identifiant est déjà utilisé.");
+    if (normalize(uname) === "admin") {
+      setSignupError("Cet identifiant est réservé.");
       return;
     }
-    update((d) => {
-      if (!d.accounts) d.accounts = [];
-      d.accounts.push({
-        id: uid(), email, username: uname, password: signupPassword,
-        troupe: signupTroupe.trim(), ville: signupVille.trim(),
-      });
-      return d;
-    });
-    setCurrentUser(uname);
-    setMode("login"); // pour qu'un futur "Déconnexion" ramène à l'écran de connexion, pas au formulaire d'inscription
+    setSignupBusy(true);
+    const { error } = await signUp({ email, password: signupPassword, username: uname, troupe: signupTroupe.trim(), ville: signupVille.trim() });
+    setSignupBusy(false);
+    if (error) {
+      setSignupError(
+        error.message?.includes("already registered") ? "Cette adresse mail a déjà un compte."
+        : error.message?.includes("duplicate") || error.message?.includes("username") ? "Cet identifiant est déjà utilisé."
+        : error.message?.includes("rate limit") ? "Trop d'inscriptions récentes, réessaie dans quelques minutes."
+        : error.message || "Erreur lors de l'inscription."
+      );
+      return;
+    }
+    setMode("signup-done");
     setSignupEmail(""); setSignupUsername(""); setSignupPassword(""); setSignupTroupe(""); setSignupVille(""); setSignupError("");
   };
 
@@ -2167,10 +2174,10 @@ function ProfilTab({ data, update, setTab, currentUser, setCurrentUser }) {
         title="Mon profil"
         subtitle="Ton activité dans l'appli."
         action={
-          currentUser === "Admin" ? (
-            <Btn small variant="accent" onClick={() => setCurrentUser(TEST_USER_NAME)}><UserCircle size={13} /> Mode utilisateur</Btn>
-          ) : currentUser === TEST_USER_NAME ? (
-            <Btn small variant="accent" onClick={() => setCurrentUser("Admin")}><LogIn size={13} /> Repasser en Admin</Btn>
+          realIsAdmin && !simulateMember ? (
+            <Btn small variant="accent" onClick={() => setSimulateMember(true)}><UserCircle size={13} /> Mode utilisateur</Btn>
+          ) : realIsAdmin && simulateMember ? (
+            <Btn small variant="accent" onClick={() => setSimulateMember(false)}><LogIn size={13} /> Repasser en Admin</Btn>
           ) : null
         }
       />
@@ -2210,25 +2217,37 @@ function ProfilTab({ data, update, setTab, currentUser, setCurrentUser }) {
           <div className="flex items-center justify-between">
             <span style={{ fontFamily: FONT_BODY, color: COLORS.text }} className="text-sm">
               Connecté·e en tant que <b>{currentUser}</b>
-              {currentUser === "Admin"
+              {isAdmin
                 ? " — tu peux ajouter/modifier/supprimer des exercices et catégories."
-                : currentUser === TEST_USER_NAME
+                : simulateMember
                 ? " — mode utilisateur simulé, pour tester le point de vue d'un compte non-admin."
                 : "."}
               {(() => {
-                const acc = accounts.find((a) => a.username === currentUser);
-                const extra = [acc?.troupe, acc?.ville].filter(Boolean).join(" · ");
+                const extra = [profile?.troupe, profile?.ville].filter(Boolean).join(" · ");
                 return extra ? <span style={{ color: COLORS.textSoft }}> {extra}</span> : null;
               })()}
             </span>
             <div className="flex gap-1 shrink-0">
-              <Btn small variant="ghost" onClick={() => setCurrentUser(null)}><LogOut size={14} /> Déconnexion</Btn>
+              <Btn small variant="ghost" onClick={() => { setSimulateMember(false); signOut(); }}><LogOut size={14} /> Déconnexion</Btn>
             </div>
           </div>
+        ) : mode === "signup-done" ? (
+          <>
+            <p className="text-sm mb-3" style={{ fontFamily: FONT_BODY, color: COLORS.text }}>
+              Compte créé ✓ Vérifie ta boîte mail et clique sur le lien de confirmation avant de pouvoir te connecter.
+            </p>
+            <button
+              onClick={() => setMode("login")}
+              className="block text-xs underline"
+              style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}
+            >
+              Retour à la connexion
+            </button>
+          </>
         ) : mode === "login" ? (
           <>
-            <Field label="Identifiant">
-              <input className={inputClass} style={inputStyle} value={username} onChange={(e) => { setUsername(e.target.value); setLoginError(false); }} placeholder="Ton pseudo" />
+            <Field label="Adresse mail">
+              <input type="email" className={inputClass} style={inputStyle} value={loginEmail} onChange={(e) => { setLoginEmail(e.target.value); setLoginError(""); }} placeholder="toi@exemple.com" />
             </Field>
             <Field label="Mot de passe">
               <input
@@ -2236,14 +2255,14 @@ function ProfilTab({ data, update, setTab, currentUser, setCurrentUser }) {
                 className={inputClass}
                 style={inputStyle}
                 value={password}
-                onChange={(e) => { setPassword(e.target.value); setLoginError(false); }}
+                onChange={(e) => { setPassword(e.target.value); setLoginError(""); }}
                 onKeyDown={(e) => { if (e.key === "Enter") login(); }}
               />
             </Field>
-            {loginError && <p className="text-xs mb-2" style={{ color: COLORS.accent, fontFamily: FONT_BODY }}>Identifiant ou mot de passe incorrect.</p>}
-            <Btn variant="accent" onClick={login}><LogIn size={14} /> Se connecter</Btn>
+            {loginError && <p className="text-xs mb-2" style={{ color: COLORS.accent, fontFamily: FONT_BODY }}>{loginError}</p>}
+            <Btn variant="accent" onClick={login} disabled={loginBusy}><LogIn size={14} /> Se connecter</Btn>
             <button
-              onClick={() => { setMode("signup"); setLoginError(false); }}
+              onClick={() => { setMode("signup"); setLoginError(""); }}
               className="block mt-3 text-xs underline"
               style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}
             >
@@ -2277,7 +2296,7 @@ function ProfilTab({ data, update, setTab, currentUser, setCurrentUser }) {
               </Field>
             </div>
             {signupError && <p className="text-xs mb-2" style={{ color: COLORS.accent, fontFamily: FONT_BODY }}>{signupError}</p>}
-            <Btn variant="accent" onClick={signup}><LogIn size={14} /> Créer mon compte</Btn>
+            <Btn variant="accent" onClick={signup} disabled={signupBusy}><LogIn size={14} /> Créer mon compte</Btn>
             <button
               onClick={() => { setMode("login"); setSignupError(""); }}
               className="block mt-3 text-xs underline"
@@ -2595,7 +2614,7 @@ function RejectReasonBox({ reason, setReason, onConfirm, onCancel }) {
   );
 }
 
-function ExercicesTab({ data, update, isAdmin, currentUser, onlyUserCreated, initialSearchQuery, setTab }) {
+function ExercicesTab({ data, update, isAdmin, currentUser, profile, onlyUserCreated, initialSearchQuery, setTab }) {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(null);
   const [view, setView] = useState({ type: "hub" }); // hub | echauffement-groupes | echauffement-groupe | echauffement-tags | echauffement-tag | preimpro | impro-groupes | impro-groupe | impro-tags | impro-tag
@@ -2612,7 +2631,6 @@ function ExercicesTab({ data, update, isAdmin, currentUser, onlyUserCreated, ini
   const [toastMsg, showToast] = useToast();
 
   const canCreate = isAdmin || !!currentUser;
-  const currentAccount = (data.accounts || []).find((a) => a.username === currentUser);
 
   const baseExercises = onlyUserCreated ? data.exercises.filter((e) => e.creatorUsername === currentUser) : data.exercises.filter((e) => !e.pending && !e.rejected);
 
@@ -2625,7 +2643,7 @@ function ExercicesTab({ data, update, isAdmin, currentUser, onlyUserCreated, ini
       ...rest,
       pending: !isAdmin,
       creatorUsername: isAdmin ? "" : (currentUser || ""),
-      creatorTroupe: !isAdmin && showTroupeOnCard && currentAccount?.troupe ? currentAccount.troupe : "",
+      creatorTroupe: !isAdmin && showTroupeOnCard && profile?.troupe ? profile.troupe : "",
       approvalSeen: isAdmin,
     };
   };
@@ -2808,7 +2826,7 @@ function ExercicesTab({ data, update, isAdmin, currentUser, onlyUserCreated, ini
         showTypesList={data.showTypes}
       thematiquesList={data.thematiques}
       isAdmin={isAdmin}
-      creatorTroupe={currentAccount?.troupe || ""}
+      creatorTroupe={profile?.troupe || ""}
       creatorUsername={currentUser}
       onSave={saveNewExercise}
       onCancel={() => setAdding(false)}
@@ -3485,7 +3503,6 @@ function CategoriesTab({ data, update, isAdmin, currentUser, onlyUserCreated, in
   const baseCategories = onlyUserCreated ? data.categories.filter((c) => c.creatorUsername === currentUser) : data.categories.filter((c) => !c.pending && !c.rejected);
 
   const canCreate = isAdmin || !!currentUser;
-  const currentAccount = (data.accounts || []).find((a) => a.username === currentUser);
 
   const toggleFavorite = (id) => {
     if (!currentUser) return; // favoris réservés aux comptes connectés
@@ -3505,7 +3522,7 @@ function CategoriesTab({ data, update, isAdmin, currentUser, onlyUserCreated, in
       ...rest,
       pending: !isAdmin,
       creatorUsername: isAdmin ? "" : (currentUser || ""),
-      creatorTroupe: !isAdmin && showTroupeOnCard && currentAccount?.troupe ? currentAccount.troupe : "",
+      creatorTroupe: !isAdmin && showTroupeOnCard && profile?.troupe ? profile.troupe : "",
       approvalSeen: isAdmin,
     };
   };
@@ -3704,7 +3721,7 @@ function CategoriesTab({ data, update, isAdmin, currentUser, onlyUserCreated, in
         objectifsList={data.objectifs}
         showTypesList={data.showTypes}
       isAdmin={isAdmin}
-      creatorTroupe={currentAccount?.troupe || ""}
+      creatorTroupe={profile?.troupe || ""}
       creatorUsername={currentUser}
       onSave={saveNewCategory}
       onCancel={() => setAdding(false)}
@@ -5916,7 +5933,20 @@ function EntrainementTab({ data }) {
 
 
 /* ---------- Modération : exercices et catégories proposés par la communauté ---------- */
-function ModerationTab({ data, update, setTab }) {
+function ModerationTab({ data, update, setTab, isAdmin }) {
+  const [rejectingExId, setRejectingExId] = useState(null);
+  const [rejectingCatId, setRejectingCatId] = useState(null);
+  const [rejectReason, setRejectReason] = useState("");
+
+  if (!isAdmin) {
+    return (
+      <div>
+        {setTab && <LibraryBackBtn label="Mon profil" onClick={() => setTab("profil")} />}
+        <Empty text="Réservé à l'Admin." />
+      </div>
+    );
+  }
+
   const pendingExercises = data.exercises.filter((e) => e.pending);
   const pendingCategories = data.categories.filter((c) => c.pending);
 
@@ -5940,9 +5970,6 @@ function ModerationTab({ data, update, setTab }) {
     if (c) { c.pending = false; c.rejected = true; notifyCreatorRejected(d, c, "catégorie", reason); }
     return d;
   });
-  const [rejectingExId, setRejectingExId] = useState(null);
-  const [rejectingCatId, setRejectingCatId] = useState(null);
-  const [rejectReason, setRejectReason] = useState("");
 
   return (
     <div>
@@ -6024,19 +6051,29 @@ function ModerationTab({ data, update, setTab }) {
 }
 
 /* ---------- Messages reçus (contact utilisateurs -> Admin) ---------- */
-function MessagesTab({ data, update, setTab }) {
+function MessagesTab({ data, update, setTab, isAdmin }) {
   // Exclut les notifications automatiques (validation/refus) envoyées PAR l'Admin aux créateurs —
   // cette boîte ne montre que les messages reçus DES troupes utilisatrices.
   const messages = [...(data.messages || [])].filter((m) => m.type !== "notif").sort((a, b) => b.createdAt - a.createdAt);
 
   // Marque tous les messages comme lus à l'ouverture de la page.
   useEffect(() => {
+    if (!isAdmin) return;
     const hasUnread = (data.messages || []).some((m) => m.type !== "notif" && !m.read);
     if (hasUnread) {
       update((d) => { (d.messages || []).forEach((m) => { if (m.type !== "notif") m.read = true; }); return d; });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  if (!isAdmin) {
+    return (
+      <div>
+        {setTab && <LibraryBackBtn label="Mon profil" onClick={() => setTab("profil")} />}
+        <Empty text="Réservé à l'Admin." />
+      </div>
+    );
+  }
 
   const deleteMessage = (id) => update((d) => { d.messages = (d.messages || []).filter((m) => m.id !== id); return d; });
   const sendReply = (id, text) => update((d) => {
