@@ -2159,7 +2159,7 @@ function ProfilTab({ data, update, setTab, currentUser, setCurrentUser }) {
         ) : mode === "login" ? (
           <>
             <Field label="Identifiant">
-              <input className={inputClass} style={inputStyle} value={username} onChange={(e) => { setUsername(e.target.value); setLoginError(false); }} placeholder="Admin" />
+              <input className={inputClass} style={inputStyle} value={username} onChange={(e) => { setUsername(e.target.value); setLoginError(false); }} placeholder="Ton pseudo" />
             </Field>
             <Field label="Mot de passe">
               <input
