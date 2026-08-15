@@ -1585,21 +1585,13 @@ const IDEES_METIERS = [
   "Bibliothécaire", "Archéologue", "Explorateur", "Alpiniste", "Dresseur d'animaux", "Dompteur de cirque", "Clown",
   "Magicien", "Voyante", "Sorcier", "Chevalier", "Roi"
 ];
-const IDEES_MOTS = [
-  "Parapluie", "Silence", "Éclipse", "Voisin", "Frontière", "Miroir", "Racine", "Boussole",
-  "Éclat", "Souvenir", "Orage", "Ancre", "Cicatrice", "Horizon", "Écho", "Refuge",
-];
-const IDEES_THEMES = [
-  "La transmission", "Le pardon", "L'abandon", "La renaissance", "L'injustice", "La solitude",
-  "La loyauté", "Le sacrifice", "La rédemption", "L'identité", "La perte de contrôle", "L'héritage",
-];
 const IDEE_CATEGORIES = [
   { key: "lieux", label: "Lieux", list: IDEES_LIEUX },
   { key: "relations", label: "Relations", list: IDEES_RELATIONS },
   { key: "emotions", label: "Émotions", list: IDEES_EMOTIONS },
   { key: "metiers", label: "Métiers", list: IDEES_METIERS },
-  { key: "mots", label: "Mots", list: IDEES_MOTS },
-  { key: "themes", label: "Thèmes", list: IDEES_THEMES },
+  { key: "mots", label: "Mots", underConstruction: true },
+  { key: "themes", label: "Thèmes", underConstruction: true },
 ];
 
 function GenererIdeesTab({ setTab }) {
@@ -1617,11 +1609,17 @@ function GenererIdeesTab({ setTab }) {
         {IDEE_CATEGORIES.map((cat) => (
           <div key={cat.key}>
             <button
-              onClick={() => draw(cat)}
-              className="w-full flex items-center justify-center gap-2 rounded-sm px-4 py-4 text-lg font-medium transition"
-              style={{ fontFamily: FONT_DISPLAY, background: COLORS.accent, color: "#fff" }}
+              onClick={() => !cat.underConstruction && draw(cat)}
+              disabled={cat.underConstruction}
+              className="w-full flex items-center justify-center gap-2 rounded-sm px-4 py-4 text-lg font-medium transition disabled:opacity-60"
+              style={{
+                fontFamily: FONT_DISPLAY,
+                background: cat.underConstruction ? COLORS.cardEdge : COLORS.accent,
+                color: cat.underConstruction ? COLORS.textSoft : "#fff",
+                cursor: cat.underConstruction ? "default" : "pointer",
+              }}
             >
-              <Shuffle size={20} /> {cat.label}
+              <Shuffle size={20} /> {cat.label}{cat.underConstruction ? " (en travaux)" : ""}
             </button>
             {picked && picked.key === cat.key && (
               <IndexCard className="mt-2">
