@@ -31,6 +31,43 @@ function themeColor(name, allThemes) {
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
+// Envoie un message automatique (type "notif", distinct des messages utilisateur→Admin) au créateur
+// d'un exercice/catégorie quand l'Admin valide ou refuse sa proposition. Rien n'est envoyé pour les
+// fiches créées par l'Admin lui-même (creatorUsername vide).
+function notifyCreatorApproved(d, item, kind) {
+  if (!item.creatorUsername) return;
+  d.messages = d.messages || [];
+  const title = kind === "exercice" ? item.title : item.name;
+  d.messages.push({
+    id: uid(),
+    type: "notif",
+    to: item.creatorUsername,
+    troupe: item.creatorTroupe || "",
+    text: `🎉 Ton ${kind} « ${title} » a été validé${kind === "catégorie" ? "e" : ""} par l'Admin : il est maintenant visible dans la bibliothèque publique et pourra être proposé par les générateurs de cours, de spectacle et d'échauffement.`,
+    createdAt: Date.now(),
+    seen: false,
+  });
+}
+
+function notifyCreatorRejected(d, item, kind, reason) {
+  if (!item.creatorUsername) return;
+  d.messages = d.messages || [];
+  const title = kind === "exercice" ? item.title : item.name;
+  const pickerLabel = kind === "exercice" ? "Ajouter un exercice" : "Ajouter une catégorie";
+  const mesFiches = kind === "exercice" ? "tes exercices créés" : "tes catégories créées";
+  let text = `Ton ${kind} « ${title} » n'a pas été validé${kind === "catégorie" ? "e" : ""} pour la bibliothèque publique : il n'apparaîtra pas dans la bibliothèque publique et ne sera pas proposé par les générateurs. Tu peux quand même le retrouver dans ${mesFiches} (onglet Mon profil), ou en tapant son nom dans la barre de recherche « ${pickerLabel} » de la création de cours ou de spectacle, pour l'ajouter toi-même à ton programme si tu le souhaites.`;
+  if (reason) text += `\n\nRaison indiquée par l'Admin : ${reason}`;
+  d.messages.push({
+    id: uid(),
+    type: "notif",
+    to: item.creatorUsername,
+    troupe: item.creatorTroupe || "",
+    text,
+    createdAt: Date.now(),
+    seen: false,
+  });
+}
+
 /* Estime le temps (en min) où un élève reste spectateur pendant un exercice "chacun son tour" */
 function computeWaitMinutes(exercise, participants) {
   if (exercise.format !== "Tour à tour avec spectateur") return 0;
@@ -1456,16 +1493,17 @@ export default function ImproApp() {
 
   const update = useCallback((fn) => setData((prev) => fn(structuredClone(prev))), [setData]);
   // Vue "publique" des données : masque les exercices/catégories créés par la communauté tant qu'ils
-  // n'ont pas été validés par l'Admin — utilisée partout où le contenu doit rester fiable (génération
-  // de cours/spectacle/échauffement, recherche, tirage aléatoire, favoris, plans enregistrés). Les
-  // pages "Exercices créés"/"Catégories créées" et l'édition directe continuent d'utiliser `data`
-  // (non filtré) puisque c'est justement là que la validation a lieu.
+  // n'ont pas été validés par l'Admin, ainsi que ceux refusés — utilisée partout où le contenu doit
+  // rester fiable (génération de cours/spectacle/échauffement, recherche, tirage aléatoire, favoris,
+  // plans enregistrés). Les pages "Exercices créés"/"Catégories créées" et l'édition directe
+  // continuent d'utiliser `data` (non filtré) puisque c'est justement là que la validation a lieu, et
+  // où le créateur d'une fiche refusée peut encore la retrouver.
   const publicData = useMemo(() => {
     if (!data) return data;
     return {
       ...data,
-      exercises: data.exercises.filter((e) => !e.pending),
-      categories: data.categories.filter((c) => !c.pending),
+      exercises: data.exercises.filter((e) => !e.pending && !e.rejected),
+      categories: data.categories.filter((c) => !c.pending && !c.rejected),
     };
   }, [data]);
 
@@ -1512,8 +1550,8 @@ export default function ImproApp() {
 
       <div className="max-w-2xl mx-auto px-4 py-5">
         {tab === "accueil" && <Accueil setTab={setTab} hasCoursPlan={!!coursPlan} hasSpectaclePlan={!!spectaclePlan} hasEchauffementPlan={!!echauffementPlan} />}
-        {tab === "gen-cours" && <GenerateurCoursTab data={publicData} update={update} plan={coursPlan} setPlan={setCoursPlan} currentUser={currentUser} setTab={setTab} />}
-        {tab === "gen-spectacle" && <GenerateurSpectacleTab data={publicData} update={update} plan={spectaclePlan} setPlan={setSpectaclePlan} currentUser={currentUser} setTab={setTab} />}
+        {tab === "gen-cours" && <GenerateurCoursTab data={publicData} allData={data} update={update} plan={coursPlan} setPlan={setCoursPlan} currentUser={currentUser} setTab={setTab} />}
+        {tab === "gen-spectacle" && <GenerateurSpectacleTab data={publicData} allData={data} update={update} plan={spectaclePlan} setPlan={setSpectaclePlan} currentUser={currentUser} setTab={setTab} />}
         {tab === "gen-echauffement" && <GenerateurEchauffementTab data={publicData} update={update} plan={echauffementPlan} setPlan={setEchauffementPlan} currentUser={currentUser} />}
         {tab === "gen-idees" && <GenererIdeesTab setTab={setTab} />}
         {tab === "bibliotheque" && <BibliothequeTab data={publicData} update={update} setTab={setTab} isAdmin={isAdmin} currentUser={currentUser} goToLibrarySection={goToLibrarySection} />}
@@ -2021,7 +2059,10 @@ function ProfilTab({ data, update, setTab, currentUser, setCurrentUser }) {
   const isAdmin = currentUser === "Admin";
   const nbPending = data.exercises.filter((e) => e.pending).length + data.categories.filter((c) => c.pending).length;
   const nbUnreadMessages = (data.messages || []).filter((m) => !m.read).length;
-  const nbUnreadReplies = (data.messages || []).filter((m) => m.from === currentUser && m.reply && m.replySeen === false).length;
+  const nbUnreadReplies = (data.messages || []).filter((m) =>
+    (m.from === currentUser && m.reply && m.replySeen === false) ||
+    (m.type === "notif" && m.to === currentUser && m.seen === false)
+  ).length;
 
   const [contactOpen, setContactOpen] = useState(false);
   const [contactText, setContactText] = useState("");
@@ -2356,7 +2397,7 @@ function ProfilTab({ data, update, setTab, currentUser, setCurrentUser }) {
 }
 
 /* ---------- Exercices ---------- */
-function ExerciseForm({ initial, showTypes, objectifsList, thematiquesList, familiesList, onCreateFamily, isAdmin, creatorTroupe, onSave, onCancel }) {
+function ExerciseForm({ initial, showTypes, objectifsList, thematiquesList, familiesList, onCreateFamily, isAdmin, creatorTroupe, creatorUsername, onSave, onCancel }) {
   const [f, setF] = useState(
     initial || { title: "", summary: "", level: "Débutant", objectives: [], thematiques: [], players: 2, duration: 10, format: "Solo simultané", groupSize: 2, warmup: false, application: false, showTypes: [], phase: "Impro", favorite: false, createdByUser: true, showTroupeOnCard: false }
   );
@@ -2454,7 +2495,7 @@ function ExerciseForm({ initial, showTypes, objectifsList, thematiquesList, fami
           {creatorTroupe && (
             <label className="flex items-center gap-2 text-sm mt-2" style={{ fontFamily: FONT_BODY, color: COLORS.text }}>
               <input type="checkbox" checked={!!f.showTroupeOnCard} onChange={(e) => setF({ ...f, showTroupeOnCard: e.target.checked })} />
-              Afficher le nom de ma troupe ({creatorTroupe}) sur la fiche
+              Afficher mon nom ({creatorUsername}) et le nom de ma troupe ({creatorTroupe}) sur la fiche
             </label>
           )}
         </IndexCard>
@@ -2504,6 +2545,27 @@ function ClassementToggle({ active, onFamilles, onTags, onTout }) {
   );
 }
 
+/* Bloc "raison du refus" affiché sous une fiche en attente quand l'Admin clique sur "Refuser" — la
+   raison est optionnelle mais, si renseignée, est jointe au message envoyé au créateur. */
+function RejectReasonBox({ reason, setReason, onConfirm, onCancel }) {
+  return (
+    <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+      <textarea
+        className={inputClass}
+        style={inputStyle}
+        rows={2}
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        placeholder="Raison du refus (optionnelle, envoyée au créateur)…"
+      />
+      <div className="flex gap-2 mt-1">
+        <Btn small variant="accent" onClick={onConfirm}><Check size={13} /> Confirmer le refus</Btn>
+        <Btn small variant="ghost" onClick={onCancel}>Annuler</Btn>
+      </div>
+    </div>
+  );
+}
+
 function ExercicesTab({ data, update, isAdmin, currentUser, onlyUserCreated, initialSearchQuery, setTab }) {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -2523,7 +2585,7 @@ function ExercicesTab({ data, update, isAdmin, currentUser, onlyUserCreated, ini
   const canCreate = isAdmin || !!currentUser;
   const currentAccount = (data.accounts || []).find((a) => a.username === currentUser);
 
-  const baseExercises = onlyUserCreated ? data.exercises.filter((e) => e.createdByUser) : data.exercises.filter((e) => !e.pending);
+  const baseExercises = onlyUserCreated ? data.exercises.filter((e) => e.createdByUser) : data.exercises.filter((e) => !e.pending && !e.rejected);
 
   // Stampe les champs de modération/attribution sur une nouvelle fiche : les créations Admin sont
   // publiées directement, les créations d'un compte utilisateur restent "pending" jusqu'à validation.
@@ -2555,8 +2617,18 @@ function ExercicesTab({ data, update, isAdmin, currentUser, onlyUserCreated, ini
     setDuplicateWarning(null);
     setAdding(false);
   };
-  const approveExercise = (id) => update((d) => { const e = d.exercises.find((x) => x.id === id); if (e) e.pending = false; return d; });
-  const rejectExercise = (id) => update((d) => { d.exercises = d.exercises.filter((x) => x.id !== id); return d; });
+  const approveExercise = (id) => update((d) => {
+    const e = d.exercises.find((x) => x.id === id);
+    if (e) { e.pending = false; notifyCreatorApproved(d, e, "exercice"); }
+    return d;
+  });
+  const rejectExercise = (id, reason) => update((d) => {
+    const e = d.exercises.find((x) => x.id === id);
+    if (e) { e.pending = false; e.rejected = true; notifyCreatorRejected(d, e, "exercice", reason); }
+    return d;
+  });
+  const [rejectingId, setRejectingId] = useState(null);
+  const [rejectReason, setRejectReason] = useState("");
   const toggleFavorite = (id) => {
     if (!currentUser) return; // favoris réservés aux comptes connectés
     update((d) => {
@@ -2591,7 +2663,7 @@ function ExercicesTab({ data, update, isAdmin, currentUser, onlyUserCreated, ini
             {isAdmin && ex.pending && (
               <>
                 <Btn small variant="ghost" onClick={() => approveExercise(ex.id)}><Check size={13} /> Valider</Btn>
-                <Btn small variant="ghost" onClick={() => rejectExercise(ex.id)}><X size={13} /> Refuser</Btn>
+                <Btn small variant="ghost" onClick={() => { setRejectingId(ex.id); setRejectReason(""); }}><X size={13} /> Refuser</Btn>
               </>
             )}
             {isAdmin && <Btn small variant="ghost" onClick={() => setEditing(ex.id)}>Modifier</Btn>}
@@ -2607,6 +2679,14 @@ function ExercicesTab({ data, update, isAdmin, currentUser, onlyUserCreated, ini
             En attente de validation — pas encore visible dans la bibliothèque publique.
           </p>
         )}
+        {rejectingId === ex.id && (
+          <RejectReasonBox
+            reason={rejectReason}
+            setReason={setRejectReason}
+            onConfirm={() => { rejectExercise(ex.id, rejectReason.trim()); setRejectingId(null); setRejectReason(""); }}
+            onCancel={() => { setRejectingId(null); setRejectReason(""); }}
+          />
+        )}
         <p style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }} className="text-sm my-1">{ex.summary}</p>
         <div className="flex flex-wrap gap-1 mt-1 text-xs" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
           <span>{ex.level}</span>·<span>{ex.players > 0 ? `${ex.players} élève${ex.players > 1 ? "s" : ""}` : "Illimité"}</span>·<span>{ex.duration} min</span>
@@ -2618,7 +2698,7 @@ function ExercicesTab({ data, update, isAdmin, currentUser, onlyUserCreated, ini
           {ex.format === "Tour à tour avec spectateur" && <span style={{ color: COLORS.textSoft }}>· Tour à tour avec spectateur</span>}
           {ex.format === "En groupe simultané" && <span style={{ color: COLORS.accent }}>· En groupe simultané (bruyant)</span>}
           {ex.format === "En cercle" && <span style={{ color: COLORS.textSoft }}>· En cercle</span>}
-          {ex.creatorTroupe && <span>· Troupe {ex.creatorTroupe}</span>}
+          {ex.creatorTroupe && <span>· {ex.creatorUsername} — Troupe {ex.creatorTroupe}</span>}
         </div>
       </IndexCard>
     );
@@ -2700,6 +2780,7 @@ function ExercicesTab({ data, update, isAdmin, currentUser, onlyUserCreated, ini
       thematiquesList={data.thematiques}
       isAdmin={isAdmin}
       creatorTroupe={currentAccount?.troupe || ""}
+      creatorUsername={currentUser}
       onSave={saveNewExercise}
       onCancel={() => setAdding(false)}
     />
@@ -3239,7 +3320,7 @@ function groupByLetter(items) {
 }
 
 /* ---------- Catégories ---------- */
-function CategoryForm({ initial, thematiquesList, objectifsList, showTypesList, familiesList, onCreateFamily, isAdmin, creatorTroupe, onSave, onCancel }) {
+function CategoryForm({ initial, thematiquesList, objectifsList, showTypesList, familiesList, onCreateFamily, isAdmin, creatorTroupe, creatorUsername, onSave, onCancel }) {
   const [f, setF] = useState(
     initial || {
       name: "", summary: "", rules: "", thematiques: [], tags: [], duration: 5, archetypes: [],
@@ -3328,7 +3409,7 @@ function CategoryForm({ initial, thematiquesList, objectifsList, showTypesList, 
           {creatorTroupe && (
             <label className="flex items-center gap-2 text-sm mt-2" style={{ fontFamily: FONT_BODY, color: COLORS.text }}>
               <input type="checkbox" checked={!!f.showTroupeOnCard} onChange={(e) => setF({ ...f, showTroupeOnCard: e.target.checked })} />
-              Afficher le nom de ma troupe ({creatorTroupe}) sur la fiche
+              Afficher mon nom ({creatorUsername}) et le nom de ma troupe ({creatorTroupe}) sur la fiche
             </label>
           )}
         </IndexCard>
@@ -3355,7 +3436,7 @@ function CategoriesTab({ data, update, isAdmin, currentUser, onlyUserCreated, in
   const [toastMsg, showToast] = useToast();
   const [fullSheetId, setFullSheetId] = useState(null); // fiche complète (univers) actuellement ouverte
 
-  const baseCategories = onlyUserCreated ? data.categories.filter((c) => c.createdByUser) : data.categories.filter((c) => !c.pending);
+  const baseCategories = onlyUserCreated ? data.categories.filter((c) => c.createdByUser) : data.categories.filter((c) => !c.pending && !c.rejected);
 
   const canCreate = isAdmin || !!currentUser;
   const currentAccount = (data.accounts || []).find((a) => a.username === currentUser);
@@ -3396,8 +3477,18 @@ function CategoriesTab({ data, update, isAdmin, currentUser, onlyUserCreated, in
     setDuplicateWarning(null);
     setAdding(false);
   };
-  const approveCategory = (id) => update((d) => { const c = d.categories.find((x) => x.id === id); if (c) c.pending = false; return d; });
-  const rejectCategory = (id) => update((d) => { d.categories = d.categories.filter((x) => x.id !== id); return d; });
+  const approveCategory = (id) => update((d) => {
+    const c = d.categories.find((x) => x.id === id);
+    if (c) { c.pending = false; notifyCreatorApproved(d, c, "catégorie"); }
+    return d;
+  });
+  const rejectCategory = (id, reason) => update((d) => {
+    const c = d.categories.find((x) => x.id === id);
+    if (c) { c.pending = false; c.rejected = true; notifyCreatorRejected(d, c, "catégorie", reason); }
+    return d;
+  });
+  const [rejectingId, setRejectingId] = useState(null);
+  const [rejectReason, setRejectReason] = useState("");
 
   const renderCard = (c) =>
     editing === c.id ? (
@@ -3430,7 +3521,7 @@ function CategoriesTab({ data, update, isAdmin, currentUser, onlyUserCreated, in
             {isAdmin && c.pending && (
               <>
                 <Btn small variant="ghost" onClick={() => approveCategory(c.id)}><Check size={13} /> Valider</Btn>
-                <Btn small variant="ghost" onClick={() => rejectCategory(c.id)}><X size={13} /> Refuser</Btn>
+                <Btn small variant="ghost" onClick={() => { setRejectingId(c.id); setRejectReason(""); }}><X size={13} /> Refuser</Btn>
               </>
             )}
             {isAdmin && <Btn small variant="ghost" onClick={() => setEditing(c.id)}>Modifier</Btn>}
@@ -3446,6 +3537,14 @@ function CategoriesTab({ data, update, isAdmin, currentUser, onlyUserCreated, in
             En attente de validation — pas encore visible dans la bibliothèque publique.
           </p>
         )}
+        {rejectingId === c.id && (
+          <RejectReasonBox
+            reason={rejectReason}
+            setReason={setRejectReason}
+            onConfirm={() => { rejectCategory(c.id, rejectReason.trim()); setRejectingId(null); setRejectReason(""); }}
+            onCancel={() => { setRejectingId(null); setRejectReason(""); }}
+          />
+        )}
         {(c.tags || []).length > 0 && (
           <span
             className="inline-block text-xs px-2 py-0.5 rounded-full mt-1 mb-1"
@@ -3460,7 +3559,7 @@ function CategoriesTab({ data, update, isAdmin, currentUser, onlyUserCreated, in
           {c.level && <span>· {c.level}</span>}
           {c.playersMin && <span>· {playersLabel(c)}</span>}
           {c.energy && <span>· énergie {c.energy}</span>}
-          {c.creatorTroupe && <span>· Troupe {c.creatorTroupe}</span>}
+          {c.creatorTroupe && <span>· {c.creatorUsername} — Troupe {c.creatorTroupe}</span>}
         </div>
         <div className="flex flex-wrap">
           {c.thematiques.map((t) => <TagPill key={t} label={t} color={themeColor(t, data.thematiques)} />)}
@@ -3560,6 +3659,7 @@ function CategoriesTab({ data, update, isAdmin, currentUser, onlyUserCreated, in
         showTypesList={data.showTypes}
       isAdmin={isAdmin}
       creatorTroupe={currentAccount?.troupe || ""}
+      creatorUsername={currentUser}
       onSave={saveNewCategory}
       onCancel={() => setAdding(false)}
     />
@@ -4410,7 +4510,14 @@ function buildCours(exercises, categories, { niveau, tempsTotal, nbEchauffements
 
 
 
-function GenerateurCoursTab({ data, update, goTo, plan, setPlan, currentUser, setTab }) {
+function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, currentUser, setTab }) {
+  // Fiches en attente/refusées du créateur courant : jamais proposées par le tirage automatique,
+  // mais ajoutées au pool de recherche manuelle des pickers pour qu'il puisse quand même les ajouter
+  // lui-même à son cours (voir notifyCreatorRejected).
+  const myPendingExercises = currentUser ? (allData?.exercises || []).filter((e) => e.creatorUsername === currentUser && (e.pending || e.rejected)) : [];
+  const myPendingCategories = currentUser ? (allData?.categories || []).filter((c) => c.creatorUsername === currentUser && (c.pending || c.rejected)) : [];
+  const pickerExercises = myPendingExercises.length > 0 ? [...data.exercises, ...myPendingExercises] : data.exercises;
+  const pickerCategories = myPendingCategories.length > 0 ? [...data.categories, ...myPendingCategories] : data.categories;
   const [niveau, setNiveau] = useState("");
   const [participants, setParticipants] = useState(8);
   const [joueursSeConnaissent, setJoueursSeConnaissent] = useState(true);
@@ -4900,7 +5007,7 @@ function GenerateurCoursTab({ data, update, goTo, plan, setPlan, currentUser, se
           })}
           {picker && (
             <ExercisePicker
-              exercises={data.exercises}
+              exercises={pickerExercises}
               excludeIds={[...usedIds()]}
               onSelect={pickManually}
               onCancel={() => setPicker(null)}
@@ -4912,7 +5019,7 @@ function GenerateurCoursTab({ data, update, goTo, plan, setPlan, currentUser, se
           </div>
           {catPicker && (
             <CategoryPicker
-              categories={data.categories}
+              categories={pickerCategories}
               excludeIds={[...usedCatIds()]}
               onSelect={pickCatManually}
               onCancel={() => setCatPicker(null)}
@@ -5105,7 +5212,12 @@ function DropZone() {
   return <div style={{ height: 10 }} />;
 }
 
-function GenerateurSpectacleTab({ data, update, plan, setPlan, currentUser, setTab }) {
+function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentUser, setTab }) {
+  // Catégories en attente/refusées du créateur courant : jamais proposées par le tirage automatique,
+  // mais ajoutées au pool de recherche manuelle du picker pour qu'il puisse quand même les ajouter
+  // lui-même à son spectacle (voir notifyCreatorRejected).
+  const myPendingCategories = currentUser ? (allData?.categories || []).filter((c) => c.creatorUsername === currentUser && (c.pending || c.rejected)) : [];
+  const pickerCategories = myPendingCategories.length > 0 ? [...data.categories, ...myPendingCategories] : data.categories;
   const [format, setFormat] = useState("Cabaret");
   const [duree, setDuree] = useState(120);
   const [comediens, setComediens] = useState(4);
@@ -5416,7 +5528,7 @@ function GenerateurSpectacleTab({ data, update, plan, setPlan, currentUser, setT
           </div>
           {catPicker && (
             <CategoryPicker
-              categories={data.categories}
+              categories={pickerCategories}
               excludeIds={allCats.map((c) => c.id)}
               onSelect={pickCatManually}
               onCancel={() => setCatPicker(null)}
@@ -5740,10 +5852,29 @@ function ModerationTab({ data, update, setTab }) {
   const pendingExercises = data.exercises.filter((e) => e.pending);
   const pendingCategories = data.categories.filter((c) => c.pending);
 
-  const approveExercise = (id) => update((d) => { const e = d.exercises.find((x) => x.id === id); if (e) e.pending = false; return d; });
-  const rejectExercise = (id) => update((d) => { d.exercises = d.exercises.filter((x) => x.id !== id); return d; });
-  const approveCategory = (id) => update((d) => { const c = d.categories.find((x) => x.id === id); if (c) c.pending = false; return d; });
-  const rejectCategory = (id) => update((d) => { d.categories = d.categories.filter((x) => x.id !== id); return d; });
+  const approveExercise = (id) => update((d) => {
+    const e = d.exercises.find((x) => x.id === id);
+    if (e) { e.pending = false; notifyCreatorApproved(d, e, "exercice"); }
+    return d;
+  });
+  const rejectExercise = (id, reason) => update((d) => {
+    const e = d.exercises.find((x) => x.id === id);
+    if (e) { e.pending = false; e.rejected = true; notifyCreatorRejected(d, e, "exercice", reason); }
+    return d;
+  });
+  const approveCategory = (id) => update((d) => {
+    const c = d.categories.find((x) => x.id === id);
+    if (c) { c.pending = false; notifyCreatorApproved(d, c, "catégorie"); }
+    return d;
+  });
+  const rejectCategory = (id, reason) => update((d) => {
+    const c = d.categories.find((x) => x.id === id);
+    if (c) { c.pending = false; c.rejected = true; notifyCreatorRejected(d, c, "catégorie", reason); }
+    return d;
+  });
+  const [rejectingExId, setRejectingExId] = useState(null);
+  const [rejectingCatId, setRejectingCatId] = useState(null);
+  const [rejectReason, setRejectReason] = useState("");
 
   return (
     <div>
@@ -5767,14 +5898,22 @@ function ModerationTab({ data, update, setTab }) {
                 <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-lg font-medium">{ex.title}</h3>
                 <div className="flex gap-1">
                   <Btn small variant="ghost" onClick={() => approveExercise(ex.id)}><Check size={13} /> Valider</Btn>
-                  <Btn small variant="ghost" onClick={() => rejectExercise(ex.id)}><X size={13} /> Refuser</Btn>
+                  <Btn small variant="ghost" onClick={() => { setRejectingExId(ex.id); setRejectReason(""); }}><X size={13} /> Refuser</Btn>
                 </div>
               </div>
+              {rejectingExId === ex.id && (
+                <RejectReasonBox
+                  reason={rejectReason}
+                  setReason={setRejectReason}
+                  onConfirm={() => { rejectExercise(ex.id, rejectReason.trim()); setRejectingExId(null); setRejectReason(""); }}
+                  onCancel={() => { setRejectingExId(null); setRejectReason(""); }}
+                />
+              )}
               <p style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }} className="text-sm my-1">{ex.summary}</p>
               <div className="flex flex-wrap gap-1 mt-1 text-xs" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
                 <span>{ex.level}</span>·<span>{ex.players > 0 ? `${ex.players} élève${ex.players > 1 ? "s" : ""}` : "Illimité"}</span>·<span>{ex.duration} min</span>
                 {ex.phase && <span>· {ex.phase}</span>}
-                {ex.creatorTroupe && <span>· Troupe {ex.creatorTroupe}</span>}
+                {ex.creatorTroupe && <span>· {ex.creatorUsername} — Troupe {ex.creatorTroupe}</span>}
               </div>
             </IndexCard>
           ))}
@@ -5790,15 +5929,23 @@ function ModerationTab({ data, update, setTab }) {
                 <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-lg font-medium">{c.name}</h3>
                 <div className="flex gap-1">
                   <Btn small variant="ghost" onClick={() => approveCategory(c.id)}><Check size={13} /> Valider</Btn>
-                  <Btn small variant="ghost" onClick={() => rejectCategory(c.id)}><X size={13} /> Refuser</Btn>
+                  <Btn small variant="ghost" onClick={() => { setRejectingCatId(c.id); setRejectReason(""); }}><X size={13} /> Refuser</Btn>
                 </div>
               </div>
+              {rejectingCatId === c.id && (
+                <RejectReasonBox
+                  reason={rejectReason}
+                  setReason={setRejectReason}
+                  onConfirm={() => { rejectCategory(c.id, rejectReason.trim()); setRejectingCatId(null); setRejectReason(""); }}
+                  onCancel={() => { setRejectingCatId(null); setRejectReason(""); }}
+                />
+              )}
               <p style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }} className="text-sm my-1">{c.summary}</p>
               <div className="flex flex-wrap items-center gap-2 text-xs" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
                 <span>{c.durationLabel || `${c.duration || 5} min`}</span>
                 {c.level && <span>· {c.level}</span>}
                 {c.playersMin && <span>· {playersLabel(c)}</span>}
-                {c.creatorTroupe && <span>· Troupe {c.creatorTroupe}</span>}
+                {c.creatorTroupe && <span>· {c.creatorUsername} — Troupe {c.creatorTroupe}</span>}
               </div>
             </IndexCard>
           ))}
@@ -5810,13 +5957,15 @@ function ModerationTab({ data, update, setTab }) {
 
 /* ---------- Messages reçus (contact utilisateurs -> Admin) ---------- */
 function MessagesTab({ data, update, setTab }) {
-  const messages = [...(data.messages || [])].sort((a, b) => b.createdAt - a.createdAt);
+  // Exclut les notifications automatiques (validation/refus) envoyées PAR l'Admin aux créateurs —
+  // cette boîte ne montre que les messages reçus DES troupes utilisatrices.
+  const messages = [...(data.messages || [])].filter((m) => m.type !== "notif").sort((a, b) => b.createdAt - a.createdAt);
 
   // Marque tous les messages comme lus à l'ouverture de la page.
   useEffect(() => {
-    const hasUnread = (data.messages || []).some((m) => !m.read);
+    const hasUnread = (data.messages || []).some((m) => m.type !== "notif" && !m.read);
     if (hasUnread) {
-      update((d) => { (d.messages || []).forEach((m) => { m.read = true; }); return d; });
+      update((d) => { (d.messages || []).forEach((m) => { if (m.type !== "notif") m.read = true; }); return d; });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -5909,13 +6058,24 @@ function MessageCard({ message: m, onDelete, onReply, formatDate }) {
 
 /* ---------- Mes messages (utilisateur -> réponses de l'Admin) ---------- */
 function MesMessagesTab({ data, update, setTab, currentUser }) {
-  const messages = [...(data.messages || [])].filter((m) => m.from === currentUser).sort((a, b) => b.createdAt - a.createdAt);
+  // Deux sortes de fiches ici : les messages que l'utilisateur a lui-même envoyés à l'Admin (avec
+  // sa réponse éventuelle), et les notifications automatiques que l'Admin lui envoie (validation ou
+  // refus d'un exercice/catégorie proposé) — voir notifyCreatorApproved/notifyCreatorRejected.
+  const messages = [...(data.messages || [])]
+    .filter((m) => m.from === currentUser || (m.type === "notif" && m.to === currentUser))
+    .sort((a, b) => b.createdAt - a.createdAt);
 
-  // Marque les réponses comme vues à l'ouverture de la page.
+  // Marque les réponses et notifications comme vues à l'ouverture de la page.
   useEffect(() => {
-    const hasUnseenReply = messages.some((m) => m.reply && m.replySeen === false);
-    if (hasUnseenReply) {
-      update((d) => { (d.messages || []).forEach((m) => { if (m.from === currentUser && m.reply) m.replySeen = true; }); return d; });
+    const hasUnseen = messages.some((m) => (m.reply && m.replySeen === false) || (m.type === "notif" && m.seen === false));
+    if (hasUnseen) {
+      update((d) => {
+        (d.messages || []).forEach((m) => {
+          if (m.from === currentUser && m.reply) m.replySeen = true;
+          if (m.type === "notif" && m.to === currentUser) m.seen = true;
+        });
+        return d;
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -5928,25 +6088,33 @@ function MesMessagesTab({ data, update, setTab, currentUser }) {
       <SectionHeader
         icon={Mail}
         title="Messages reçus"
-        subtitle="Tes messages envoyés à l'Admin et ses réponses."
+        subtitle="Tes messages envoyés à l'Admin, ses réponses, et les notifications de validation."
       />
 
-      {messages.length === 0 && <Empty text="Tu n'as envoyé aucun message pour le moment." />}
+      {messages.length === 0 && <Empty text="Tu n'as reçu ni envoyé aucun message pour le moment." />}
 
-      {messages.map((m) => (
-        <IndexCard key={m.id}>
-          <p style={{ fontFamily: FONT_BODY, color: COLORS.text }} className="text-sm whitespace-pre-wrap">{m.text}</p>
-          <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{formatDate(m.createdAt)}</span>
-          {m.reply ? (
-            <div className="mt-2 pl-3" style={{ borderLeft: `2px solid ${COLORS.brass}` }}>
-              <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs uppercase">Réponse de l'Admin</span>
-              <p style={{ fontFamily: FONT_BODY, color: COLORS.text }} className="text-sm whitespace-pre-wrap">{m.reply}</p>
-            </div>
-          ) : (
-            <p className="text-xs mt-2" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>En attente de réponse…</p>
-          )}
-        </IndexCard>
-      ))}
+      {messages.map((m) =>
+        m.type === "notif" ? (
+          <IndexCard key={m.id}>
+            <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">Message de l'Admin</span>
+            <p style={{ fontFamily: FONT_BODY, color: COLORS.text }} className="text-sm my-1 whitespace-pre-wrap">{m.text}</p>
+            <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{formatDate(m.createdAt)}</span>
+          </IndexCard>
+        ) : (
+          <IndexCard key={m.id}>
+            <p style={{ fontFamily: FONT_BODY, color: COLORS.text }} className="text-sm whitespace-pre-wrap">{m.text}</p>
+            <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{formatDate(m.createdAt)}</span>
+            {m.reply ? (
+              <div className="mt-2 pl-3" style={{ borderLeft: `2px solid ${COLORS.brass}` }}>
+                <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs uppercase">Réponse de l'Admin</span>
+                <p style={{ fontFamily: FONT_BODY, color: COLORS.text }} className="text-sm whitespace-pre-wrap">{m.reply}</p>
+              </div>
+            ) : (
+              <p className="text-xs mt-2" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>En attente de réponse…</p>
+            )}
+          </IndexCard>
+        )
+      )}
     </div>
   );
 }
