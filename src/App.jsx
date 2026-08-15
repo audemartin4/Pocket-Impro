@@ -5006,8 +5006,18 @@ function buildSpectacle(categories, { format, niveau, duree, entracteOn, integre
   // La durée moyenne d'une catégorie inclut désormais la transition de ~2 min vers la suivante,
   // pour ne pas surestimer le nombre de catégories qui tiennent réellement dans le temps imparti.
   const avgWithTransition = SPECTACLE_CATEGORY_AVG_MIN + SPECTACLE_TRANSITION_MIN;
-  const maxCount1 = duree === 120 && entracteOn ? 6 : Math.max(1, Math.round(budget1 / avgWithTransition));
-  const maxCount2 = !entracteOn ? 0 : duree === 120 ? 6 : Math.max(1, Math.round(budget2 / avgWithTransition));
+  // Nombre de catégories imposé pour les formats courts, peu importe le calcul par durée moyenne :
+  // 4 pour 30 min, 8 pour 60 min (réparties en 2 si l'entracte est coché).
+  const maxCount1 =
+    duree === 30 ? (entracteOn ? 2 : 4)
+    : duree === 60 ? (entracteOn ? 4 : 8)
+    : duree === 120 && entracteOn ? 6
+    : Math.max(1, Math.round(budget1 / avgWithTransition));
+  const maxCount2 = !entracteOn ? 0
+    : duree === 30 ? 2
+    : duree === 60 ? 4
+    : duree === 120 ? 6
+    : Math.max(1, Math.round(budget2 / avgWithTransition));
 
   const pickFor = (budget, exclude, maxCount, guaranteed) => {
     let b = budget, picked = [];
@@ -5241,7 +5251,23 @@ function GenerateurSpectacleTab({ data, update, plan, setPlan, currentUser, setT
                 <IndexCard>
                   <div className="flex justify-between items-start">
                     <div className="flex-1" onClick={() => handleCardTap(c.id)} style={{ cursor: "pointer" }}>
-                      <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{c.name}</h3>
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{c.name}</h3>
+                        {format === "Match" && (
+                          <div className="flex rounded-sm overflow-hidden shrink-0" style={{ border: `1px solid ${COLORS.accent}` }} onClick={(e) => e.stopPropagation()}>
+                            {["Mixte", "Comparé"].map((mode) => (
+                              <button
+                                key={mode}
+                                onClick={() => setMatchMode("first", i, mode)}
+                                className="text-xs px-2 py-1"
+                                style={{ fontFamily: FONT_MONO, background: (c.matchMode || "Mixte") === mode ? COLORS.accent : "transparent", color: (c.matchMode || "Mixte") === mode ? "#fff" : COLORS.accent }}
+                              >
+                                {mode}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                       {(c.tags || []).length > 0 && (
                         <span
                           className="inline-block text-xs px-2 py-0.5 rounded-full mt-1 mb-1"
@@ -5273,20 +5299,6 @@ function GenerateurSpectacleTab({ data, update, plan, setPlan, currentUser, setT
                     <div className="flex flex-col gap-1 items-end">
                       <Btn small variant="ghost" onClick={() => replaceCat("first", i)}>Aléatoire</Btn>
                       <Btn small variant="ghost" onClick={() => setCatPicker({ part: "first", idx: i })}>Modifier</Btn>
-                      {format === "Match" && (
-                        <div className="flex rounded-sm overflow-hidden" style={{ border: `1px solid ${COLORS.accent}` }}>
-                          {["Mixte", "Comparé"].map((mode) => (
-                            <button
-                              key={mode}
-                              onClick={() => setMatchMode("first", i, mode)}
-                              className="text-xs px-2 py-1"
-                              style={{ fontFamily: FONT_MONO, background: (c.matchMode || "Mixte") === mode ? COLORS.accent : "transparent", color: (c.matchMode || "Mixte") === mode ? "#fff" : COLORS.accent }}
-                            >
-                              {mode}
-                            </button>
-                          ))}
-                        </div>
-                      )}
                     </div>
                   </div>
                   <div className="flex justify-between items-center mt-2">
@@ -5325,7 +5337,23 @@ function GenerateurSpectacleTab({ data, update, plan, setPlan, currentUser, setT
                 <IndexCard>
                   <div className="flex justify-between items-start">
                     <div className="flex-1" onClick={() => handleCardTap(c.id)} style={{ cursor: "pointer" }}>
-                      <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{c.name}</h3>
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{c.name}</h3>
+                        {format === "Match" && (
+                          <div className="flex rounded-sm overflow-hidden shrink-0" style={{ border: `1px solid ${COLORS.accent}` }} onClick={(e) => e.stopPropagation()}>
+                            {["Mixte", "Comparé"].map((mode) => (
+                              <button
+                                key={mode}
+                                onClick={() => setMatchMode("second", i, mode)}
+                                className="text-xs px-2 py-1"
+                                style={{ fontFamily: FONT_MONO, background: (c.matchMode || "Mixte") === mode ? COLORS.accent : "transparent", color: (c.matchMode || "Mixte") === mode ? "#fff" : COLORS.accent }}
+                              >
+                                {mode}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                       {(c.tags || []).length > 0 && (
                         <span
                           className="inline-block text-xs px-2 py-0.5 rounded-full mt-1 mb-1"
@@ -5357,20 +5385,6 @@ function GenerateurSpectacleTab({ data, update, plan, setPlan, currentUser, setT
                     <div className="flex flex-col gap-1 items-end">
                       <Btn small variant="ghost" onClick={() => replaceCat("second", i)}>Aléatoire</Btn>
                       <Btn small variant="ghost" onClick={() => setCatPicker({ part: "second", idx: i })}>Modifier</Btn>
-                      {format === "Match" && (
-                        <div className="flex rounded-sm overflow-hidden" style={{ border: `1px solid ${COLORS.accent}` }}>
-                          {["Mixte", "Comparé"].map((mode) => (
-                            <button
-                              key={mode}
-                              onClick={() => setMatchMode("second", i, mode)}
-                              className="text-xs px-2 py-1"
-                              style={{ fontFamily: FONT_MONO, background: (c.matchMode || "Mixte") === mode ? COLORS.accent : "transparent", color: (c.matchMode || "Mixte") === mode ? "#fff" : COLORS.accent }}
-                            >
-                              {mode}
-                            </button>
-                          ))}
-                        </div>
-                      )}
                     </div>
                   </div>
                   <div className="flex justify-between items-center mt-2">
