@@ -2091,13 +2091,27 @@ function ProfilTab({ data, update, setTab, currentUser, setCurrentUser }) {
   // puis marquées comme vues (approvalSeen: true) pour ne pas réapparaître.
   const newlyApproved = currentUser
     ? [
-        ...data.exercises.filter((e) => e.creatorUsername === currentUser && !e.pending && e.approvalSeen === false).map((e) => ({ kind: "exercice", article: "Ton", title: e.title, id: e.id })),
-        ...data.categories.filter((c) => c.creatorUsername === currentUser && !c.pending && c.approvalSeen === false).map((c) => ({ kind: "catégorie", article: "Ta", title: c.name, id: c.id })),
+        ...data.exercises.filter((e) => e.creatorUsername === currentUser && !e.pending && !e.rejected && e.approvalSeen === false).map((e) => ({ kind: "exercice", article: "Ton", title: e.title, id: e.id })),
+        ...data.categories.filter((c) => c.creatorUsername === currentUser && !c.pending && !c.rejected && c.approvalSeen === false).map((c) => ({ kind: "catégorie", article: "Ta", title: c.name, id: c.id })),
       ]
     : [];
   const dismissApproved = () => update((d) => {
-    d.exercises.forEach((e) => { if (e.creatorUsername === currentUser && !e.pending && e.approvalSeen === false) e.approvalSeen = true; });
-    d.categories.forEach((c) => { if (c.creatorUsername === currentUser && !c.pending && c.approvalSeen === false) c.approvalSeen = true; });
+    d.exercises.forEach((e) => { if (e.creatorUsername === currentUser && !e.pending && !e.rejected && e.approvalSeen === false) e.approvalSeen = true; });
+    d.categories.forEach((c) => { if (c.creatorUsername === currentUser && !c.pending && !c.rejected && c.approvalSeen === false) c.approvalSeen = true; });
+    return d;
+  });
+
+  // Créations refusées par l'Admin depuis la dernière visite du créateur — même principe, affichées
+  // une seule fois. Le détail de la raison, lui, reste consultable dans les messages (notifyCreatorRejected).
+  const newlyRejected = currentUser
+    ? [
+        ...data.exercises.filter((e) => e.creatorUsername === currentUser && e.rejected && e.approvalSeen === false).map((e) => ({ kind: "exercice", title: e.title, id: e.id })),
+        ...data.categories.filter((c) => c.creatorUsername === currentUser && c.rejected && c.approvalSeen === false).map((c) => ({ kind: "catégorie", title: c.name, id: c.id })),
+      ]
+    : [];
+  const dismissRejected = () => update((d) => {
+    d.exercises.forEach((e) => { if (e.creatorUsername === currentUser && e.rejected && e.approvalSeen === false) e.approvalSeen = true; });
+    d.categories.forEach((c) => { if (c.creatorUsername === currentUser && c.rejected && c.approvalSeen === false) c.approvalSeen = true; });
     return d;
   });
 
@@ -2173,6 +2187,21 @@ function ProfilTab({ data, update, setTab, currentUser, setCurrentUser }) {
             )}
           </p>
           <Btn small variant="ghost" onClick={dismissApproved}><Check size={13} /> OK, compris</Btn>
+        </IndexCard>
+      )}
+
+      {newlyRejected.length > 0 && (
+        <IndexCard style={{ background: COLORS.accent + "11", borderColor: COLORS.accent }}>
+          <p className="text-sm mb-2" style={{ fontFamily: FONT_BODY, color: COLORS.ink }}>
+            {newlyRejected.length === 1 ? (
+              <>Désolé ! {newlyRejected[0].kind === "catégorie" ? "Ta catégorie" : "Ton exercice"} « <b>{newlyRejected[0].title}</b> » n'a pas été validé{newlyRejected[0].kind === "catégorie" ? "e" : ""} par la modération. Consulte tes messages pour en connaître la raison. Tu peux tout de même {newlyRejected[0].kind === "catégorie" ? "utiliser ta catégorie" : "utiliser ton exercice"}, mais {newlyRejected[0].kind === "catégorie" ? "elle" : "il"} ne sera pas rendu{newlyRejected[0].kind === "catégorie" ? "e" : ""} public{newlyRejected[0].kind === "catégorie" ? "que" : ""}.</>
+            ) : (
+              <>Désolé, tes créations suivantes n'ont pas été validées par la modération : {newlyRejected.map((n, i) => (
+                <span key={n.id}>{i > 0 && ", "}« <b>{n.title}</b> »</span>
+              ))}. Consulte tes messages pour en connaître la raison. Tu peux tout de même les utiliser, mais elles ne seront pas rendues publiques.</>
+            )}
+          </p>
+          <Btn small variant="ghost" onClick={dismissRejected}><Check size={13} /> OK, compris</Btn>
         </IndexCard>
       )}
 
