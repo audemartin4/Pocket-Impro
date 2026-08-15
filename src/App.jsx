@@ -1722,7 +1722,6 @@ function BibliothequeTab({ data, update, setTab, isAdmin, currentUser, goToLibra
     { label: "Catégories", desc: `${data.categories.length} fiche(s) — types de scène, thématiques, archétypes`, tab: "categories", icon: Tag },
     { label: "Concepts de spectacle", desc: `${data.showConcepts.length} fiche(s)`, tab: "spectacles", icon: Theater },
   ];
-  const upcoming = ["Univers", "Personnages", "Lieux", "Vocabulaire"];
 
   return (
     <div>
@@ -1889,16 +1888,6 @@ function BibliothequeTab({ data, update, setTab, isAdmin, currentUser, goToLibra
           </IndexCard>
         </button>
       ))}
-      <div className="mt-4">
-        <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs uppercase">À venir</span>
-        <div className="flex flex-wrap gap-2 mt-2">
-          {upcoming.map((u) => (
-            <span key={u} className="text-xs px-2 py-1 rounded-full" style={{ fontFamily: FONT_BODY, background: COLORS.cardEdge + "55", color: COLORS.textSoft }}>
-              {u}
-            </span>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }
@@ -2324,14 +2313,6 @@ function ProfilTab({ data, update, setTab, currentUser, setCurrentUser }) {
           )}
         </IndexCard>
       )}
-      <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs uppercase">À venir</span>
-      <div className="flex flex-wrap gap-2 mt-2">
-        {["Partage avec la troupe", "Créations publiques"].map((u) => (
-          <span key={u} className="text-xs px-2 py-1 rounded-full" style={{ fontFamily: FONT_BODY, background: COLORS.cardEdge + "55", color: COLORS.textSoft }}>
-            {u}
-          </span>
-        ))}
-      </div>
     </div>
   );
 }
