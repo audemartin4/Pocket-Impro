@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import {
   Sparkles, Shuffle, Clock, BookOpen, Users, Flame, ClipboardList,
   Plus, Trash2, Tag, ChevronRight, ChevronUp, ChevronDown, ChevronLeft, Download,
-  Save, X, Check, Home, Theater, Pencil, Library, UserCircle, GripVertical, Star, LogIn, LogOut, AlertTriangle, Mail
+  Save, X, Check, Home, Theater, Pencil, Library, UserCircle, GripVertical, Star, LogIn, LogOut, AlertTriangle, Mail, Eye, EyeOff
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
 import { useAuthUser, signIn, signUp, signOut } from "./auth.js";
@@ -35,16 +35,25 @@ const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(
 // Envoie un message automatique (type "notif", distinct des messages utilisateur→Admin) au créateur
 // d'un exercice/catégorie quand l'Admin valide ou refuse sa proposition. Rien n'est envoyé pour les
 // fiches créées par l'Admin lui-même (creatorUsername vide).
+function itemTitleFor(item, kind) {
+  if (kind === "exercice") return item.title;
+  if (kind === "catégorie") return item.name;
+  return `${item.theme} · ${item.type}`; // concept de spectacle
+}
+
 function notifyCreatorApproved(d, item, kind) {
   if (!item.creatorUsername) return;
   d.messages = d.messages || [];
-  const title = kind === "exercice" ? item.title : item.name;
+  const title = itemTitleFor(item, kind);
+  const extra = kind === "concept de spectacle"
+    ? "il est maintenant visible dans la liste publique des concepts de spectacle."
+    : "il est maintenant visible dans la bibliothèque publique et pourra être proposé par les générateurs de cours, de spectacle et d'échauffement.";
   d.messages.push({
     id: uid(),
     type: "notif",
     to: item.creatorUsername,
     troupe: item.creatorTroupe || "",
-    text: `🎉 Ton ${kind} « ${title} » a été validé${kind === "catégorie" ? "e" : ""} par l'Admin : il est maintenant visible dans la bibliothèque publique et pourra être proposé par les générateurs de cours, de spectacle et d'échauffement.`,
+    text: `🎉 Ton ${kind} « ${title} » a été validé${kind === "catégorie" ? "e" : ""} par l'Admin : ${extra}`,
     createdAt: Date.now(),
     seen: false,
   });
@@ -53,10 +62,15 @@ function notifyCreatorApproved(d, item, kind) {
 function notifyCreatorRejected(d, item, kind, reason) {
   if (!item.creatorUsername) return;
   d.messages = d.messages || [];
-  const title = kind === "exercice" ? item.title : item.name;
-  const pickerLabel = kind === "exercice" ? "Ajouter un exercice" : "Ajouter une catégorie";
-  const mesFiches = kind === "exercice" ? "tes exercices créés" : "tes catégories créées";
-  let text = `Ton ${kind} « ${title} » n'a pas été validé${kind === "catégorie" ? "e" : ""} pour la bibliothèque publique : il n'apparaîtra pas dans la bibliothèque publique et ne sera pas proposé par les générateurs. Tu peux quand même le retrouver dans ${mesFiches} (onglet Mon profil), ou en tapant son nom dans la barre de recherche « ${pickerLabel} » de la création de cours ou de spectacle, pour l'ajouter toi-même à ton programme si tu le souhaites.`;
+  const title = itemTitleFor(item, kind);
+  let text;
+  if (kind === "concept de spectacle") {
+    text = `Ton concept de spectacle « ${title} » n'a pas été validé pour la liste publique : il n'apparaîtra pas dans la liste publique des concepts de spectacle. Tu peux quand même le retrouver et le réutiliser depuis la page « Concepts de spectacle ».`;
+  } else {
+    const pickerLabel = kind === "exercice" ? "Ajouter un exercice" : "Ajouter une catégorie";
+    const mesFiches = kind === "exercice" ? "tes exercices créés" : "tes catégories créées";
+    text = `Ton ${kind} « ${title} » n'a pas été validé${kind === "catégorie" ? "e" : ""} pour la bibliothèque publique : il n'apparaîtra pas dans la bibliothèque publique et ne sera pas proposé par les générateurs. Tu peux quand même le retrouver dans ${mesFiches} (onglet Mon profil), ou en tapant son nom dans la barre de recherche « ${pickerLabel} » de la création de cours ou de spectacle, pour l'ajouter toi-même à ton programme si tu le souhaites.`;
+  }
   if (reason) text += `\n\nRaison indiquée par l'Admin : ${reason}`;
   d.messages.push({
     id: uid(),
@@ -1101,6 +1115,33 @@ const inputStyle = {
 };
 const inputClass = "w-full rounded-sm px-2 py-1.5 text-sm outline-none focus:ring-2";
 
+/* Champ mot de passe avec un œil cliquable à droite pour basculer entre masqué et affiché en clair. */
+function PasswordInput({ value, onChange, onKeyDown, placeholder }) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="relative">
+      <input
+        type={visible ? "text" : "password"}
+        className={inputClass}
+        style={{ ...inputStyle, paddingRight: 34 }}
+        value={value}
+        onChange={onChange}
+        onKeyDown={onKeyDown}
+        placeholder={placeholder}
+      />
+      <button
+        type="button"
+        onClick={() => setVisible((v) => !v)}
+        className="absolute inset-y-0 right-0 flex items-center px-2"
+        tabIndex={-1}
+        title={visible ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+      >
+        {visible ? <EyeOff size={16} color={COLORS.textSoft} /> : <Eye size={16} color={COLORS.textSoft} />}
+      </button>
+    </div>
+  );
+}
+
 function MultiTagPicker({ allOptions, selected, onChange, color = COLORS.brass, placeholder }) {
   const [draft, setDraft] = useState("");
   const add = (val) => {
@@ -1508,6 +1549,7 @@ export default function ImproApp() {
       ...data,
       exercises: data.exercises.filter((e) => !e.pending && !e.rejected),
       categories: data.categories.filter((c) => !c.pending && !c.rejected),
+      showConcepts: data.showConcepts.filter((sc) => !sc.pending && !sc.rejected),
     };
   }, [data]);
 
@@ -1563,7 +1605,7 @@ export default function ImproApp() {
         {tab === "exercices-crees" && <ExercicesTab data={data} update={update} isAdmin={isAdmin} currentUser={currentUser} profile={auth.profile} onlyUserCreated setTab={setTab} />}
         {tab === "categories" && <CategoriesTab data={data} update={update} isAdmin={isAdmin} currentUser={currentUser} profile={auth.profile} initialSearchQuery={librarySearchSeed} setTab={setTab} />}
         {tab === "categories-crees" && <CategoriesTab data={data} update={update} isAdmin={isAdmin} currentUser={currentUser} profile={auth.profile} onlyUserCreated setTab={setTab} />}
-        {tab === "spectacles" && <SpectaclesTab data={publicData} update={update} setTab={setTab} />}
+        {tab === "spectacles" && <SpectaclesTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} />}
         {tab === "entrainement" && <EntrainementTab data={publicData} />}
         {tab === "plans" && <PlansTab data={publicData} update={update} setTab={setTab} />}
         {tab === "moderation" && <ModerationTab data={data} update={update} setTab={setTab} isAdmin={isAdmin} />}
@@ -2061,7 +2103,7 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
   ];
 
   const nbPending = data.exercises.filter((e) => e.pending).length + data.categories.filter((c) => c.pending).length;
-  const nbUnreadMessages = (data.messages || []).filter((m) => !m.read).length;
+  const nbUnreadMessages = (data.messages || []).filter((m) => m.type !== "notif" && !m.read).length;
   const nbUnreadReplies = (data.messages || []).filter((m) =>
     (m.from === currentUser && m.reply && m.replySeen === false) ||
     (m.type === "notif" && m.to === currentUser && m.seen === false)
@@ -2096,11 +2138,13 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
     ? [
         ...data.exercises.filter((e) => e.creatorUsername === currentUser && !e.pending && !e.rejected && e.approvalSeen === false).map((e) => ({ kind: "exercice", article: "Ton", title: e.title, id: e.id })),
         ...data.categories.filter((c) => c.creatorUsername === currentUser && !c.pending && !c.rejected && c.approvalSeen === false).map((c) => ({ kind: "catégorie", article: "Ta", title: c.name, id: c.id })),
+        ...data.showConcepts.filter((sc) => sc.creatorUsername === currentUser && !sc.pending && !sc.rejected && sc.approvalSeen === false).map((sc) => ({ kind: "concept de spectacle", article: "Ton", title: `${sc.theme} · ${sc.type}`, id: sc.id })),
       ]
     : [];
   const dismissApproved = () => update((d) => {
     d.exercises.forEach((e) => { if (e.creatorUsername === currentUser && !e.pending && !e.rejected && e.approvalSeen === false) e.approvalSeen = true; });
     d.categories.forEach((c) => { if (c.creatorUsername === currentUser && !c.pending && !c.rejected && c.approvalSeen === false) c.approvalSeen = true; });
+    d.showConcepts.forEach((sc) => { if (sc.creatorUsername === currentUser && !sc.pending && !sc.rejected && sc.approvalSeen === false) sc.approvalSeen = true; });
     return d;
   });
 
@@ -2110,11 +2154,13 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
     ? [
         ...data.exercises.filter((e) => e.creatorUsername === currentUser && e.rejected && e.approvalSeen === false).map((e) => ({ kind: "exercice", title: e.title, id: e.id })),
         ...data.categories.filter((c) => c.creatorUsername === currentUser && c.rejected && c.approvalSeen === false).map((c) => ({ kind: "catégorie", title: c.name, id: c.id })),
+        ...data.showConcepts.filter((sc) => sc.creatorUsername === currentUser && sc.rejected && sc.approvalSeen === false).map((sc) => ({ kind: "concept de spectacle", title: `${sc.theme} · ${sc.type}`, id: sc.id })),
       ]
     : [];
   const dismissRejected = () => update((d) => {
     d.exercises.forEach((e) => { if (e.creatorUsername === currentUser && e.rejected && e.approvalSeen === false) e.approvalSeen = true; });
     d.categories.forEach((c) => { if (c.creatorUsername === currentUser && c.rejected && c.approvalSeen === false) c.approvalSeen = true; });
+    d.showConcepts.forEach((sc) => { if (sc.creatorUsername === currentUser && sc.rejected && sc.approvalSeen === false) sc.approvalSeen = true; });
     return d;
   });
 
@@ -2186,7 +2232,7 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
         <IndexCard style={{ background: COLORS.brass + "22", borderColor: COLORS.brass }}>
           <p className="text-sm mb-2" style={{ fontFamily: FONT_BODY, color: COLORS.ink }}>
             🎉 {newlyApproved.length === 1 ? (
-              <>{newlyApproved[0].article} {newlyApproved[0].kind} « <b>{newlyApproved[0].title}</b> » a été validé{newlyApproved[0].kind === "catégorie" ? "e" : ""} et est maintenant publi{newlyApproved[0].kind === "catégorie" ? "que" : "c"} dans la bibliothèque !</>
+              <>{newlyApproved[0].article} {newlyApproved[0].kind} « <b>{newlyApproved[0].title}</b> » a été validé{newlyApproved[0].kind === "catégorie" ? "e" : ""} et est maintenant {newlyApproved[0].kind === "concept de spectacle" ? "public dans la liste des concepts de spectacle" : `publi${newlyApproved[0].kind === "catégorie" ? "que" : "c"} dans la bibliothèque`} !</>
             ) : (
               <>Tes créations suivantes ont été validées et sont maintenant publiques dans la bibliothèque : {newlyApproved.map((n, i) => (
                 <span key={n.id}>{i > 0 && ", "}« <b>{n.title}</b> »</span>
@@ -2200,9 +2246,13 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
       {newlyRejected.length > 0 && (
         <IndexCard style={{ background: COLORS.accent + "11", borderColor: COLORS.accent }}>
           <p className="text-sm mb-2" style={{ fontFamily: FONT_BODY, color: COLORS.ink }}>
-            {newlyRejected.length === 1 ? (
-              <>Désolé ! {newlyRejected[0].kind === "catégorie" ? "Ta catégorie" : "Ton exercice"} « <b>{newlyRejected[0].title}</b> » n'a pas été validé{newlyRejected[0].kind === "catégorie" ? "e" : ""} par la modération. Consulte tes messages pour en connaître la raison. Tu peux tout de même {newlyRejected[0].kind === "catégorie" ? "utiliser ta catégorie" : "utiliser ton exercice"}, mais {newlyRejected[0].kind === "catégorie" ? "elle" : "il"} ne sera pas rendu{newlyRejected[0].kind === "catégorie" ? "e" : ""} public{newlyRejected[0].kind === "catégorie" ? "que" : ""}.</>
-            ) : (
+            {newlyRejected.length === 1 ? (() => {
+              const isFem = newlyRejected[0].kind === "catégorie";
+              const noun = newlyRejected[0].kind === "catégorie" ? "catégorie" : newlyRejected[0].kind === "concept de spectacle" ? "concept de spectacle" : "exercice";
+              return (
+                <>Désolé ! {isFem ? "Ta" : "Ton"} {noun} « <b>{newlyRejected[0].title}</b> » n'a pas été validé{isFem ? "e" : ""} par la modération. Consulte tes messages pour en connaître la raison. Tu peux tout de même {isFem ? `utiliser ta ${noun}` : `utiliser ton ${noun}`}, mais {isFem ? "elle" : "il"} ne sera pas rendu{isFem ? "e" : ""} public{isFem ? "que" : ""}.</>
+              );
+            })() : (
               <>Désolé, tes créations suivantes n'ont pas été validées par la modération : {newlyRejected.map((n, i) => (
                 <span key={n.id}>{i > 0 && ", "}« <b>{n.title}</b> »</span>
               ))}. Consulte tes messages pour en connaître la raison. Tu peux tout de même les utiliser, mais elles ne seront pas rendues publiques.</>
@@ -2250,10 +2300,7 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
               <input type="email" className={inputClass} style={inputStyle} value={loginEmail} onChange={(e) => { setLoginEmail(e.target.value); setLoginError(""); }} placeholder="toi@exemple.com" />
             </Field>
             <Field label="Mot de passe">
-              <input
-                type="password"
-                className={inputClass}
-                style={inputStyle}
+              <PasswordInput
                 value={password}
                 onChange={(e) => { setPassword(e.target.value); setLoginError(""); }}
                 onKeyDown={(e) => { if (e.key === "Enter") login(); }}
@@ -2278,10 +2325,7 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
               <input className={inputClass} style={inputStyle} value={signupUsername} onChange={(e) => { setSignupUsername(e.target.value); setSignupError(""); }} />
             </Field>
             <Field label="Mot de passe">
-              <input
-                type="password"
-                className={inputClass}
-                style={inputStyle}
+              <PasswordInput
                 value={signupPassword}
                 onChange={(e) => { setSignupPassword(e.target.value); setSignupError(""); }}
                 onKeyDown={(e) => { if (e.key === "Enter") signup(); }}
@@ -3882,11 +3926,34 @@ function CategoriesTab({ data, update, isAdmin, currentUser, onlyUserCreated, in
 }
 
 /* ---------- Concepts de spectacle ---------- */
-function SpectaclesTab({ data, update, setTab }) {
+function SpectaclesTab({ data, update, setTab, currentUser, isAdmin }) {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState({ theme: data.thematiques[0] || "", type: data.showTypes[0] || "", categoryIds: [] });
 
-  const suggestionsFor = (theme) => data.categories.filter((c) => c.thematiques.includes(theme));
+  const canCreate = isAdmin || !!currentUser;
+  // Seules les catégories déjà validées peuvent être combinées dans un nouveau concept.
+  const approvedCategories = data.categories.filter((c) => !c.pending && !c.rejected);
+  const suggestionsFor = (theme) => approvedCategories.filter((c) => c.thematiques.includes(theme));
+
+  // Concepts visibles : validés pour tout le monde, + ceux du créateur courant (même en attente ou
+  // refusés, pour qu'il puisse toujours les retrouver), + tout pour l'Admin (contexte de modération).
+  const visibleConcepts = data.showConcepts.filter((sc) =>
+    (!sc.pending && !sc.rejected) || sc.creatorUsername === currentUser || isAdmin
+  );
+
+  const saveConcept = () => {
+    update((d) => {
+      d.showConcepts.push({
+        ...draft,
+        id: uid(),
+        pending: !isAdmin,
+        creatorUsername: isAdmin ? "" : (currentUser || ""),
+        approvalSeen: isAdmin,
+      });
+      return d;
+    });
+    setAdding(false);
+  };
 
   return (
     <div>
@@ -3895,8 +3962,20 @@ function SpectaclesTab({ data, update, setTab }) {
         icon={Theater}
         title="Concepts de spectacle"
         subtitle="Une thématique + un type → l'appli suggère les catégories (et leurs archétypes) qui correspondent."
-        action={<Btn variant="accent" small onClick={() => setAdding(true)}><Plus size={13} /> Ajouter un concept</Btn>}
+        action={canCreate ? <Btn variant="accent" small onClick={() => setAdding(true)}><Plus size={13} /> Ajouter un concept</Btn> : null}
       />
+      <IndexCard style={{ borderColor: COLORS.accent, background: COLORS.accent + "15", marginBottom: 12 }} className="flex items-center gap-2">
+        <AlertTriangle size={18} color={COLORS.accent} />
+        <span style={{ fontFamily: FONT_BODY, color: COLORS.accent }} className="text-xs font-medium">
+          Page en travaux — tu peux quand même l'utiliser et la tester librement.
+        </span>
+      </IndexCard>
+
+      {!canCreate && (
+        <p className="text-xs mb-3 italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+          Connecte-toi ou crée un compte (onglet Mon profil) pour proposer un concept de spectacle.
+        </p>
+      )}
 
       {adding && (
         <IndexCard>
@@ -3924,7 +4003,7 @@ function SpectaclesTab({ data, update, setTab }) {
               <div className="mt-2">
                 <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">Ou ajouter une autre catégorie :</span>
                 <div className="flex flex-wrap gap-1 mt-1">
-                  {data.categories.filter((c) => !suggestionsFor(draft.theme).includes(c)).map((c) => (
+                  {approvedCategories.filter((c) => !suggestionsFor(draft.theme).includes(c)).map((c) => (
                     <button key={c.id} className="text-xs px-2 py-0.5 rounded-full border"
                       style={{ fontFamily: FONT_MONO, borderColor: COLORS.cardEdge, color: COLORS.textSoft }}
                       onClick={() => setDraft({ ...draft, categoryIds: draft.categoryIds.includes(c.id) ? draft.categoryIds.filter(x=>x!==c.id) : [...draft.categoryIds, c.id] })}>
@@ -3936,7 +4015,7 @@ function SpectaclesTab({ data, update, setTab }) {
             </Field>
           )}
           <div className="flex gap-2 mt-2">
-            <Btn variant="accent" onClick={() => { update((d) => { d.showConcepts.push({ ...draft, id: uid() }); return d; }); setAdding(false); }}>
+            <Btn variant="accent" onClick={saveConcept}>
               <Check size={14} /> Enregistrer
             </Btn>
             <Btn variant="ghost" onClick={() => setAdding(false)}><X size={14} /> Annuler</Btn>
@@ -3944,7 +4023,7 @@ function SpectaclesTab({ data, update, setTab }) {
         </IndexCard>
       )}
 
-      {data.showConcepts.map((sc) => {
+      {visibleConcepts.map((sc) => {
         const cats = data.categories.filter((c) => sc.categoryIds.includes(c.id));
         const archetypes = cats.flatMap((c) => c.archetypes.map((a) => ({ ...a, category: c.name })));
         return (
@@ -3954,10 +4033,22 @@ function SpectaclesTab({ data, update, setTab }) {
                 <TagPill label={sc.theme} color={themeColor(sc.theme, data.thematiques)} />
                 <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{sc.type}</span>
               </div>
-              <button onClick={() => update((d) => { d.showConcepts = d.showConcepts.filter((x) => x.id !== sc.id); return d; })}>
-                <Trash2 size={14} color={COLORS.accent} />
-              </button>
+              {isAdmin && (
+                <button onClick={() => update((d) => { d.showConcepts = d.showConcepts.filter((x) => x.id !== sc.id); return d; })}>
+                  <Trash2 size={14} color={COLORS.accent} />
+                </button>
+              )}
             </div>
+            {sc.pending && (
+              <p className="text-xs mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.accent }}>
+                En attente de validation — pas encore visible dans la liste publique.
+              </p>
+            )}
+            {sc.rejected && (
+              <p className="text-xs mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.accent }}>
+                Non validé par la modération — visible uniquement par toi.
+              </p>
+            )}
             <div className="mt-2 text-sm" style={{ fontFamily: FONT_BODY, color: COLORS.text }}>
               <b>Catégories :</b> {cats.length ? cats.map((c) => c.name).join(", ") : "—"}
             </div>
@@ -3970,7 +4061,7 @@ function SpectaclesTab({ data, update, setTab }) {
           </IndexCard>
         );
       })}
-      {data.showConcepts.length === 0 && !adding && <Empty text="Aucun concept de spectacle pour l'instant." />}
+      {visibleConcepts.length === 0 && !adding && <Empty text="Aucun concept de spectacle pour l'instant." />}
     </div>
   );
 }
@@ -4973,8 +5064,9 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                   data-list="impro"
                   data-index={it.idx}
                   onPointerDown={(e) => startPress("impro", it.idx, e)}
-                  style={{ opacity: isDraggedItem ? 0.4 : 1, userSelect: "none", WebkitUserSelect: "none", touchAction: "none" }}
+                  style={{ position: "relative", opacity: isDraggedItem ? 0.4 : 1, userSelect: "none", WebkitUserSelect: "none", touchAction: "none" }}
                 >
+                  <GripVertical size={12} color={COLORS.textSoft} style={{ position: "absolute", left: 3, top: "50%", transform: "translateY(-50%)", zIndex: 1, pointerEvents: "none" }} />
                   {card}
                 </div>
               );
@@ -5084,8 +5176,9 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                 data-list={listKey}
                 data-index={it.idx}
                 onPointerDown={(e) => startPress(listKey, it.idx, e)}
-                style={{ opacity: isDraggedItem ? 0.4 : 1, userSelect: "none", WebkitUserSelect: "none", touchAction: "none" }}
+                style={{ position: "relative", opacity: isDraggedItem ? 0.4 : 1, userSelect: "none", WebkitUserSelect: "none", touchAction: "none" }}
               >
+                <GripVertical size={12} color={COLORS.textSoft} style={{ position: "absolute", left: 3, top: "50%", transform: "translateY(-50%)", zIndex: 1, pointerEvents: "none" }} />
                 {card}
               </div>
             );
@@ -5451,10 +5544,12 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                 data-index={i}
                 onPointerDown={(e) => startPress("first", i, e)}
                 style={{
+                  position: "relative",
                   opacity: dragged?.part === "first" && dragged.index === i ? 0.4 : 1,
                   userSelect: "none", WebkitUserSelect: "none", touchAction: "none",
                 }}
               >
+                <GripVertical size={12} color={COLORS.textSoft} style={{ position: "absolute", left: 3, top: "50%", transform: "translateY(-50%)", zIndex: 1, pointerEvents: "none" }} />
                 <IndexCard>
                   <div className="flex justify-between items-start">
                     <div className="flex-1" onClick={() => handleCardTap(c.id)} style={{ cursor: "pointer" }}>
@@ -5537,10 +5632,12 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                 data-index={i}
                 onPointerDown={(e) => startPress("second", i, e)}
                 style={{
+                  position: "relative",
                   opacity: dragged?.part === "second" && dragged.index === i ? 0.4 : 1,
                   userSelect: "none", WebkitUserSelect: "none", touchAction: "none",
                 }}
               >
+                <GripVertical size={12} color={COLORS.textSoft} style={{ position: "absolute", left: 3, top: "50%", transform: "translateY(-50%)", zIndex: 1, pointerEvents: "none" }} />
                 <IndexCard>
                   <div className="flex justify-between items-start">
                     <div className="flex-1" onClick={() => handleCardTap(c.id)} style={{ cursor: "pointer" }}>
@@ -5936,6 +6033,7 @@ function EntrainementTab({ data }) {
 function ModerationTab({ data, update, setTab, isAdmin }) {
   const [rejectingExId, setRejectingExId] = useState(null);
   const [rejectingCatId, setRejectingCatId] = useState(null);
+  const [rejectingConceptId, setRejectingConceptId] = useState(null);
   const [rejectReason, setRejectReason] = useState("");
 
   if (!isAdmin) {
@@ -5949,6 +6047,7 @@ function ModerationTab({ data, update, setTab, isAdmin }) {
 
   const pendingExercises = data.exercises.filter((e) => e.pending);
   const pendingCategories = data.categories.filter((c) => c.pending);
+  const pendingConcepts = data.showConcepts.filter((sc) => sc.pending);
 
   const approveExercise = (id) => update((d) => {
     const e = d.exercises.find((x) => x.id === id);
@@ -5970,6 +6069,16 @@ function ModerationTab({ data, update, setTab, isAdmin }) {
     if (c) { c.pending = false; c.rejected = true; notifyCreatorRejected(d, c, "catégorie", reason); }
     return d;
   });
+  const approveShowConcept = (id) => update((d) => {
+    const sc = d.showConcepts.find((x) => x.id === id);
+    if (sc) { sc.pending = false; notifyCreatorApproved(d, sc, "concept de spectacle"); }
+    return d;
+  });
+  const rejectShowConcept = (id, reason) => update((d) => {
+    const sc = d.showConcepts.find((x) => x.id === id);
+    if (sc) { sc.pending = false; sc.rejected = true; notifyCreatorRejected(d, sc, "concept de spectacle", reason); }
+    return d;
+  });
 
   return (
     <div>
@@ -5977,10 +6086,10 @@ function ModerationTab({ data, update, setTab, isAdmin }) {
       <SectionHeader
         icon={AlertTriangle}
         title="À valider"
-        subtitle="Exercices et catégories proposés par la communauté, en attente de validation."
+        subtitle="Exercices, catégories et concepts de spectacle proposés par la communauté, en attente de validation."
       />
 
-      {pendingExercises.length === 0 && pendingCategories.length === 0 && (
+      {pendingExercises.length === 0 && pendingCategories.length === 0 && pendingConcepts.length === 0 && (
         <Empty text="Rien à valider pour le moment — toutes les propositions de la communauté ont été traitées." />
       )}
 
@@ -6044,6 +6153,41 @@ function ModerationTab({ data, update, setTab, isAdmin }) {
               </div>
             </IndexCard>
           ))}
+        </>
+      )}
+
+      {pendingConcepts.length > 0 && (
+        <>
+          <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs uppercase mt-3 block">Concepts de spectacle ({pendingConcepts.length})</span>
+          {pendingConcepts.map((sc) => {
+            const cats = data.categories.filter((c) => sc.categoryIds.includes(c.id));
+            return (
+              <IndexCard key={sc.id}>
+                <div className="flex justify-between items-start">
+                  <div className="flex items-center gap-2">
+                    <TagPill label={sc.theme} color={themeColor(sc.theme, data.thematiques)} />
+                    <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{sc.type}</span>
+                  </div>
+                  <div className="flex gap-1">
+                    <Btn small variant="ghost" onClick={() => approveShowConcept(sc.id)}><Check size={13} /> Valider</Btn>
+                    <Btn small variant="ghost" onClick={() => { setRejectingConceptId(sc.id); setRejectReason(""); }}><X size={13} /> Refuser</Btn>
+                  </div>
+                </div>
+                {rejectingConceptId === sc.id && (
+                  <RejectReasonBox
+                    reason={rejectReason}
+                    setReason={setRejectReason}
+                    onConfirm={() => { rejectShowConcept(sc.id, rejectReason.trim()); setRejectingConceptId(null); setRejectReason(""); }}
+                    onCancel={() => { setRejectingConceptId(null); setRejectReason(""); }}
+                  />
+                )}
+                <div className="mt-2 text-sm" style={{ fontFamily: FONT_BODY, color: COLORS.text }}>
+                  <b>Catégories :</b> {cats.length ? cats.map((c) => c.name).join(", ") : "—"}
+                </div>
+                {sc.creatorUsername && <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{sc.creatorUsername}</span>}
+              </IndexCard>
+            );
+          })}
         </>
       )}
     </div>
