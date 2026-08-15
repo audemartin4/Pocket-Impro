@@ -5950,7 +5950,7 @@ function exportCoursePlanPDF(plan, data) {
   plan.exerciseIds.forEach((id, i) => {
     const e = data.exercises.find((x) => x.id === id);
     if (!e) { addLine(`${i + 1}. (exercice supprimé)`, { gap: 8 }); return; }
-    addLine(`${i + 1}. ${e.title} — ${e.duration} min`, { bold: true, gap: 6 });
+    addLine(`${i + 1}. ${e.title} — ${e.duration} min — ${e.format || "Solo simultané"}`, { bold: true, gap: 6 });
     addLine(e.summary, { size: 10, gap: 9 });
   });
 
