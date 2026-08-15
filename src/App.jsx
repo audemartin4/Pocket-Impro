@@ -4057,7 +4057,9 @@ function buildCours(exercises, categories, { niveau, tempsTotal, nbEchauffements
 
   // Sous 5 participants, on écarte les échauffements de la famille "Cercle" (peu adaptés à un
   // petit groupe) — même règle que sur la page "Créer un échauffement".
-  const warmupAll = exercises.filter((e) => e.warmup && fitsGroup(e) && allowedLevel(e) && (participants >= 5 || e.groupe !== "Cercle"));
+  // "Ambassadeur" est exclu du pool normal : il n'est ajouté que via la règle dédiée plus bas
+  // (dernier échauffement, uniquement si la case "Inclure un ambassadeur" est cochée).
+  const warmupAll = exercises.filter((e) => e.warmup && e.title !== "Ambassadeur" && fitsGroup(e) && allowedLevel(e) && (participants >= 5 || e.groupe !== "Cercle"));
   // Les fiches marquées "dualUse" (fusion d'un doublon échauffement/exercice — même contenu
   // utile dans les deux sections) restent éligibles ici même si elles sont aussi cochées comme
   // échauffement ; les ~40 autres échauffements actifs, eux, restent réservés à l'échauffement.
@@ -4172,20 +4174,25 @@ function buildCours(exercises, categories, { niveau, tempsTotal, nbEchauffements
     if (single) { warmups = [withActual(single, tempsEchauffement)]; used.add(single.id); }
   }
 
-  // Exercices principaux : remplissent le budget "Temps d'exercices".
-  let budget = tempsExercices;
-  const middle = [];
-
-  // Si demandé, l'exercice "Ambassadeur" est placé en premier, juste après l'échauffement — la
-  // durée suggérée n'entre pas en jeu dans ce choix (toujours ajouté si trouvé et demandé).
+  // Si demandé, l'exercice "Ambassadeur" est toujours placé en dernier échauffement — peu importe
+  // la famille/l'objectif choisi, cette règle passe par-dessus la sélection habituelle. S'il n'y a
+  // plus de place (nombre d'échauffements déjà atteint), on retire le dernier choisi pour lui faire
+  // de la place plutôt que de dépasser le nombre demandé.
   if (faireAmbassadeur) {
     const ambassadeur = exercises.find((e) => e.title === "Ambassadeur" && !used.has(e.id) && fitsGroup(e));
     if (ambassadeur) {
-      middle.push(withActual(ambassadeur, budget));
+      if (warmups.length >= maxEchauffements && warmups.length > 0) {
+        const removed = warmups.pop();
+        used.delete(removed.id);
+      }
+      warmups.push(withActual(ambassadeur, remainingWarmupBudget));
       used.add(ambassadeur.id);
-      budget = consumeBudget(ambassadeur.duration, budget);
     }
   }
+
+  // Exercices principaux : remplissent le budget "Temps d'exercices".
+  let budget = tempsExercices;
+  const middle = [];
 
   // Équilibrage du rythme : alterne simultané / chacun-son-tour et plafonne le temps d'attente cumulé
   const waitCapMin = tempsExercices * 0.35;
