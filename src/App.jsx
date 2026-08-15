@@ -5554,6 +5554,12 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
   return (
     <div>
       <SectionHeader icon={Flame} title="Créer un échauffement" subtitle="Une préparation rapide, immédiatement utilisable." />
+      <IndexCard style={{ borderColor: COLORS.brass, marginBottom: 12 }} className="flex items-center gap-2">
+        <AlertTriangle size={16} color={COLORS.brass} />
+        <span style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }} className="text-xs">
+          Page en travaux — tu peux quand même l'utiliser et la tester librement.
+        </span>
+      </IndexCard>
       <IndexCard>
         <Field label="Temps disponible">
           <div className="flex gap-2">
