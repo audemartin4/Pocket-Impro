@@ -1610,7 +1610,7 @@ export default function ImproApp() {
         {tab === "plans" && <PlansTab data={publicData} update={update} setTab={setTab} />}
         {tab === "moderation" && <ModerationTab data={data} update={update} setTab={setTab} isAdmin={isAdmin} />}
         {tab === "messages" && <MessagesTab data={data} update={update} setTab={setTab} isAdmin={isAdmin} />}
-        {tab === "comptes" && <ComptesTab data={data} isAdmin={isAdmin} setTab={setTab} />}
+        {tab === "comptes" && <ComptesTab data={data} update={update} isAdmin={isAdmin} setTab={setTab} />}
         {tab === "mes-messages" && <MesMessagesTab data={data} update={update} setTab={setTab} currentUser={currentUser} />}
         {tab === "favoris" && <FavorisTab data={publicData} update={update} isAdmin={isAdmin} currentUser={currentUser} setTab={setTab} />}
         {tab === "profil" && <ProfilTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} realIsAdmin={auth.isAdmin} simulateMember={simulateMember} setSimulateMember={setSimulateMember} />}
@@ -6273,9 +6273,33 @@ function MessagesTab({ data, update, setTab, isAdmin }) {
 
 /* ---------- Comptes (vue Admin en lecture seule : pseudo, troupe, exercices créés — pas d'email,
    pas d'accès au compte lui-même) ---------- */
-function ComptesTab({ data, isAdmin, setTab }) {
+function ComptesTab({ data, update, isAdmin, setTab }) {
   const [profiles, setProfiles] = useState(null); // null = chargement en cours
   const [error, setError] = useState("");
+  const [messageOpenFor, setMessageOpenFor] = useState(null); // username en cours de composition
+  const [messageText, setMessageText] = useState("");
+  const [messageSentFor, setMessageSentFor] = useState(null);
+
+  const sendMessage = (p) => {
+    const text = messageText.trim();
+    if (!text) return;
+    update((d) => {
+      d.messages = d.messages || [];
+      d.messages.push({
+        id: uid(),
+        type: "notif",
+        to: p.username,
+        troupe: p.troupe || "",
+        text,
+        createdAt: Date.now(),
+        seen: false,
+      });
+      return d;
+    });
+    setMessageText("");
+    setMessageOpenFor(null);
+    setMessageSentFor(p.username);
+  };
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -6316,6 +6340,7 @@ function ComptesTab({ data, isAdmin, setTab }) {
 
       {profiles && profiles.map((p) => {
         const nbExercices = data.exercises.filter((e) => e.creatorUsername === p.username).length;
+        const composing = messageOpenFor === p.username;
         return (
           <IndexCard key={p.username}>
             <div className="flex items-center justify-between">
@@ -6332,6 +6357,37 @@ function ComptesTab({ data, isAdmin, setTab }) {
                 {nbExercices} exercice{nbExercices > 1 ? "s" : ""}
               </span>
             </div>
+
+            {!composing ? (
+              <div className="mt-2">
+                <Btn
+                  small
+                  variant="ghost"
+                  onClick={() => { setMessageOpenFor(p.username); setMessageText(""); setMessageSentFor(null); }}
+                >
+                  <Mail size={13} /> Envoyer un message
+                </Btn>
+                {messageSentFor === p.username && (
+                  <span className="text-xs ml-2" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>Message envoyé.</span>
+                )}
+              </div>
+            ) : (
+              <div className="mt-2">
+                <textarea
+                  className={inputClass}
+                  style={inputStyle}
+                  rows={3}
+                  value={messageText}
+                  onChange={(e) => setMessageText(e.target.value)}
+                  placeholder={`Message à ${p.username}…`}
+                  autoFocus
+                />
+                <div className="flex gap-2 mt-2">
+                  <Btn small variant="accent" onClick={() => sendMessage(p)}><Check size={13} /> Envoyer</Btn>
+                  <Btn small variant="ghost" onClick={() => setMessageOpenFor(null)}><X size={13} /> Annuler</Btn>
+                </div>
+              </div>
+            )}
           </IndexCard>
         );
       })}
