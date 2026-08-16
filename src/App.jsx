@@ -225,11 +225,14 @@ const tagOverlap = (a, b) => {
 };
 // Recherche multi-mots-clés : chaque mot tapé doit se retrouver quelque part dans les champs
 // fournis (titre, objectifs, thématiques...), insensible aux accents et à l'ordre des mots.
+// Insensible au pluriel dans le mot tapé (ex. "clowns" trouve aussi "clown") : le sens inverse
+// (taper "clown" trouve "clowns") fonctionne déjà de lui-même grâce à la recherche par sous-chaîne.
+const singularOf = (w) => (w.length > 3 && /[sx]$/.test(w) ? w.slice(0, -1) : w);
 const matchesKeywords = (query, ...fields) => {
   const words = normalize(query).split(/\s+/).filter(Boolean);
   if (words.length === 0) return true;
   const combined = normalize(fields.filter(Boolean).join(" "));
-  return words.every((w) => combined.includes(w));
+  return words.every((w) => combined.includes(w) || combined.includes(singularOf(w)));
 };
 // Les générateurs peuvent faire varier la durée effective d'un exercice/échauffement/catégorie
 // de 2 minutes près (par compression) pour mieux remplir le temps demandé, sans jamais dépasser
@@ -1255,7 +1258,9 @@ function SearchableMultiSelect({ allOptions, selected, onChange, placeholder = "
   const [open, setOpen] = useState(false);
   const sortedOptions = [...allOptions].sort((a, b) => a.localeCompare(b, "fr"));
   const filtered = sortedOptions.filter((o) => !selected.includes(o) && matchesKeywords(query, o));
-  const exactExists = allOptions.some((o) => normalize(o) === normalize(query));
+  // Insensible casse/accents/pluriel (voir tagOverlap) : évite de proposer "+ Ajouter" pour une
+  // variante d'un tag déjà existant (ex. "Clowns" alors que "Clown" existe déjà).
+  const exactExists = allOptions.some((o) => tagOverlap(o, query));
 
   const add = (val, isNew) => {
     const v = val.trim();
@@ -1322,7 +1327,9 @@ function SearchableSingleSelect({ allOptions, value, onChange, placeholder = "Ch
   const [open, setOpen] = useState(false);
   const filtered = [...allOptions].sort((a, b) => a.localeCompare(b, "fr")).filter((o) => matchesKeywords(query, o));
   const trimmedQuery = query.trim();
-  const exactExists = allOptions.some((o) => normalize(o) === normalize(trimmedQuery));
+  // Insensible casse/accents/pluriel (voir tagOverlap) : évite de proposer "+ Ajouter" pour une
+  // variante d'une option déjà existante.
+  const exactExists = allOptions.some((o) => tagOverlap(o, trimmedQuery));
 
   return (
     <div className="relative">
