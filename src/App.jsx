@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import {
   Sparkles, Shuffle, Clock, BookOpen, Users, Flame, ClipboardList,
   Plus, Trash2, Tag, ChevronRight, ChevronUp, ChevronDown, ChevronLeft, Download,
-  Save, X, Check, Home, Theater, Pencil, Library, UserCircle, Pointer, Star, LogIn, LogOut, AlertTriangle, Mail, Eye, EyeOff, Contact
+  Save, X, Check, Home, Theater, Pencil, Library, UserCircle, Pointer, Star, LogIn, LogOut, AlertTriangle, Mail, Eye, EyeOff, Contact,
+  Facebook, Instagram
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
 import { useAuthUser, signIn, signUp, signOut } from "./auth.js";
@@ -1457,6 +1458,38 @@ function LibraryBackBtn({ onClick, label = "Bibliothèque" }) {
 
 /* Bouton flottant "Remonter en haut", discret, qui n'apparaît qu'après un peu de scroll et reste
    visible à l'écran (position fixe) pendant le défilement. */
+/* Icônes réseaux sociaux, discrètes, en bas de chaque page. */
+function SocialFooter() {
+  return (
+    <div className="flex items-center justify-center gap-4 py-6">
+      <a
+        href="https://www.facebook.com/lesidephiles"
+        target="_blank"
+        rel="noopener noreferrer"
+        title="Les Idéphiles sur Facebook"
+        aria-label="Les Idéphiles sur Facebook"
+        style={{ opacity: 0.5 }}
+        onMouseEnter={(e) => (e.currentTarget.style.opacity = 1)}
+        onMouseLeave={(e) => (e.currentTarget.style.opacity = 0.5)}
+      >
+        <Facebook size={18} color={COLORS.textSoft} />
+      </a>
+      <a
+        href="https://www.instagram.com/les_idephiles/"
+        target="_blank"
+        rel="noopener noreferrer"
+        title="Les Idéphiles sur Instagram"
+        aria-label="Les Idéphiles sur Instagram"
+        style={{ opacity: 0.5 }}
+        onMouseEnter={(e) => (e.currentTarget.style.opacity = 1)}
+        onMouseLeave={(e) => (e.currentTarget.style.opacity = 0.5)}
+      >
+        <Instagram size={18} color={COLORS.textSoft} />
+      </a>
+    </div>
+  );
+}
+
 function BackToTopButton() {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
@@ -1633,6 +1666,7 @@ export default function ImproApp() {
         {tab === "favoris" && <FavorisTab data={publicData} update={update} isAdmin={isAdmin} currentUser={currentUser} setTab={setTab} />}
         {tab === "profil" && <ProfilTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} realIsAdmin={auth.isAdmin} simulateMember={simulateMember} setSimulateMember={setSimulateMember} />}
       </div>
+      <SocialFooter />
       {LIBRARY_TABS.includes(tab) && <BackToTopButton />}
     </div>
   );
