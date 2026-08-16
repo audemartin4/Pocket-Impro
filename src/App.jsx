@@ -4050,12 +4050,16 @@ function CategoriesTab({ data, update, isAdmin, currentUser, onlyUserCreated, in
 /* ---------- Concepts de spectacle ---------- */
 function SpectaclesTab({ data, update, setTab, currentUser, isAdmin }) {
   const [adding, setAdding] = useState(false);
-  const [draft, setDraft] = useState({ theme: data.thematiques[0] || "", type: data.showTypes[0] || "", categoryIds: [] });
+  const [draft, setDraft] = useState({ theme: "", description: "", type: "", categoryIds: [] });
+  const [catSearch, setCatSearch] = useState("");
 
   const canCreate = isAdmin || !!currentUser;
   // Seules les catégories déjà validées peuvent être combinées dans un nouveau concept.
   const approvedCategories = data.categories.filter((c) => !c.pending && !c.rejected);
-  const suggestionsFor = (theme) => approvedCategories.filter((c) => c.thematiques.includes(theme));
+  const conceptTypes = [...new Set([...data.showTypes, "Format Long"])];
+  const matchingCats = catSearch
+    ? approvedCategories.filter((c) => !draft.categoryIds.includes(c.id) && matchesKeywords(catSearch, c.name, (c.tags || []).join(" "), (c.thematiques || []).join(" ")))
+    : [];
 
   // Concepts visibles : validés pour tout le monde, + ceux du créateur courant (même en attente ou
   // refusés, pour qu'il puisse toujours les retrouver), + tout pour l'Admin (contexte de modération).
@@ -4063,6 +4067,7 @@ function SpectaclesTab({ data, update, setTab, currentUser, isAdmin }) {
     (!sc.pending && !sc.rejected) || sc.creatorUsername === currentUser || isAdmin
   );
 
+  const resetDraft = () => { setDraft({ theme: "", description: "", type: "", categoryIds: [] }); setCatSearch(""); };
   const saveConcept = () => {
     update((d) => {
       d.showConcepts.push({
@@ -4075,6 +4080,7 @@ function SpectaclesTab({ data, update, setTab, currentUser, isAdmin }) {
       return d;
     });
     setAdding(false);
+    resetDraft();
   };
 
   return (
@@ -4083,8 +4089,8 @@ function SpectaclesTab({ data, update, setTab, currentUser, isAdmin }) {
       <SectionHeader
         icon={Theater}
         title="Concepts de spectacle"
-        subtitle="Une thématique + un type → l'appli suggère les catégories (et leurs archétypes) qui correspondent."
-        action={canCreate ? <Btn variant="accent" small onClick={() => setAdding(true)}><Plus size={13} /> Ajouter un concept</Btn> : null}
+        subtitle="Tu as un concept de spectacle à partager à la communauté ? Crée le ici !"
+        action={canCreate ? <Btn variant="accent" small onClick={() => setAdding(true)}><Plus size={13} /> Soumettre un concept</Btn> : null}
       />
       <IndexCard style={{ borderColor: COLORS.accent, background: COLORS.accent + "15", marginBottom: 12 }} className="flex items-center gap-2">
         <AlertTriangle size={18} color={COLORS.accent} />
@@ -4101,46 +4107,64 @@ function SpectaclesTab({ data, update, setTab, currentUser, isAdmin }) {
 
       {adding && (
         <IndexCard>
-          <Field label="Thématique">
-            <MultiTagPicker allOptions={data.thematiques} selected={draft.theme ? [draft.theme] : []} onChange={(v) => setDraft({ ...draft, theme: v[v.length - 1] || "" })} placeholder="Thématique du spectacle…" />
+          <Field label="Titre">
+            <input className={inputClass} style={inputStyle} value={draft.theme} onChange={(e) => setDraft({ ...draft, theme: e.target.value })} placeholder="Titre du concept…" />
+          </Field>
+          <Field label="Description (optionnel)">
+            <textarea className={inputClass} style={inputStyle} rows={3} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="Décris le concept…" />
           </Field>
           <Field label="Type de spectacle">
-            <MultiTagPicker allOptions={data.showTypes} selected={draft.type ? [draft.type] : []} onChange={(v) => setDraft({ ...draft, type: v[v.length - 1] || "" })} placeholder="Type…" />
+            <select className={inputClass} style={inputStyle} value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value })}>
+              <option value="">Choisir un type</option>
+              {conceptTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
           </Field>
-          {draft.theme && (
-            <Field label={`Catégories suggérées pour "${draft.theme}"`}>
-              {suggestionsFor(draft.theme).length === 0 && <Empty text="Aucune catégorie ne porte encore cette thématique." />}
-              {suggestionsFor(draft.theme).map((c) => (
-                <label key={c.id} className="flex items-center gap-2 text-sm mb-1" style={{ fontFamily: FONT_BODY }}>
-                  <input
-                    type="checkbox"
-                    checked={draft.categoryIds.includes(c.id)}
-                    onChange={(e) =>
-                      setDraft({ ...draft, categoryIds: e.target.checked ? [...draft.categoryIds, c.id] : draft.categoryIds.filter((x) => x !== c.id) })
-                    }
-                  />
-                  {c.name}
-                </label>
-              ))}
-              <div className="mt-2">
-                <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">Ou ajouter une autre catégorie :</span>
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {approvedCategories.filter((c) => !suggestionsFor(draft.theme).includes(c)).map((c) => (
-                    <button key={c.id} className="text-xs px-2 py-0.5 rounded-full border"
-                      style={{ fontFamily: FONT_MONO, borderColor: COLORS.cardEdge, color: COLORS.textSoft }}
-                      onClick={() => setDraft({ ...draft, categoryIds: draft.categoryIds.includes(c.id) ? draft.categoryIds.filter(x=>x!==c.id) : [...draft.categoryIds, c.id] })}>
-                      {draft.categoryIds.includes(c.id) ? "✓ " : "+ "}{c.name}
-                    </button>
-                  ))}
-                </div>
+          <Field label="Catégories (optionnel)">
+            {draft.categoryIds.length > 0 && (
+              <div className="flex flex-wrap gap-1 mb-2">
+                {draft.categoryIds.map((id) => {
+                  const c = approvedCategories.find((x) => x.id === id);
+                  if (!c) return null;
+                  return (
+                    <span key={id} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full" style={{ fontFamily: FONT_MONO, background: COLORS.brass + "22", color: COLORS.brass }}>
+                      {c.name}
+                      <button type="button" onClick={() => setDraft({ ...draft, categoryIds: draft.categoryIds.filter((x) => x !== id) })}>
+                        <X size={11} />
+                      </button>
+                    </span>
+                  );
+                })}
               </div>
-            </Field>
-          )}
+            )}
+            <input
+              className={inputClass}
+              style={inputStyle}
+              value={catSearch}
+              onChange={(e) => setCatSearch(e.target.value)}
+              placeholder="Chercher une catégorie à ajouter…"
+            />
+            {catSearch && (
+              <div className="max-h-48 overflow-y-auto mt-1">
+                {matchingCats.length === 0 && <Empty text="Aucune catégorie ne correspond." />}
+                {matchingCats.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className="block w-full text-left py-1.5 border-b text-sm"
+                    style={{ borderColor: COLORS.cardEdge, fontFamily: FONT_BODY, color: COLORS.text }}
+                    onClick={() => { setDraft({ ...draft, categoryIds: [...draft.categoryIds, c.id] }); setCatSearch(""); }}
+                  >
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </Field>
           <div className="flex gap-2 mt-2">
-            <Btn variant="accent" onClick={saveConcept}>
+            <Btn variant="accent" onClick={saveConcept} disabled={!draft.theme.trim()}>
               <Check size={14} /> Enregistrer
             </Btn>
-            <Btn variant="ghost" onClick={() => setAdding(false)}><X size={14} /> Annuler</Btn>
+            <Btn variant="ghost" onClick={() => { setAdding(false); resetDraft(); }}><X size={14} /> Annuler</Btn>
           </div>
         </IndexCard>
       )}
@@ -4151,9 +4175,9 @@ function SpectaclesTab({ data, update, setTab, currentUser, isAdmin }) {
         return (
           <IndexCard key={sc.id}>
             <div className="flex justify-between items-start">
-              <div className="flex items-center gap-2">
-                <TagPill label={sc.theme} color={themeColor(sc.theme, data.thematiques)} />
-                <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{sc.type}</span>
+              <div>
+                <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{sc.theme}</h3>
+                {sc.type && <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{sc.type}</span>}
               </div>
               {(isAdmin || (sc.creatorUsername === currentUser && (sc.pending || sc.rejected))) && (
                 <button onClick={() => update((d) => { d.showConcepts = d.showConcepts.filter((x) => x.id !== sc.id); return d; })}>
@@ -4170,6 +4194,9 @@ function SpectaclesTab({ data, update, setTab, currentUser, isAdmin }) {
               <p className="text-xs mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.accent }}>
                 Non validé par la modération — visible uniquement par toi.
               </p>
+            )}
+            {sc.description && (
+              <p className="text-sm mt-1" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>{sc.description}</p>
             )}
             <div className="mt-2 text-sm" style={{ fontFamily: FONT_BODY, color: COLORS.text }}>
               <b>Catégories :</b> {cats.length ? cats.map((c) => c.name).join(", ") : "—"}
@@ -6385,9 +6412,9 @@ function ModerationTab({ data, update, setTab, isAdmin }) {
             return (
               <IndexCard key={sc.id}>
                 <div className="flex justify-between items-start">
-                  <div className="flex items-center gap-2">
-                    <TagPill label={sc.theme} color={themeColor(sc.theme, data.thematiques)} />
-                    <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{sc.type}</span>
+                  <div>
+                    <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{sc.theme}</h3>
+                    {sc.type && <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{sc.type}</span>}
                   </div>
                   <div className="flex gap-1">
                     <Btn small variant="ghost" onClick={() => approveShowConcept(sc.id)}><Check size={13} /> Valider</Btn>
@@ -6401,6 +6428,9 @@ function ModerationTab({ data, update, setTab, isAdmin }) {
                     onConfirm={() => { rejectShowConcept(sc.id, rejectReason.trim()); setRejectingConceptId(null); setRejectReason(""); }}
                     onCancel={() => { setRejectingConceptId(null); setRejectReason(""); }}
                   />
+                )}
+                {sc.description && (
+                  <p className="text-sm mt-1" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>{sc.description}</p>
                 )}
                 <div className="mt-2 text-sm" style={{ fontFamily: FONT_BODY, color: COLORS.text }}>
                   <b>Catégories :</b> {cats.length ? cats.map((c) => c.name).join(", ") : "—"}
