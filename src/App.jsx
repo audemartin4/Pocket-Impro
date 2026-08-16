@@ -1529,6 +1529,14 @@ function LibraryBackBtn({ onClick, label = "Bibliothèque" }) {
 /* Bouton flottant "Remonter en haut", discret, qui n'apparaît qu'après un peu de scroll et reste
    visible à l'écran (position fixe) pendant le défilement. */
 /* Icônes réseaux sociaux, discrètes, en bas de chaque page. */
+// Ouvre le lien dans un nouvel onglet via window.open (en plus de target="_blank", qui suffit sur la
+// plupart des navigateurs mais pas de façon fiable partout, notamment dans certains navigateurs
+// intégrés mobiles) — empêche la navigation par défaut du lien pour ne garder que cet appel explicite.
+const openInNewTab = (url) => (e) => {
+  e.preventDefault();
+  window.open(url, "_blank", "noopener,noreferrer");
+};
+
 function SocialFooter() {
   return (
     <div className="flex items-center justify-center gap-4 py-6">
@@ -1536,6 +1544,7 @@ function SocialFooter() {
         href="https://www.facebook.com/lesidephiles"
         target="_blank"
         rel="noopener noreferrer"
+        onClick={openInNewTab("https://www.facebook.com/lesidephiles")}
         title="Les Idéphiles sur Facebook"
         aria-label="Les Idéphiles sur Facebook"
         style={{ opacity: 0.5 }}
@@ -1548,6 +1557,7 @@ function SocialFooter() {
         href="https://www.instagram.com/les_idephiles/"
         target="_blank"
         rel="noopener noreferrer"
+        onClick={openInNewTab("https://www.instagram.com/les_idephiles/")}
         title="Les Idéphiles sur Instagram"
         aria-label="Les Idéphiles sur Instagram"
         style={{ opacity: 0.5 }}
