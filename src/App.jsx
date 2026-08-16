@@ -4187,6 +4187,39 @@ function reorderArray(arr, fromIndex, insertAt) {
   return copy;
 }
 
+/* Détecte un pointeur "fin" (souris/trackpad) par opposition à un écran tactile — sert à n'afficher
+   le bouton "Déplacer" (poignée de glisser-déposer explicite) que sur ordinateur : au tactile, la
+   carte entière reste saisissable n'importe où par appui long, comme avant. */
+function useIsFinePointer() {
+  const [isFine, setIsFine] = useState(() => window.matchMedia("(pointer: fine)").matches);
+  useEffect(() => {
+    const mq = window.matchMedia("(pointer: fine)");
+    const handler = () => setIsFine(mq.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+  return isFine;
+}
+
+/* Poignée de glisser-déposer visible uniquement sur ordinateur (voir useIsFinePointer) : le clic
+   maintenu doit partir de ce bouton précis (repéré par le wrapper via [data-drag-handle]) plutôt que
+   n'importe où sur la carte, pour ne pas gêner la lecture/le clic sur le reste de la carte à la souris. */
+function DragHandleLabel() {
+  const isFinePointer = useIsFinePointer();
+  if (!isFinePointer) return null;
+  return (
+    <button
+      type="button"
+      data-drag-handle
+      title="Maintenir le clic pour déplacer la carte"
+      className="text-xs uppercase shrink-0"
+      style={{ fontFamily: FONT_MONO, color: COLORS.textSoft, cursor: "grab" }}
+    >
+      Déplacer
+    </button>
+  );
+}
+
 /* Glisser-déposer générique par appui long (mobile + souris) : saisir un item n'importe où sur sa
    carte après 400ms d'appui immobile, le déplacer (une carte flottante suit le doigt), défilement
    automatique près des bords de l'écran, dépôt tolérant sur la moitié haute/basse d'une autre carte.
@@ -5060,11 +5093,16 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
               const isDraggedItem = dragged && dragged.listKey === "impro" && dragged.index === it.idx;
               const isExpanded = expandedId === c.id;
               const card = (
-                <IndexCard style={{ paddingLeft: 30 }}>
+                <IndexCard>
                   <div className="flex justify-between items-start">
                     <div className="flex-1" onClick={() => handleCardTap(c.id)} style={{ cursor: "pointer" }}>
                       <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">{it.label}</span>
-                      <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{c.name}</h3>
+                      <div className="flex items-center gap-1.5">
+                        <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{c.name}</h3>
+                        <button onClick={(e) => { e.stopPropagation(); toggleFavCat(c.id); }} title="Favori">
+                          <Star size={18} color={c.favorite ? COLORS.brass : COLORS.textSoft} fill={c.favorite ? COLORS.brass : "none"} />
+                        </button>
+                      </div>
                       {(c.tags || []).length > 0 && (
                         <span
                           className="inline-block text-xs px-2 py-0.5 rounded-full mt-1 mb-1"
@@ -5127,13 +5165,11 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                     </div>
                   </div>
                   <div className="flex justify-between items-center mt-2">
-                    <div className="flex items-center gap-2">
-                      <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{c.actualDuration ?? c.duration ?? 5} min</span>
-                      <button onClick={() => toggleFavCat(c.id)} title="Favori">
-                        <Star size={22} color={c.favorite ? COLORS.brass : COLORS.textSoft} fill={c.favorite ? COLORS.brass : "none"} />
-                      </button>
+                    <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{c.actualDuration ?? c.duration ?? 5} min</span>
+                    <div className="flex items-center gap-3">
+                      <DragHandleLabel />
+                      <button onClick={() => removeCat(it.idx)} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
                     </div>
-                    <button onClick={() => removeCat(it.idx)} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
                   </div>
                 </IndexCard>
               );
@@ -5146,7 +5182,6 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                     onPointerDown={(e) => { if (e.pointerType === "mouse" && !e.target.closest("[data-drag-handle]")) return; startPress("impro", it.idx, e); }}
                     style={{ position: "relative", opacity: isDraggedItem ? 0.4 : 1, userSelect: "none", WebkitUserSelect: "none", touchAction: "none" }}
                   >
-                    <Pointer data-drag-handle size={14} color={COLORS.textSoft} style={{ position: "absolute", left: 6, bottom: 6, zIndex: 1, cursor: "grab" }} />
                     {card}
                   </div>
                   {catPicker?.mode === "replace" && catPicker.idx === it.idx && (
@@ -5165,11 +5200,16 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
             const isDraggedItem = dragged && listKey && dragged.listKey === listKey && dragged.index === it.idx;
             const isExpanded = expandedId === it.ex.id;
             const card = (
-              <IndexCard style={{ paddingLeft: 30 }}>
+              <IndexCard>
                 <div className="flex justify-between items-start">
                   <div className="flex-1" onClick={() => handleCardTap(it.ex.id)} style={{ cursor: "pointer" }}>
                     <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">{it.label}</span>
-                    <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{it.ex.title}</h3>
+                    <div className="flex items-center gap-1.5">
+                      <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{it.ex.title}</h3>
+                      <button onClick={(e) => { e.stopPropagation(); toggleFavEx(it.ex.id); }} title="Favori">
+                        <Star size={18} color={it.ex.favorite ? COLORS.brass : COLORS.textSoft} fill={it.ex.favorite ? COLORS.brass : "none"} />
+                      </button>
+                    </div>
                     {it.slot === "warmup" && it.ex.groupe && (
                       <span
                         className="inline-block text-xs px-2 py-0.5 rounded-full mt-1 mb-1"
@@ -5249,11 +5289,11 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                         🟢 tout le monde actif
                       </span>
                     )}
-                    <button onClick={() => toggleFavEx(it.ex.id)} title="Favori">
-                      <Star size={22} color={it.ex.favorite ? COLORS.brass : COLORS.textSoft} fill={it.ex.favorite ? COLORS.brass : "none"} />
-                    </button>
                   </div>
-                  <button onClick={() => remove(it.slot, it.idx)} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
+                  <div className="flex items-center gap-3">
+                    <DragHandleLabel />
+                    <button onClick={() => remove(it.slot, it.idx)} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
+                  </div>
                 </div>
               </IndexCard>
             );
@@ -5276,7 +5316,6 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                   onPointerDown={(e) => { if (e.pointerType === "mouse" && !e.target.closest("[data-drag-handle]")) return; startPress(listKey, it.idx, e); }}
                   style={{ position: "relative", opacity: isDraggedItem ? 0.4 : 1, userSelect: "none", WebkitUserSelect: "none", touchAction: "none" }}
                 >
-                  <Pointer data-drag-handle size={14} color={COLORS.textSoft} style={{ position: "absolute", left: 6, bottom: 6, zIndex: 1, cursor: "grab" }} />
                   {card}
                 </div>
                 {inlinePicker}
@@ -5649,12 +5688,16 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                   userSelect: "none", WebkitUserSelect: "none", touchAction: "none",
                 }}
               >
-                <Pointer data-drag-handle size={14} color={COLORS.textSoft} style={{ position: "absolute", left: 6, bottom: 6, zIndex: 1, cursor: "grab" }} />
-                <IndexCard style={{ paddingLeft: 30 }}>
+                <IndexCard>
                   <div className="flex justify-between items-start">
                     <div className="flex-1" onClick={() => handleCardTap(c.id)} style={{ cursor: "pointer" }}>
                       <div className="flex items-center justify-between gap-2">
-                        <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{c.name}</h3>
+                        <div className="flex items-center gap-1.5">
+                          <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{c.name}</h3>
+                          <button onClick={(e) => { e.stopPropagation(); toggleFavCat(c.id); }} title="Favori">
+                            <Star size={18} color={c.favorite ? COLORS.brass : COLORS.textSoft} fill={c.favorite ? COLORS.brass : "none"} />
+                          </button>
+                        </div>
                         {format === "Match" && (
                           <div className="flex rounded-sm overflow-hidden shrink-0" style={{ border: `1px solid ${COLORS.accent}` }} onClick={(e) => e.stopPropagation()}>
                             {["Mixte", "Comparé"].map((mode) => (
@@ -5704,13 +5747,11 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                     </div>
                   </div>
                   <div className="flex justify-between items-center mt-2">
-                    <div className="flex items-center gap-2">
-                      <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{c.actualDuration ?? c.duration ?? 5} min</span>
-                      <button onClick={() => toggleFavCat(c.id)} title="Favori">
-                        <Star size={22} color={c.favorite ? COLORS.brass : COLORS.textSoft} fill={c.favorite ? COLORS.brass : "none"} />
-                      </button>
+                    <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{c.actualDuration ?? c.duration ?? 5} min</span>
+                    <div className="flex items-center gap-3">
+                      <DragHandleLabel />
+                      <button onClick={() => removeCat("first", i)} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
                     </div>
-                    <button onClick={() => removeCat("first", i)} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
                   </div>
                 </IndexCard>
               </div>
@@ -5745,12 +5786,16 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                   userSelect: "none", WebkitUserSelect: "none", touchAction: "none",
                 }}
               >
-                <Pointer data-drag-handle size={14} color={COLORS.textSoft} style={{ position: "absolute", left: 6, bottom: 6, zIndex: 1, cursor: "grab" }} />
-                <IndexCard style={{ paddingLeft: 30 }}>
+                <IndexCard>
                   <div className="flex justify-between items-start">
                     <div className="flex-1" onClick={() => handleCardTap(c.id)} style={{ cursor: "pointer" }}>
                       <div className="flex items-center justify-between gap-2">
-                        <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{c.name}</h3>
+                        <div className="flex items-center gap-1.5">
+                          <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{c.name}</h3>
+                          <button onClick={(e) => { e.stopPropagation(); toggleFavCat(c.id); }} title="Favori">
+                            <Star size={18} color={c.favorite ? COLORS.brass : COLORS.textSoft} fill={c.favorite ? COLORS.brass : "none"} />
+                          </button>
+                        </div>
                         {format === "Match" && (
                           <div className="flex rounded-sm overflow-hidden shrink-0" style={{ border: `1px solid ${COLORS.accent}` }} onClick={(e) => e.stopPropagation()}>
                             {["Mixte", "Comparé"].map((mode) => (
@@ -5800,13 +5845,11 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                     </div>
                   </div>
                   <div className="flex justify-between items-center mt-2">
-                    <div className="flex items-center gap-2">
-                      <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{c.actualDuration ?? c.duration ?? 5} min</span>
-                      <button onClick={() => toggleFavCat(c.id)} title="Favori">
-                        <Star size={22} color={c.favorite ? COLORS.brass : COLORS.textSoft} fill={c.favorite ? COLORS.brass : "none"} />
-                      </button>
+                    <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{c.actualDuration ?? c.duration ?? 5} min</span>
+                    <div className="flex items-center gap-3">
+                      <DragHandleLabel />
+                      <button onClick={() => removeCat("second", i)} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
                     </div>
-                    <button onClick={() => removeCat("second", i)} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
                   </div>
                 </IndexCard>
               </div>
