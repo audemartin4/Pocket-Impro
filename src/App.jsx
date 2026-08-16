@@ -1516,7 +1516,24 @@ export default function ImproApp() {
   }, []);
 
   const [data, setData, loaded] = useAppData();
-  const [tab, setTab] = useState("accueil");
+  const [tab, setTabRaw] = useState(() => window.location.hash.slice(1) || "accueil");
+  const tabRef = useRef(tab);
+  useEffect(() => { tabRef.current = tab; }, [tab]);
+  // Relie la navigation interne (onglets) à l'historique du navigateur : chaque changement d'onglet
+  // pousse une entrée d'historique, pour que "page précédente" dans le navigateur ramène à l'onglet
+  // précédent de l'appli au lieu de quitter la page.
+  useEffect(() => {
+    window.history.replaceState({ tab: tabRef.current }, "", `#${tabRef.current}`);
+    const onPopState = (e) => setTabRaw(e.state?.tab || window.location.hash.slice(1) || "accueil");
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const setTab = useCallback((next) => {
+    if (next === tabRef.current) return;
+    window.history.pushState({ tab: next }, "", `#${next}`);
+    setTabRaw(next);
+  }, []);
   // Remonte en haut de page à chaque changement d'onglet (Accueil/Bibliothèque/Créer un cours…) —
   // même logique que dans les pages famille, pour ne jamais arriver au milieu d'une page.
   useEffect(() => { window.scrollTo(0, 0); }, [tab]);
@@ -4170,6 +4187,11 @@ function useDragReorder(onReorder) {
 
     const handleMove = (ev) => {
       if (longPressFired) return;
+      // Le défilement manuel simulé ci-dessous ne sert qu'à compenser touchAction:"none" (qui bloque
+      // le défilement tactile natif pendant l'attente du appui long). À la souris, il n'y a pas ce
+      // problème : un léger mouvement pendant l'appui ne doit pas être interprété comme une intention
+      // de défiler la page, sinon ça annule le glisser-déposer dès qu'on bouge un peu la souris.
+      if (e.pointerType === "mouse") return;
       const dx = Math.abs(ev.clientX - startX);
       const dy = Math.abs(ev.clientY - startY);
       if (!manualScrolling && (dx > 10 || dy > 10)) { manualScrolling = true; cancelPress(); }
