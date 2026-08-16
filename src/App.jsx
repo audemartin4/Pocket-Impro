@@ -1629,7 +1629,7 @@ export default function ImproApp() {
         {tab === "messages" && <MessagesTab data={data} update={update} setTab={setTab} isAdmin={isAdmin} />}
         {tab === "comptes" && <ComptesTab data={data} update={update} isAdmin={isAdmin} setTab={setTab} />}
         {tab === "mes-messages" && <MesMessagesTab data={data} update={update} setTab={setTab} currentUser={currentUser} />}
-        {tab === "messages-envoyes" && <MessagesEnvoyesTab data={data} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} />}
+        {tab === "messages-envoyes" && <MessagesEnvoyesTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} />}
         {tab === "favoris" && <FavorisTab data={publicData} update={update} isAdmin={isAdmin} currentUser={currentUser} setTab={setTab} />}
         {tab === "profil" && <ProfilTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} realIsAdmin={auth.isAdmin} simulateMember={simulateMember} setSimulateMember={setSimulateMember} />}
       </div>
@@ -2875,7 +2875,7 @@ function ExercicesTab({ data, update, isAdmin, currentUser, profile, onlyUserCre
                 Supprimer
               </Btn>
             )}
-            {!isAdmin && ex.rejected && ex.creatorUsername === currentUser && (
+            {!isAdmin && (ex.pending || ex.rejected) && ex.creatorUsername === currentUser && (
               <Btn small variant="ghost" onClick={() => update((d) => { d.exercises = d.exercises.filter((x) => x.id !== ex.id); return d; })}>
                 Supprimer
               </Btn>
@@ -3754,6 +3754,11 @@ function CategoriesTab({ data, update, isAdmin, currentUser, onlyUserCreated, in
                 Supprimer
               </Btn>
             )}
+            {!isAdmin && (c.pending || c.rejected) && c.creatorUsername === currentUser && (
+              <Btn small variant="ghost" onClick={() => update((d) => { d.categories = d.categories.filter((x) => x.id !== c.id); return d; })}>
+                Supprimer
+              </Btn>
+            )}
           </div>
         </div>
         {c.pending && (
@@ -4150,7 +4155,7 @@ function SpectaclesTab({ data, update, setTab, currentUser, isAdmin }) {
                 <TagPill label={sc.theme} color={themeColor(sc.theme, data.thematiques)} />
                 <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{sc.type}</span>
               </div>
-              {isAdmin && (
+              {(isAdmin || (sc.creatorUsername === currentUser && (sc.pending || sc.rejected))) && (
                 <button onClick={() => update((d) => { d.showConcepts = d.showConcepts.filter((x) => x.id !== sc.id); return d; })}>
                   <Trash2 size={14} color={COLORS.accent} />
                 </button>
@@ -6665,6 +6670,7 @@ function MesMessagesTab({ data, update, setTab, currentUser }) {
   }, []);
 
   const formatDate = (ts) => new Date(ts).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  const deleteMessage = (id) => update((d) => { d.messages = (d.messages || []).filter((m) => m.id !== id); return d; });
 
   return (
     <div>
@@ -6680,13 +6686,23 @@ function MesMessagesTab({ data, update, setTab, currentUser }) {
       {messages.map((m) =>
         m.type === "notif" ? (
           <IndexCard key={m.id}>
-            <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">Message de l'Admin</span>
+            <div className="flex justify-between items-start">
+              <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">Message de l'Admin</span>
+              <button onClick={() => deleteMessage(m.id)} title="Supprimer">
+                <Trash2 size={14} color={COLORS.accent} />
+              </button>
+            </div>
             <p style={{ fontFamily: FONT_BODY, color: COLORS.text }} className="text-sm my-1 whitespace-pre-wrap">{m.text}</p>
             <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{formatDate(m.createdAt)}</span>
           </IndexCard>
         ) : (
           <IndexCard key={m.id}>
-            <p style={{ fontFamily: FONT_BODY, color: COLORS.text }} className="text-sm whitespace-pre-wrap">{m.text}</p>
+            <div className="flex justify-between items-start">
+              <p style={{ fontFamily: FONT_BODY, color: COLORS.text }} className="text-sm whitespace-pre-wrap flex-1">{m.text}</p>
+              <button onClick={() => deleteMessage(m.id)} title="Supprimer">
+                <Trash2 size={14} color={COLORS.accent} />
+              </button>
+            </div>
             <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{formatDate(m.createdAt)}</span>
             {m.reply ? (
               <div className="mt-2 pl-3" style={{ borderLeft: `2px solid ${COLORS.brass}` }}>
@@ -6705,16 +6721,26 @@ function MesMessagesTab({ data, update, setTab, currentUser }) {
 
 /* ---------- Messages envoyés (Admin : réponses données + messages directs ; utilisateur : messages
    envoyés à l'Admin) ---------- */
-function MessagesEnvoyesTab({ data, setTab, currentUser, isAdmin }) {
+function MessagesEnvoyesTab({ data, update, setTab, currentUser, isAdmin }) {
   const formatDate = (ts) => new Date(ts).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
   if (isAdmin) {
+    // Supprimer une "réponse" n'efface que la réponse (le message original reste dans la boîte de
+    // réception, à nouveau "en attente de réponse") ; supprimer un message "direct" (notif) le
+    // retire complètement.
+    const deleteReply = (originalId) => update((d) => {
+      const msg = (d.messages || []).find((mm) => mm.id === originalId);
+      if (msg) { delete msg.reply; delete msg.repliedAt; delete msg.replySeen; }
+      return d;
+    });
+    const deleteDirect = (id) => update((d) => { d.messages = (d.messages || []).filter((mm) => mm.id !== id); return d; });
+
     const replied = (data.messages || [])
       .filter((m) => m.reply)
-      .map((m) => ({ id: m.id + "-reply", to: m.from, troupe: m.troupe, text: m.reply, createdAt: m.repliedAt, context: m.text }));
+      .map((m) => ({ id: m.id + "-reply", originalId: m.id, kind: "reply", to: m.from, troupe: m.troupe, text: m.reply, createdAt: m.repliedAt, context: m.text }));
     const direct = (data.messages || [])
       .filter((m) => m.type === "notif")
-      .map((m) => ({ id: m.id, to: m.to, troupe: m.troupe, text: m.text, createdAt: m.createdAt }));
+      .map((m) => ({ id: m.id, kind: "direct", to: m.to, troupe: m.troupe, text: m.text, createdAt: m.createdAt }));
     const sent = [...replied, ...direct].sort((a, b) => b.createdAt - a.createdAt);
 
     return (
@@ -6729,8 +6755,13 @@ function MessagesEnvoyesTab({ data, setTab, currentUser, isAdmin }) {
         {sent.map((m) => (
           <IndexCard key={m.id}>
             <div className="flex justify-between items-start">
-              <span style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">À {m.to}</span>
-              {m.troupe && <span style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }} className="text-xs">Troupe {m.troupe}</span>}
+              <div>
+                <span style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">À {m.to}</span>
+                {m.troupe && <span style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }} className="text-xs"> — Troupe {m.troupe}</span>}
+              </div>
+              <button onClick={() => (m.kind === "reply" ? deleteReply(m.originalId) : deleteDirect(m.id))} title="Supprimer">
+                <Trash2 size={14} color={COLORS.accent} />
+              </button>
             </div>
             {m.context && (
               <p className="text-xs mt-1 pl-3" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft, borderLeft: `2px solid ${COLORS.cardEdge}` }}>
@@ -6745,6 +6776,7 @@ function MessagesEnvoyesTab({ data, setTab, currentUser, isAdmin }) {
     );
   }
 
+  const deleteMessage = (id) => update((d) => { d.messages = (d.messages || []).filter((mm) => mm.id !== id); return d; });
   const sent = [...(data.messages || [])].filter((m) => m.from === currentUser).sort((a, b) => b.createdAt - a.createdAt);
 
   return (
@@ -6754,7 +6786,12 @@ function MessagesEnvoyesTab({ data, setTab, currentUser, isAdmin }) {
       {sent.length === 0 && <Empty text="Tu n'as envoyé aucun message pour le moment." />}
       {sent.map((m) => (
         <IndexCard key={m.id}>
-          <p style={{ fontFamily: FONT_BODY, color: COLORS.text }} className="text-sm whitespace-pre-wrap">{m.text}</p>
+          <div className="flex justify-between items-start">
+            <p style={{ fontFamily: FONT_BODY, color: COLORS.text }} className="text-sm whitespace-pre-wrap flex-1">{m.text}</p>
+            <button onClick={() => deleteMessage(m.id)} title="Supprimer">
+              <Trash2 size={14} color={COLORS.accent} />
+            </button>
+          </div>
           <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{formatDate(m.createdAt)}</span>
           {m.reply ? (
             <div className="mt-2 pl-3" style={{ borderLeft: `2px solid ${COLORS.brass}` }}>
