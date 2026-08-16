@@ -5235,6 +5235,13 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
   ] : [];
   const totalMin = items.reduce((s, it) => s + (it.kind === "category" ? (it.cat.actualDuration ?? it.cat.duration ?? 5) : (it.ex.actualDuration ?? it.ex.duration)), 0) + DEBRIEF_MIN;
   const totalWait = items.filter((it) => it.kind === "exercise").reduce((s, it) => s + computeWaitMinutes(it.ex, participants), 0);
+  // Durées effectivement retenues (resserrées pour tenir dans le temps demandé) — transmises au PDF
+  // pour qu'il affiche exactement les mêmes durées/total que cet écran (voir exportCoursePlanPDF).
+  const durationsById = {};
+  items.forEach((it) => {
+    if (it.kind === "exercise") durationsById[it.ex.id] = it.ex.actualDuration ?? it.ex.duration;
+    else durationsById[it.cat.id] = it.cat.actualDuration ?? it.cat.duration ?? 5;
+  });
 
   return (
     <div>
@@ -5570,6 +5577,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                   name: name || "Plan de cours",
                   exerciseIds: items.filter((it) => it.kind === "exercise").map((it) => it.ex.id),
                   categoryIds: items.filter((it) => it.kind === "category").map((it) => it.cat.id),
+                  durationsById,
                 },
                 data
               )}
@@ -5586,6 +5594,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                     id: uid(), name,
                     exerciseIds: items.filter((it) => it.kind === "exercise").map((it) => it.ex.id),
                     categoryIds: items.filter((it) => it.kind === "category").map((it) => it.cat.id),
+                    durationsById,
                   });
                   return d;
                 });
@@ -5818,6 +5827,10 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
   const draggedCat = dragged ? result?.[dragged.listKey]?.[dragged.index] : null;
 
   const allCats = result ? [...result.first, ...result.second] : [];
+  // Durées effectivement retenues (resserrées pour tenir dans le temps demandé) — transmises au PDF
+  // pour qu'il affiche exactement les mêmes durées/total que cet écran (voir exportSpectaclePlanPDF).
+  const durationsById = {};
+  allCats.forEach((c) => { durationsById[c.id] = c.actualDuration ?? c.duration ?? 5; });
 
   return (
     <div>
@@ -6094,7 +6107,8 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                   name: name || "Spectacle",
                   format, duree,
                   categoryIds: allCats.map((c) => c.id),
-                  entracte: entracteOn ? { duree: SPECTACLE_ENTRACTE_MIN, placementMin: result.budget1 } : null,
+                  durationsById,
+                  entracte: entracteOn ? { duree: SPECTACLE_ENTRACTE_MIN, firstCount: result.first.length } : null,
                 },
                 data
               )}
@@ -6110,7 +6124,8 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                   d.spectaclePlans.push({
                     id: uid(), name, format, duree,
                     categoryIds: allCats.map((c) => c.id),
-                    entracte: entracteOn ? { duree: SPECTACLE_ENTRACTE_MIN, placementMin: result.budget1 } : null,
+                    durationsById,
+                    entracte: entracteOn ? { duree: SPECTACLE_ENTRACTE_MIN, firstCount: result.first.length } : null,
                   });
                   return d;
                 });
@@ -7005,25 +7020,43 @@ function exportCoursePlanPDF(plan, data) {
     });
   };
 
-  addLine(`Plan de cours : ${plan.name}`, { size: 16, bold: true, gap: 10 });
-  const totalDuration =
-    plan.exerciseIds.reduce((s, id) => s + Number(data.exercises.find((e) => e.id === id)?.duration || 0), 0) +
-    catIds.reduce((s, id) => s + Number(data.categories.find((c) => c.id === id)?.duration || 5), 0);
-  addLine(`Durée totale estimée : ${totalDuration} min`, { size: 11, gap: 10 });
+  // Durées réellement retenues au moment de la génération (peuvent différer légèrement de la durée
+  // "nominale" de la fiche, resserrées pour tenir dans le temps demandé) — voir `durationsById`,
+  // renseigné par l'écran du générateur (et conservé dans les plans enregistrés). À défaut (plans
+  // enregistrés avant ce champ), on retombe sur la durée nominale de la fiche.
+  const durationsById = plan.durationsById || {};
+  const exDuration = (e) => Number(durationsById[e.id] ?? e.duration ?? 0);
+  const catDuration = (c) => Number(durationsById[c.id] ?? c.duration ?? 5);
 
-  plan.exerciseIds.forEach((id, i) => {
-    const e = data.exercises.find((x) => x.id === id);
-    if (!e) { addLine(`${i + 1}. (exercice supprimé)`, { gap: 8 }); return; }
-    addLine(`${i + 1}. ${e.title} — ${e.duration} min — ${e.format || "Solo simultané"}`, { bold: true, gap: 6 });
-    addLine(e.summary, { size: 10, gap: 9 });
+  addLine(`Plan de cours : ${plan.name}`, { size: 16, bold: true, gap: 10 });
+  const exercisesFound = plan.exerciseIds.map((id) => data.exercises.find((e) => e.id === id)).filter(Boolean);
+  const totalDuration =
+    exercisesFound.reduce((s, e) => s + exDuration(e), 0) +
+    catIds.reduce((s, id) => { const c = data.categories.find((x) => x.id === id); return c ? s + catDuration(c) : s; }, 0) +
+    DEBRIEF_MIN;
+  addLine(`Durée totale estimée : ${totalDuration} min (feedbacks inclus ${DEBRIEF_MIN} minutes)`, { size: 11, gap: 10 });
+
+  // Regroupées par phase (échauffement / pré-impro / impro), dans cet ordre, comme sur l'écran du
+  // générateur — plutôt qu'une simple liste à plat qui mélangeait tout.
+  const PHASE_LABELS = { "Échauffement": "Échauffement", "Pré-impro": "Exercice pré-impro", "Impro": "Exercice d'impro" };
+  const missingIds = plan.exerciseIds.filter((id) => !data.exercises.find((e) => e.id === id));
+  SECTIONS_EXERCICE.forEach((phase) => {
+    const list = exercisesFound.filter((e) => (e.phase || "Impro") === phase);
+    if (list.length === 0) return;
+    addLine(PHASE_LABELS[phase], { size: 13, bold: true, gap: 8 });
+    list.forEach((e, i) => {
+      addLine(`${i + 1}. ${e.title} — ${exDuration(e)} min — ${e.format || "Solo simultané"}`, { bold: true, gap: 6 });
+      addLine(e.summary, { size: 10, gap: 9 });
+    });
   });
+  missingIds.forEach(() => addLine("(exercice supprimé)", { gap: 8 }));
 
   if (catIds.length > 0) {
     addLine("Catégories d'impro jouées :", { bold: true, gap: 8 });
     catIds.forEach((id, i) => {
       const c = data.categories.find((x) => x.id === id);
       if (!c) { addLine(`${i + 1}. (catégorie supprimée)`, { gap: 8 }); return; }
-      addLine(`${i + 1}. ${c.name} — ${c.duration || 5} min`, { bold: true, gap: 6 });
+      addLine(`${i + 1}. ${c.name} — ${catDuration(c)} min`, { bold: true, gap: 6 });
       addLine(c.summary, { size: 10, gap: 9 });
     });
   }
@@ -7055,12 +7088,21 @@ function exportSpectaclePlanPDF(plan, data) {
     });
   };
 
+  const durationsById = plan.durationsById || {};
+  const catDuration = (c) => Number(durationsById[c.id] ?? c.duration ?? 5);
+
   addLine(`Spectacle : ${plan.name}`, { size: 16, bold: true, gap: 10 });
   addLine(`Format : ${plan.format || "non précisé"} — Durée totale estimée : ${plan.duree} min`, { size: 11, gap: 10 });
 
   const entracte = plan.entracte;
+  // Emplacement exact (nombre de catégories avant l'entracte), tel que défini par le générateur —
+  // plus fiable que l'ancienne estimation par cumul de durée (`placementMin`), qui pouvait ne jamais
+  // être atteinte exactement et reléguait l'entracte tout à la fin du PDF. `placementMin` reste géré
+  // en repli pour les spectacles déjà enregistrés avant l'ajout de `firstCount`.
   let placementIdx = catIds.length;
-  if (entracte) {
+  if (entracte && typeof entracte.firstCount === "number") {
+    placementIdx = entracte.firstCount;
+  } else if (entracte) {
     let cum = 0;
     for (let i = 0; i < catIds.length; i++) {
       const c = data.categories.find((x) => x.id === catIds[i]);
@@ -7077,14 +7119,14 @@ function exportSpectaclePlanPDF(plan, data) {
     }
     const c = data.categories.find((x) => x.id === id);
     if (!c) { addLine(`${i + 1}. (catégorie supprimée)`, { gap: 8 }); return; }
-    addLine(`${i + 1}. ${c.name} — ${c.duration || 5} min`, { bold: true, gap: 6 });
+    addLine(`${i + 1}. ${c.name} — ${catDuration(c)} min`, { bold: true, gap: 6 });
     addLine(c.summary, { size: 10, gap: 9 });
     if (c.archetypes?.length > 0) {
       addLine(`Archétypes : ${c.archetypes.map((a) => a.name).join(", ")}`, { size: 9, gap: 9 });
     }
   });
 
-  if (entracte && placementIdx === catIds.length) {
+  if (entracte && placementIdx >= catIds.length) {
     addLine(`— Entracte (${entracte.duree} min) —`, { bold: true, gap: 9 });
   }
 
