@@ -890,6 +890,20 @@ function mergeMissingCategories(data) {
     musiqueTagV1 = true;
   }
 
+  // Ajoute une seule fois "Musique" comme matériel aux catégories déjà taguées "Musique" qui n'ont
+  // pas encore de matériel renseigné (ex. "Muette sur fond musical" nécessite de la musique) — ne se
+  // réexécute plus ensuite, pour ne pas revenir sur un retrait manuel du matériel par la suite.
+  let materialMusiqueV1 = data._materialMusiqueV1;
+  if (!materialMusiqueV1 && categories) {
+    categories = categories.map((c) => {
+      if ((c.objectives || []).some((o) => o.toLowerCase() === "musique") && !c.material) {
+        return { ...c, material: "Musique" };
+      }
+      return c;
+    });
+    materialMusiqueV1 = true;
+  }
+
   // Le niveau "Expert" est retiré de l'appli : on convertit les fiches déjà enregistrées vers "Avancé".
   if (exercises?.some((e) => e.level === "Expert")) {
     exercises = exercises.map((e) => (e.level === "Expert" ? { ...e, level: "Avancé" } : e));
@@ -906,9 +920,10 @@ function mergeMissingCategories(data) {
     objectifs === data.objectifs &&
     thematiques === data.thematiques &&
     cercleTagV1 === data._cercleTagV1 &&
-    musiqueTagV1 === data._musiqueTagV1
+    musiqueTagV1 === data._musiqueTagV1 &&
+    materialMusiqueV1 === data._materialMusiqueV1
   ) return data;
-  return { ...data, categories, showTypes, showConcepts, exercises, objectifs, thematiques, _cercleTagV1: cercleTagV1, _musiqueTagV1: musiqueTagV1 };
+  return { ...data, categories, showTypes, showConcepts, exercises, objectifs, thematiques, _cercleTagV1: cercleTagV1, _musiqueTagV1: musiqueTagV1, _materialMusiqueV1: materialMusiqueV1 };
 }
 
 /* ---------- Persistence ---------- */
@@ -2006,6 +2021,7 @@ function BibliothequeTab({ data, update, setTab, isAdmin, currentUser, goToLibra
                   {c.level && <span>· {c.level}</span>}
                   {c.playersMin && <span>· {playersLabel(c)}</span>}
                   {c.energy && <span>· énergie {c.energy}</span>}
+                  {c.material && c.material !== "Aucun" && <span>· {c.material}</span>}
                 </div>
                 <div className="flex flex-wrap">
                   {c.thematiques.map((t) => <TagPill key={t} label={t} color={themeColor(t, data.thematiques)} />)}
@@ -3583,7 +3599,7 @@ function CategoryForm({ initial, thematiquesList, objectifsList, showTypesList, 
   const [f, setF] = useState(
     initial || {
       name: "", summary: "", rules: "", thematiques: [], tags: [], duration: 5, archetypes: [],
-      level: "", playersMin: 2, playersMax: 6, energy: "", codes: [], advice: "", durationLabel: "",
+      level: "", playersMin: 2, playersMax: 6, energy: "", material: "", codes: [], advice: "", durationLabel: "",
       objectives: [], showTypes: [], favorite: false, createdByUser: true, showTroupeOnCard: false,
     }
   );
@@ -3631,6 +3647,9 @@ function CategoryForm({ initial, thematiquesList, objectifsList, showTypesList, 
       </div>
       <Field label="Durée suggérée (minutes)">
         <input type="number" min={1} className={inputClass} style={inputStyle} value={f.duration} onChange={(e) => setF({ ...f, duration: Number(e.target.value) })} />
+      </Field>
+      <Field label="Matériel">
+        <input className={inputClass} style={inputStyle} value={f.material || ""} onChange={(e) => setF({ ...f, material: e.target.value })} placeholder="Aucun, Musique, Chaises…" />
       </Field>
       <Field label="Famille d'objectif pédagogique">
         <SearchableMultiSelect
@@ -3822,6 +3841,7 @@ function CategoriesTab({ data, update, isAdmin, currentUser, onlyUserCreated, in
           {c.level && <span>· {c.level}</span>}
           {c.playersMin && <span>· {playersLabel(c)}</span>}
           {c.energy && <span>· énergie {c.energy}</span>}
+          {c.material && c.material !== "Aucun" && <span>· {c.material}</span>}
           {c.creatorTroupe && <span>· {c.creatorUsername} — Troupe {c.creatorTroupe}</span>}
         </div>
         <div className="flex flex-wrap">
@@ -6431,6 +6451,7 @@ function ModerationTab({ data, update, setTab, isAdmin }) {
                 <span>{c.durationLabel || `${c.duration || 5} min`}</span>
                 {c.level && <span>· {c.level}</span>}
                 {c.playersMin && <span>· {playersLabel(c)}</span>}
+                {c.material && c.material !== "Aucun" && <span>· {c.material}</span>}
                 {c.creatorTroupe && <span>· {c.creatorUsername} — Troupe {c.creatorTroupe}</span>}
               </div>
             </IndexCard>
