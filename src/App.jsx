@@ -1922,9 +1922,16 @@ function BibliothequeTab({ data, update, setTab, isAdmin, currentUser, goToLibra
 
   const [editingExerciseId, setEditingExerciseId] = useState(null);
   const [editingCategoryId, setEditingCategoryId] = useState(null);
+  const [toastMsg, showToast] = useToast();
 
-  const toggleFavExercise = (id) => { if (!currentUser) return; update((d) => { const e = d.exercises.find((x) => x.id === id); if (e) e.favorite = !e.favorite; return d; }); };
-  const toggleFavCategory = (id) => { if (!currentUser) return; update((d) => { const c = d.categories.find((x) => x.id === id); if (c) c.favorite = !c.favorite; return d; }); };
+  const toggleFavExercise = (id) => {
+    if (!currentUser) { showToast("Désolé, il te faut un compte pour enregistrer tes créations !", { type: "notice" }); return; }
+    update((d) => { const e = d.exercises.find((x) => x.id === id); if (e) e.favorite = !e.favorite; return d; });
+  };
+  const toggleFavCategory = (id) => {
+    if (!currentUser) { showToast("Désolé, il te faut un compte pour enregistrer tes créations !", { type: "notice" }); return; }
+    update((d) => { const c = d.categories.find((x) => x.id === id); if (c) c.favorite = !c.favorite; return d; });
+  };
 
   const sections = [
     { label: "Exercices", desc: `${data.exercises.length} fiche(s)`, tab: "exercices", icon: Users },
@@ -1934,6 +1941,7 @@ function BibliothequeTab({ data, update, setTab, isAdmin, currentUser, goToLibra
 
   return (
     <div>
+      <Toast toast={toastMsg} />
       <SectionHeader icon={Library} title="Bibliothèque" subtitle="Toutes les ressources de l'appli, au même endroit." />
       <Field label="Chercher la fiche d'un exercice ou d'une catégorie">
         <input
@@ -2119,12 +2127,20 @@ function FavorisTab({ data, update, isAdmin, currentUser, setTab }) {
   const favCategories = data.categories.filter((c) => c.favorite);
   const [editingExerciseId, setEditingExerciseId] = useState(null);
   const [editingCategoryId, setEditingCategoryId] = useState(null);
+  const [toastMsg, showToast] = useToast();
 
-  const toggleFavExercise = (id) => { if (!currentUser) return; update((d) => { const e = d.exercises.find((x) => x.id === id); if (e) e.favorite = !e.favorite; return d; }); };
-  const toggleFavCategory = (id) => { if (!currentUser) return; update((d) => { const c = d.categories.find((x) => x.id === id); if (c) c.favorite = !c.favorite; return d; }); };
+  const toggleFavExercise = (id) => {
+    if (!currentUser) { showToast("Désolé, il te faut un compte pour enregistrer tes créations !", { type: "notice" }); return; }
+    update((d) => { const e = d.exercises.find((x) => x.id === id); if (e) e.favorite = !e.favorite; return d; });
+  };
+  const toggleFavCategory = (id) => {
+    if (!currentUser) { showToast("Désolé, il te faut un compte pour enregistrer tes créations !", { type: "notice" }); return; }
+    update((d) => { const c = d.categories.find((x) => x.id === id); if (c) c.favorite = !c.favorite; return d; });
+  };
 
   return (
     <div>
+      <Toast toast={toastMsg} />
       {setTab && <LibraryBackBtn onClick={() => setTab("bibliotheque")} />}
       <SectionHeader icon={Star} title="Favoris" subtitle="Tes exercices et catégories étoilés." />
       {favExercises.length === 0 && favCategories.length === 0 && <Empty text="Aucun favori pour l'instant — clique sur l'étoile d'une fiche pour l'ajouter ici." />}
@@ -2938,7 +2954,7 @@ function ExercicesTab({ data, update, isAdmin, currentUser, profile, onlyUserCre
   const [rejectingId, setRejectingId] = useState(null);
   const [rejectReason, setRejectReason] = useState("");
   const toggleFavorite = (id) => {
-    if (!currentUser) return; // favoris réservés aux comptes connectés
+    if (!currentUser) { showToast("Désolé, il te faut un compte pour enregistrer tes créations !", { type: "notice" }); return; }
     update((d) => {
       const ex = d.exercises.find((x) => x.id === id);
       if (ex) ex.favorite = !ex.favorite;
@@ -3774,7 +3790,7 @@ function CategoriesTab({ data, update, isAdmin, currentUser, onlyUserCreated, in
   const canCreate = isAdmin || !!currentUser;
 
   const toggleFavorite = (id) => {
-    if (!currentUser) return; // favoris réservés aux comptes connectés
+    if (!currentUser) { showToast("Désolé, il te faut un compte pour enregistrer tes créations !", { type: "notice" }); return; }
     update((d) => {
       const c = d.categories.find((x) => x.id === id);
       if (c) c.favorite = !c.favorite;
@@ -5049,7 +5065,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
     setExpandedId(expandedId === id ? null : id);
   };
   const toggleFavEx = (id) => {
-    if (!currentUser) return; // favoris réservés aux comptes connectés
+    if (!currentUser) { showToast("Désolé, il te faut un compte pour enregistrer tes créations !", { type: "notice" }); return; }
     update((d) => { const e = d.exercises.find((x) => x.id === id); if (e) e.favorite = !e.favorite; return d; });
     setPlan((prev) => {
       if (!prev) return prev;
@@ -5058,7 +5074,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
     });
   };
   const toggleFavCat = (id) => {
-    if (!currentUser) return; // favoris réservés aux comptes connectés
+    if (!currentUser) { showToast("Désolé, il te faut un compte pour enregistrer tes créations !", { type: "notice" }); return; }
     update((d) => { const c = d.categories.find((x) => x.id === id); if (c) c.favorite = !c.favorite; return d; });
     setPlan((prev) => {
       if (!prev) return prev;
@@ -5744,7 +5760,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
   };
 
   const toggleFavCat = (id) => {
-    if (!currentUser) return; // favoris réservés aux comptes connectés
+    if (!currentUser) { showToast("Désolé, il te faut un compte pour enregistrer tes créations !", { type: "notice" }); return; }
     update((d) => { const c = d.categories.find((x) => x.id === id); if (c) c.favorite = !c.favorite; return d; });
     setResult((prev) => {
       if (!prev) return prev;
@@ -6122,6 +6138,7 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
   const setList = setPlan;
   const [expandedId, setExpandedId] = useState(null);
   const [picker, setPicker] = useState(null); // { mode: "add" } | { mode: "replace", idx }
+  const [toastMsg, showToast] = useToast();
 
   const generate = () => {
     const matches = (e) => tags.length === 0 || tags.includes(e.groupe);
@@ -6176,7 +6193,7 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
 
   const handleCardTap = (id) => setExpandedId(expandedId === id ? null : id);
   const toggleFavorite = (id) => {
-    if (!currentUser) return; // favoris réservés aux comptes connectés
+    if (!currentUser) { showToast("Désolé, il te faut un compte pour enregistrer tes créations !", { type: "notice" }); return; }
     update((d) => { const e = d.exercises.find((x) => x.id === id); if (e) e.favorite = !e.favorite; return d; });
     setList((prev) => prev.map((e) => (e.id === id ? { ...e, favorite: !e.favorite } : e)));
   };
@@ -6199,6 +6216,7 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
 
   return (
     <div>
+      <Toast toast={toastMsg} />
       <SectionHeader icon={Flame} title="Créer un échauffement" subtitle="Une préparation rapide, immédiatement utilisable." />
       <IndexCard style={{ borderColor: COLORS.accent, background: COLORS.accent + "15", marginBottom: 12 }} className="flex items-center gap-2">
         <AlertTriangle size={18} color={COLORS.accent} />
