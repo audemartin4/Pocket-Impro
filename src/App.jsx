@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import {
   Sparkles, Shuffle, Clock, BookOpen, Users, Flame, ClipboardList,
   Plus, Trash2, Tag, ChevronRight, ChevronUp, ChevronDown, ChevronLeft, Download,
-  Save, X, Check, Home, Theater, Pencil, Library, UserCircle, GripVertical, Star, LogIn, LogOut, AlertTriangle, Mail, Eye, EyeOff
+  Save, X, Check, Home, Theater, Pencil, Library, UserCircle, Pointer, Star, LogIn, LogOut, AlertTriangle, Mail, Eye, EyeOff, Contact
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
 import { useAuthUser, signIn, signUp, signOut } from "./auth.js";
@@ -992,12 +992,12 @@ function TagPill({ label, color, onRemove }) {
 function IndexCard({ children, style, className = "", onClick }) {
   return (
     <div
-      className={`relative rounded-sm p-4 mb-3 ${className}`}
+      className={`relative rounded-xl p-4 mb-3 ${className}`}
       onClick={onClick}
       style={{
         background: COLORS.card,
         border: `1px solid ${COLORS.cardEdge}`,
-        boxShadow: "2px 3px 0 rgba(30,42,56,0.06)",
+        boxShadow: "0 4px 10px rgba(30,42,56,0.15)",
         ...style,
       }}
     >
@@ -1443,7 +1443,7 @@ const TABS = [
 ];
 // Onglets qui relèvent de la Bibliothèque (hub + toutes ses sous-pages) — sert à n'afficher
 // le bouton "Remonter en haut" que sur ces pages-là.
-const LIBRARY_TABS = ["bibliotheque", "exercices", "exercices-crees", "categories", "categories-crees", "spectacles", "plans", "favoris", "moderation", "messages", "mes-messages"];
+const LIBRARY_TABS = ["bibliotheque", "exercices", "exercices-crees", "categories", "categories-crees", "spectacles", "plans", "favoris", "moderation", "messages", "mes-messages", "comptes"];
 
 /* Bouton "← Bibliothèque" (ou autre cible), en haut à gauche des sous-pages de la Bibliothèque —
    même style visuel que les BackBtn internes utilisés pour la navigation par famille/tag. */
@@ -1610,6 +1610,7 @@ export default function ImproApp() {
         {tab === "plans" && <PlansTab data={publicData} update={update} setTab={setTab} />}
         {tab === "moderation" && <ModerationTab data={data} update={update} setTab={setTab} isAdmin={isAdmin} />}
         {tab === "messages" && <MessagesTab data={data} update={update} setTab={setTab} isAdmin={isAdmin} />}
+        {tab === "comptes" && <ComptesTab data={data} isAdmin={isAdmin} setTab={setTab} />}
         {tab === "mes-messages" && <MesMessagesTab data={data} update={update} setTab={setTab} currentUser={currentUser} />}
         {tab === "favoris" && <FavorisTab data={publicData} update={update} isAdmin={isAdmin} currentUser={currentUser} setTab={setTab} />}
         {tab === "profil" && <ProfilTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} realIsAdmin={auth.isAdmin} simulateMember={simulateMember} setSimulateMember={setSimulateMember} />}
@@ -1847,7 +1848,7 @@ function BibliothequeTab({ data, update, setTab, isAdmin, currentUser, goToLibra
                   <div className="flex items-center gap-3">
                     <Tag size={18} color={COLORS.accent} />
                     <div>
-                      <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">Objectif</span>
+                      <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">Tag</span>
                       <div style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{o}</div>
                     </div>
                   </div>
@@ -2406,6 +2407,22 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
               >
                 {nbUnreadMessages}
               </span>
+            </div>
+          </IndexCard>
+        </button>
+      )}
+
+      {isAdmin && (
+        <button onClick={() => setTab("comptes")} className="w-full text-left mt-2">
+          <IndexCard style={{ cursor: "pointer" }}>
+            <div className="flex items-center gap-3">
+              <Contact size={18} color={COLORS.textSoft} />
+              <div>
+                <div style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">Comptes</div>
+                <div style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }} className="text-xs">
+                  Pseudo, troupe et nombre d'exercices créés par chaque compte inscrit.
+                </div>
+              </div>
             </div>
           </IndexCard>
         </button>
@@ -4255,8 +4272,8 @@ function DragGhost({ x, y, title, subtitle }) {
       }}
     >
       <IndexCard style={{ marginBottom: 0, padding: 8, background: COLORS.card, border: `1px solid ${COLORS.brass}` }}>
-        <div className="flex gap-1.5">
-          <GripVertical size={13} color={COLORS.textSoft} />
+        <div className="flex gap-2.5">
+          <Pointer size={13} color={COLORS.textSoft} />
           <div>
             <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-sm font-medium">{title}</h3>
             {subtitle && <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{subtitle}</span>}
@@ -4988,7 +5005,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
               const isDraggedItem = dragged && dragged.listKey === "impro" && dragged.index === it.idx;
               const isExpanded = expandedId === c.id;
               const card = (
-                <IndexCard>
+                <IndexCard style={{ paddingLeft: 30 }}>
                   <div className="flex justify-between items-start">
                     <div className="flex-1" onClick={() => handleCardTap(c.id)} style={{ cursor: "pointer" }}>
                       <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">{it.label}</span>
@@ -5074,7 +5091,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                   onPointerDown={(e) => startPress("impro", it.idx, e)}
                   style={{ position: "relative", opacity: isDraggedItem ? 0.4 : 1, userSelect: "none", WebkitUserSelect: "none", touchAction: "none" }}
                 >
-                  <GripVertical size={12} color={COLORS.textSoft} style={{ position: "absolute", left: 3, top: "50%", transform: "translateY(-50%)", zIndex: 1, pointerEvents: "none" }} />
+                  <Pointer size={14} color={COLORS.textSoft} style={{ position: "absolute", left: 6, top: "50%", transform: "translateY(-50%)", zIndex: 1, pointerEvents: "none" }} />
                   {card}
                 </div>
               );
@@ -5084,7 +5101,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
             const isDraggedItem = dragged && listKey && dragged.listKey === listKey && dragged.index === it.idx;
             const isExpanded = expandedId === it.ex.id;
             const card = (
-              <IndexCard>
+              <IndexCard style={{ paddingLeft: 30 }}>
                 <div className="flex justify-between items-start">
                   <div className="flex-1" onClick={() => handleCardTap(it.ex.id)} style={{ cursor: "pointer" }}>
                     <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">{it.label}</span>
@@ -5186,7 +5203,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                 onPointerDown={(e) => startPress(listKey, it.idx, e)}
                 style={{ position: "relative", opacity: isDraggedItem ? 0.4 : 1, userSelect: "none", WebkitUserSelect: "none", touchAction: "none" }}
               >
-                <GripVertical size={12} color={COLORS.textSoft} style={{ position: "absolute", left: 3, top: "50%", transform: "translateY(-50%)", zIndex: 1, pointerEvents: "none" }} />
+                <Pointer size={14} color={COLORS.textSoft} style={{ position: "absolute", left: 6, top: "50%", transform: "translateY(-50%)", zIndex: 1, pointerEvents: "none" }} />
                 {card}
               </div>
             );
@@ -5557,8 +5574,8 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                   userSelect: "none", WebkitUserSelect: "none", touchAction: "none",
                 }}
               >
-                <GripVertical size={12} color={COLORS.textSoft} style={{ position: "absolute", left: 3, top: "50%", transform: "translateY(-50%)", zIndex: 1, pointerEvents: "none" }} />
-                <IndexCard>
+                <Pointer size={14} color={COLORS.textSoft} style={{ position: "absolute", left: 6, top: "50%", transform: "translateY(-50%)", zIndex: 1, pointerEvents: "none" }} />
+                <IndexCard style={{ paddingLeft: 30 }}>
                   <div className="flex justify-between items-start">
                     <div className="flex-1" onClick={() => handleCardTap(c.id)} style={{ cursor: "pointer" }}>
                       <div className="flex items-center justify-between gap-2">
@@ -5645,8 +5662,8 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                   userSelect: "none", WebkitUserSelect: "none", touchAction: "none",
                 }}
               >
-                <GripVertical size={12} color={COLORS.textSoft} style={{ position: "absolute", left: 3, top: "50%", transform: "translateY(-50%)", zIndex: 1, pointerEvents: "none" }} />
-                <IndexCard>
+                <Pointer size={14} color={COLORS.textSoft} style={{ position: "absolute", left: 6, top: "50%", transform: "translateY(-50%)", zIndex: 1, pointerEvents: "none" }} />
+                <IndexCard style={{ paddingLeft: 30 }}>
                   <div className="flex justify-between items-start">
                     <div className="flex-1" onClick={() => handleCardTap(c.id)} style={{ cursor: "pointer" }}>
                       <div className="flex items-center justify-between gap-2">
@@ -6250,6 +6267,74 @@ function MessagesTab({ data, update, setTab, isAdmin }) {
       {messages.map((m) => (
         <MessageCard key={m.id} message={m} onDelete={() => deleteMessage(m.id)} onReply={(text) => sendReply(m.id, text)} formatDate={formatDate} />
       ))}
+    </div>
+  );
+}
+
+/* ---------- Comptes (vue Admin en lecture seule : pseudo, troupe, exercices créés — pas d'email,
+   pas d'accès au compte lui-même) ---------- */
+function ComptesTab({ data, isAdmin, setTab }) {
+  const [profiles, setProfiles] = useState(null); // null = chargement en cours
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    let cancelled = false;
+    supabase
+      .from("profiles")
+      .select("username, troupe")
+      .order("username")
+      .then(({ data: rows, error: err }) => {
+        if (cancelled) return;
+        if (err) { setError("Impossible de charger les comptes."); return; }
+        setProfiles(rows || []);
+      });
+    return () => { cancelled = true; };
+  }, [isAdmin]);
+
+  if (!isAdmin) {
+    return (
+      <div>
+        {setTab && <LibraryBackBtn label="Mon profil" onClick={() => setTab("profil")} />}
+        <Empty text="Réservé à l'Admin." />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {setTab && <LibraryBackBtn label="Mon profil" onClick={() => setTab("profil")} />}
+      <SectionHeader
+        icon={Contact}
+        title="Comptes"
+        subtitle="Pseudo, troupe et nombre d'exercices créés par chaque compte inscrit."
+      />
+
+      {error && <Empty text={error} />}
+      {!error && profiles === null && <Empty text="Chargement…" />}
+      {!error && profiles !== null && profiles.length === 0 && <Empty text="Aucun compte pour le moment." />}
+
+      {profiles && profiles.map((p) => {
+        const nbExercices = data.exercises.filter((e) => e.creatorUsername === p.username).length;
+        return (
+          <IndexCard key={p.username}>
+            <div className="flex items-center justify-between">
+              <div>
+                <div style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{p.username}</div>
+                <div style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs uppercase">
+                  {p.troupe ? `Troupe ${p.troupe}` : "Sans troupe renseignée"}
+                </div>
+              </div>
+              <span
+                className="text-sm px-2 py-0.5 rounded-full"
+                style={{ fontFamily: FONT_MONO, background: COLORS.cardEdge + "55", color: COLORS.textSoft }}
+              >
+                {nbExercices} exercice{nbExercices > 1 ? "s" : ""}
+              </span>
+            </div>
+          </IndexCard>
+        );
+      })}
     </div>
   );
 }
