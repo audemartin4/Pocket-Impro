@@ -6231,6 +6231,11 @@ function EntrainementTab({ data }) {
       {picked && (
         <IndexCard className="mt-4">
           <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-xl font-semibold">{picked.name}</h3>
+          <div className="flex flex-wrap gap-1 text-xs mt-1 mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
+            <span>{picked.durationLabel || `${picked.duration || 5} min`}</span>
+            {picked.playersMin && <span>· {playersLabel(picked)}</span>}
+            {picked.energy && <span>· énergie {picked.energy}</span>}
+          </div>
           <p style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }} className="text-sm my-1">{picked.summary}</p>
           {picked.archetypes.length > 0 && (
             <p className="text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
