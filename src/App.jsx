@@ -1952,7 +1952,7 @@ function BibliothequeTab({ data, update, setTab, isAdmin, currentUser, goToLibra
   return (
     <div>
       <Toast toast={toastMsg} />
-      <SectionHeader icon={Library} title="Bibliothèque" subtitle="Toutes les ressources de l'appli, au même endroit." />
+      <SectionHeader icon={Library} title="Bibliothèque" subtitle="Toutes les ressources de Pocket Impro, au même endroit. Tu souhaites suggérer un nouvel exercice, échauffement ou une nouvelle catégorie ? Crée un compte et c'est parti !" />
       <Field label="Chercher la fiche d'un exercice ou d'une catégorie">
         <input
           className={inputClass}
