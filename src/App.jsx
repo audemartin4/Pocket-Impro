@@ -5138,17 +5138,26 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                 </IndexCard>
               );
               return (
-                <div
-                  key={it.label}
-                  data-drop-card="true"
-                  data-list="impro"
-                  data-index={it.idx}
-                  onPointerDown={(e) => { if (e.pointerType === "mouse" && !e.target.closest("[data-drag-handle]")) return; startPress("impro", it.idx, e); }}
-                  style={{ position: "relative", opacity: isDraggedItem ? 0.4 : 1, userSelect: "none", WebkitUserSelect: "none", touchAction: "none" }}
-                >
-                  <Pointer data-drag-handle size={14} color={COLORS.textSoft} style={{ position: "absolute", left: 6, bottom: 6, zIndex: 1, cursor: "grab" }} />
-                  {card}
-                </div>
+                <React.Fragment key={it.label}>
+                  <div
+                    data-drop-card="true"
+                    data-list="impro"
+                    data-index={it.idx}
+                    onPointerDown={(e) => { if (e.pointerType === "mouse" && !e.target.closest("[data-drag-handle]")) return; startPress("impro", it.idx, e); }}
+                    style={{ position: "relative", opacity: isDraggedItem ? 0.4 : 1, userSelect: "none", WebkitUserSelect: "none", touchAction: "none" }}
+                  >
+                    <Pointer data-drag-handle size={14} color={COLORS.textSoft} style={{ position: "absolute", left: 6, bottom: 6, zIndex: 1, cursor: "grab" }} />
+                    {card}
+                  </div>
+                  {catPicker?.mode === "replace" && catPicker.idx === it.idx && (
+                    <CategoryPicker
+                      categories={pickerCategories}
+                      excludeIds={[...usedCatIds()]}
+                      onSelect={pickCatManually}
+                      onCancel={() => setCatPicker(null)}
+                    />
+                  )}
+                </React.Fragment>
               );
             }
             const wait = computeWaitMinutes(it.ex, participants);
@@ -5248,34 +5257,45 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                 </div>
               </IndexCard>
             );
-            if (!listKey) return <div key={it.label}>{card}</div>;
+            const inlinePicker = picker?.mode === "replace" && picker.slot === it.slot && picker.idx === it.idx && (
+              <ExercisePicker
+                exercises={pickerExercises}
+                excludeIds={[...usedIds()]}
+                onSelect={pickManually}
+                onCancel={() => setPicker(null)}
+                priorityFamilies={objectifs.length > 0 ? objectifs : (picker.groupe ? [picker.groupe] : [])}
+              />
+            );
+            if (!listKey) return <React.Fragment key={it.label}>{card}{inlinePicker}</React.Fragment>;
             return (
-              <div
-                key={it.label}
-                data-drop-card="true"
-                data-list={listKey}
-                data-index={it.idx}
-                onPointerDown={(e) => { if (e.pointerType === "mouse" && !e.target.closest("[data-drag-handle]")) return; startPress(listKey, it.idx, e); }}
-                style={{ position: "relative", opacity: isDraggedItem ? 0.4 : 1, userSelect: "none", WebkitUserSelect: "none", touchAction: "none" }}
-              >
-                <Pointer data-drag-handle size={14} color={COLORS.textSoft} style={{ position: "absolute", left: 6, bottom: 6, zIndex: 1, cursor: "grab" }} />
-                {card}
-              </div>
+              <React.Fragment key={it.label}>
+                <div
+                  data-drop-card="true"
+                  data-list={listKey}
+                  data-index={it.idx}
+                  onPointerDown={(e) => { if (e.pointerType === "mouse" && !e.target.closest("[data-drag-handle]")) return; startPress(listKey, it.idx, e); }}
+                  style={{ position: "relative", opacity: isDraggedItem ? 0.4 : 1, userSelect: "none", WebkitUserSelect: "none", touchAction: "none" }}
+                >
+                  <Pointer data-drag-handle size={14} color={COLORS.textSoft} style={{ position: "absolute", left: 6, bottom: 6, zIndex: 1, cursor: "grab" }} />
+                  {card}
+                </div>
+                {inlinePicker}
+              </React.Fragment>
             );
           })}
-          {picker && (
+          {picker?.mode === "add" && (
             <ExercisePicker
               exercises={pickerExercises}
               excludeIds={[...usedIds()]}
               onSelect={pickManually}
               onCancel={() => setPicker(null)}
-              priorityFamilies={objectifs.length > 0 ? objectifs : (picker?.mode === "replace" && picker.groupe ? [picker.groupe] : [])}
+              priorityFamilies={objectifs.length > 0 ? objectifs : []}
             />
           )}
           <div className="flex gap-2 mb-2">
             <Btn variant="accent" onClick={() => setPicker({ mode: "add" })}><Plus size={14} /> Ajouter un exercice</Btn>
           </div>
-          {catPicker && (
+          {catPicker?.mode === "add" && (
             <CategoryPicker
               categories={pickerCategories}
               excludeIds={[...usedCatIds()]}
@@ -5694,6 +5714,14 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                   </div>
                 </IndexCard>
               </div>
+              {catPicker?.part === "first" && catPicker.idx === i && catPicker.mode !== "add" && (
+                <CategoryPicker
+                  categories={pickerCategories}
+                  excludeIds={allCats.map((c) => c.id)}
+                  onSelect={pickCatManually}
+                  onCancel={() => setCatPicker(null)}
+                />
+              )}
               <DropZone />
             </React.Fragment>
           ))}
@@ -5782,13 +5810,21 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                   </div>
                 </IndexCard>
               </div>
+              {catPicker?.part === "second" && catPicker.idx === i && catPicker.mode !== "add" && (
+                <CategoryPicker
+                  categories={pickerCategories}
+                  excludeIds={allCats.map((c) => c.id)}
+                  onSelect={pickCatManually}
+                  onCancel={() => setCatPicker(null)}
+                />
+              )}
               <DropZone />
             </React.Fragment>
           ))}
           <div className="mb-2">
             <Btn small variant="accent" onClick={() => setCatPicker({ mode: "add", part: entracteOn ? "second" : "first" })}><Plus size={13} /> Ajouter une catégorie</Btn>
           </div>
-          {catPicker && (
+          {catPicker?.mode === "add" && (
             <CategoryPicker
               categories={pickerCategories}
               excludeIds={allCats.map((c) => c.id)}
@@ -5998,7 +6034,8 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
           {list.map((e, idx) => {
             const isExpanded = expandedId === e.id;
             return (
-              <IndexCard key={e.id}>
+              <React.Fragment key={e.id}>
+              <IndexCard>
                 <div className="flex justify-between items-start">
                   <div className="flex-1" onClick={() => handleCardTap(e.id)} style={{ cursor: "pointer" }}>
                     <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{e.title}</h3>
@@ -6043,9 +6080,18 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
                   <button onClick={() => remove(idx)} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
                 </div>
               </IndexCard>
+              {picker?.mode === "replace" && picker.idx === idx && (
+                <ExercisePicker
+                  exercises={data.exercises.filter((e) => e.warmup)}
+                  excludeIds={list.map((e) => e.id)}
+                  onSelect={pickManually}
+                  onCancel={() => setPicker(null)}
+                />
+              )}
+              </React.Fragment>
             );
           })}
-          {picker && (
+          {picker?.mode === "add" && (
             <ExercisePicker
               exercises={data.exercises.filter((e) => e.warmup)}
               excludeIds={list.map((e) => e.id)}
