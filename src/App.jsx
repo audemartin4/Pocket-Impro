@@ -5088,10 +5088,10 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                   data-drop-card="true"
                   data-list="impro"
                   data-index={it.idx}
-                  onPointerDown={(e) => startPress("impro", it.idx, e)}
+                  onPointerDown={(e) => { if (e.pointerType === "mouse" && !e.target.closest("[data-drag-handle]")) return; startPress("impro", it.idx, e); }}
                   style={{ position: "relative", opacity: isDraggedItem ? 0.4 : 1, userSelect: "none", WebkitUserSelect: "none", touchAction: "none" }}
                 >
-                  <Pointer size={14} color={COLORS.textSoft} style={{ position: "absolute", left: 6, top: "50%", transform: "translateY(-50%)", zIndex: 1, pointerEvents: "none" }} />
+                  <Pointer data-drag-handle size={14} color={COLORS.textSoft} style={{ position: "absolute", left: 6, bottom: 6, zIndex: 1, cursor: "grab" }} />
                   {card}
                 </div>
               );
@@ -5200,10 +5200,10 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                 data-drop-card="true"
                 data-list={listKey}
                 data-index={it.idx}
-                onPointerDown={(e) => startPress(listKey, it.idx, e)}
+                onPointerDown={(e) => { if (e.pointerType === "mouse" && !e.target.closest("[data-drag-handle]")) return; startPress(listKey, it.idx, e); }}
                 style={{ position: "relative", opacity: isDraggedItem ? 0.4 : 1, userSelect: "none", WebkitUserSelect: "none", touchAction: "none" }}
               >
-                <Pointer size={14} color={COLORS.textSoft} style={{ position: "absolute", left: 6, top: "50%", transform: "translateY(-50%)", zIndex: 1, pointerEvents: "none" }} />
+                <Pointer data-drag-handle size={14} color={COLORS.textSoft} style={{ position: "absolute", left: 6, bottom: 6, zIndex: 1, cursor: "grab" }} />
                 {card}
               </div>
             );
@@ -5567,14 +5567,14 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                 data-drop-card="true"
                 data-list="first"
                 data-index={i}
-                onPointerDown={(e) => startPress("first", i, e)}
+                onPointerDown={(e) => { if (e.pointerType === "mouse" && !e.target.closest("[data-drag-handle]")) return; startPress("first", i, e); }}
                 style={{
                   position: "relative",
                   opacity: dragged?.part === "first" && dragged.index === i ? 0.4 : 1,
                   userSelect: "none", WebkitUserSelect: "none", touchAction: "none",
                 }}
               >
-                <Pointer size={14} color={COLORS.textSoft} style={{ position: "absolute", left: 6, top: "50%", transform: "translateY(-50%)", zIndex: 1, pointerEvents: "none" }} />
+                <Pointer data-drag-handle size={14} color={COLORS.textSoft} style={{ position: "absolute", left: 6, bottom: 6, zIndex: 1, cursor: "grab" }} />
                 <IndexCard style={{ paddingLeft: 30 }}>
                   <div className="flex justify-between items-start">
                     <div className="flex-1" onClick={() => handleCardTap(c.id)} style={{ cursor: "pointer" }}>
@@ -5655,14 +5655,14 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                 data-drop-card="true"
                 data-list="second"
                 data-index={i}
-                onPointerDown={(e) => startPress("second", i, e)}
+                onPointerDown={(e) => { if (e.pointerType === "mouse" && !e.target.closest("[data-drag-handle]")) return; startPress("second", i, e); }}
                 style={{
                   position: "relative",
                   opacity: dragged?.part === "second" && dragged.index === i ? 0.4 : 1,
                   userSelect: "none", WebkitUserSelect: "none", touchAction: "none",
                 }}
               >
-                <Pointer size={14} color={COLORS.textSoft} style={{ position: "absolute", left: 6, top: "50%", transform: "translateY(-50%)", zIndex: 1, pointerEvents: "none" }} />
+                <Pointer data-drag-handle size={14} color={COLORS.textSoft} style={{ position: "absolute", left: 6, bottom: 6, zIndex: 1, cursor: "grab" }} />
                 <IndexCard style={{ paddingLeft: 30 }}>
                   <div className="flex justify-between items-start">
                     <div className="flex-1" onClick={() => handleCardTap(c.id)} style={{ cursor: "pointer" }}>
