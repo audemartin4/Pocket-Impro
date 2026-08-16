@@ -1443,7 +1443,7 @@ const TABS = [
 ];
 // Onglets qui relèvent de la Bibliothèque (hub + toutes ses sous-pages) — sert à n'afficher
 // le bouton "Remonter en haut" que sur ces pages-là.
-const LIBRARY_TABS = ["bibliotheque", "exercices", "exercices-crees", "categories", "categories-crees", "spectacles", "plans", "favoris", "moderation", "messages", "mes-messages", "comptes"];
+const LIBRARY_TABS = ["bibliotheque", "exercices", "exercices-crees", "categories", "categories-crees", "spectacles", "plans", "favoris", "moderation", "messages", "mes-messages", "messages-envoyes", "comptes"];
 
 /* Bouton "← Bibliothèque" (ou autre cible), en haut à gauche des sous-pages de la Bibliothèque —
    même style visuel que les BackBtn internes utilisés pour la navigation par famille/tag. */
@@ -1629,6 +1629,7 @@ export default function ImproApp() {
         {tab === "messages" && <MessagesTab data={data} update={update} setTab={setTab} isAdmin={isAdmin} />}
         {tab === "comptes" && <ComptesTab data={data} update={update} isAdmin={isAdmin} setTab={setTab} />}
         {tab === "mes-messages" && <MesMessagesTab data={data} update={update} setTab={setTab} currentUser={currentUser} />}
+        {tab === "messages-envoyes" && <MessagesEnvoyesTab data={data} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} />}
         {tab === "favoris" && <FavorisTab data={publicData} update={update} isAdmin={isAdmin} currentUser={currentUser} setTab={setTab} />}
         {tab === "profil" && <ProfilTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} realIsAdmin={auth.isAdmin} simulateMember={simulateMember} setSimulateMember={setSimulateMember} />}
       </div>
@@ -2430,6 +2431,22 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
       )}
 
       {isAdmin && (
+        <button onClick={() => setTab("messages-envoyes")} className="w-full text-left mt-2">
+          <IndexCard style={{ cursor: "pointer" }}>
+            <div className="flex items-center gap-3">
+              <Mail size={18} color={COLORS.textSoft} />
+              <div>
+                <div style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">Messages envoyés</div>
+                <div style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }} className="text-xs">
+                  Réponses données et messages envoyés directement aux comptes.
+                </div>
+              </div>
+            </div>
+          </IndexCard>
+        </button>
+      )}
+
+      {isAdmin && (
         <button onClick={() => setTab("comptes")} className="w-full text-left mt-2">
           <IndexCard style={{ cursor: "pointer" }}>
             <div className="flex items-center gap-3">
@@ -2482,6 +2499,22 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
               >
                 {nbUnreadReplies}
               </span>
+            </div>
+          </IndexCard>
+        </button>
+      )}
+
+      {!isAdmin && currentUser && (
+        <button onClick={() => setTab("messages-envoyes")} className="w-full text-left mt-2">
+          <IndexCard style={{ cursor: "pointer" }}>
+            <div className="flex items-center gap-3">
+              <Mail size={18} color={COLORS.textSoft} />
+              <div>
+                <div style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">Messages envoyés</div>
+                <div style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }} className="text-xs">
+                  Tes messages envoyés à l'Admin.
+                </div>
+              </div>
             </div>
           </IndexCard>
         </button>
@@ -6535,6 +6568,73 @@ function MesMessagesTab({ data, update, setTab, currentUser }) {
           </IndexCard>
         )
       )}
+    </div>
+  );
+}
+
+/* ---------- Messages envoyés (Admin : réponses données + messages directs ; utilisateur : messages
+   envoyés à l'Admin) ---------- */
+function MessagesEnvoyesTab({ data, setTab, currentUser, isAdmin }) {
+  const formatDate = (ts) => new Date(ts).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+  if (isAdmin) {
+    const replied = (data.messages || [])
+      .filter((m) => m.reply)
+      .map((m) => ({ id: m.id + "-reply", to: m.from, troupe: m.troupe, text: m.reply, createdAt: m.repliedAt, context: m.text }));
+    const direct = (data.messages || [])
+      .filter((m) => m.type === "notif")
+      .map((m) => ({ id: m.id, to: m.to, troupe: m.troupe, text: m.text, createdAt: m.createdAt }));
+    const sent = [...replied, ...direct].sort((a, b) => b.createdAt - a.createdAt);
+
+    return (
+      <div>
+        {setTab && <LibraryBackBtn label="Mon profil" onClick={() => setTab("profil")} />}
+        <SectionHeader
+          icon={Mail}
+          title="Messages envoyés"
+          subtitle="Réponses données et messages envoyés directement aux comptes."
+        />
+        {sent.length === 0 && <Empty text="Aucun message envoyé pour le moment." />}
+        {sent.map((m) => (
+          <IndexCard key={m.id}>
+            <div className="flex justify-between items-start">
+              <span style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">À {m.to}</span>
+              {m.troupe && <span style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }} className="text-xs">Troupe {m.troupe}</span>}
+            </div>
+            {m.context && (
+              <p className="text-xs mt-1 pl-3" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft, borderLeft: `2px solid ${COLORS.cardEdge}` }}>
+                En réponse à : « {m.context} »
+              </p>
+            )}
+            <p style={{ fontFamily: FONT_BODY, color: COLORS.text }} className="text-sm my-1 whitespace-pre-wrap">{m.text}</p>
+            <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{formatDate(m.createdAt)}</span>
+          </IndexCard>
+        ))}
+      </div>
+    );
+  }
+
+  const sent = [...(data.messages || [])].filter((m) => m.from === currentUser).sort((a, b) => b.createdAt - a.createdAt);
+
+  return (
+    <div>
+      {setTab && <LibraryBackBtn label="Mon profil" onClick={() => setTab("profil")} />}
+      <SectionHeader icon={Mail} title="Messages envoyés" subtitle="Tes messages envoyés à l'Admin." />
+      {sent.length === 0 && <Empty text="Tu n'as envoyé aucun message pour le moment." />}
+      {sent.map((m) => (
+        <IndexCard key={m.id}>
+          <p style={{ fontFamily: FONT_BODY, color: COLORS.text }} className="text-sm whitespace-pre-wrap">{m.text}</p>
+          <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{formatDate(m.createdAt)}</span>
+          {m.reply ? (
+            <div className="mt-2 pl-3" style={{ borderLeft: `2px solid ${COLORS.brass}` }}>
+              <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs uppercase">Réponse de l'Admin</span>
+              <p style={{ fontFamily: FONT_BODY, color: COLORS.text }} className="text-sm whitespace-pre-wrap">{m.reply}</p>
+            </div>
+          ) : (
+            <p className="text-xs mt-2" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>En attente de réponse…</p>
+          )}
+        </IndexCard>
+      ))}
     </div>
   );
 }
