@@ -1514,7 +1514,7 @@ const TABS = [
 ];
 // Onglets qui relèvent de la Bibliothèque (hub + toutes ses sous-pages) — sert à n'afficher
 // le bouton "Remonter en haut" que sur ces pages-là.
-const LIBRARY_TABS = ["bibliotheque", "exercices", "exercices-crees", "categories", "categories-crees", "spectacles", "plans", "favoris", "moderation", "messages", "mes-messages", "messages-envoyes", "comptes"];
+const LIBRARY_TABS = ["bibliotheque", "exercices", "exercices-crees", "categories", "categories-crees", "spectacles", "plans", "favoris", "moderation", "messages", "mes-messages", "messages-envoyes", "comptes", "valides"];
 
 /* Bouton "← Bibliothèque" (ou autre cible), en haut à gauche des sous-pages de la Bibliothèque —
    même style visuel que les BackBtn internes utilisés pour la navigation par famille/tag. */
@@ -1741,6 +1741,7 @@ export default function ImproApp() {
         {tab === "moderation" && <ModerationTab data={data} update={update} setTab={setTab} isAdmin={isAdmin} />}
         {tab === "messages" && <MessagesTab data={data} update={update} setTab={setTab} isAdmin={isAdmin} />}
         {tab === "comptes" && <ComptesTab data={data} update={update} isAdmin={isAdmin} setTab={setTab} />}
+        {tab === "valides" && <ValidesTab data={data} isAdmin={isAdmin} setTab={setTab} />}
         {tab === "mes-messages" && <MesMessagesTab data={data} update={update} setTab={setTab} currentUser={currentUser} />}
         {tab === "messages-envoyes" && <MessagesEnvoyesTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} />}
         {tab === "favoris" && <FavorisTab data={publicData} update={update} isAdmin={isAdmin} currentUser={currentUser} setTab={setTab} />}
@@ -2630,6 +2631,32 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
                   Pseudo, troupe et nombre d'exercices créés par chaque compte inscrit.
                 </div>
               </div>
+            </div>
+          </IndexCard>
+        </button>
+      )}
+
+      {isAdmin && (
+        <button onClick={() => setTab("valides")} className="w-full text-left mt-2">
+          <IndexCard style={{ cursor: "pointer" }}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Check size={18} color={COLORS.textSoft} />
+                <div>
+                  <div style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">Validés</div>
+                  <div style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }} className="text-xs">
+                    Tous les exercices, catégories et concepts de spectacle validés par la modération.
+                  </div>
+                </div>
+              </div>
+              <span
+                className="text-sm px-2 py-0.5 rounded-full"
+                style={{ fontFamily: FONT_MONO, background: COLORS.cardEdge + "55", color: COLORS.textSoft }}
+              >
+                {data.exercises.filter((e) => !e.pending && !e.rejected).length
+                  + data.categories.filter((c) => !c.pending && !c.rejected).length
+                  + data.showConcepts.filter((sc) => !sc.pending && !sc.rejected).length}
+              </span>
             </div>
           </IndexCard>
         </button>
@@ -6770,6 +6797,75 @@ function ComptesTab({ data, update, isAdmin, setTab }) {
           </IndexCard>
         );
       })}
+    </div>
+  );
+}
+
+/* ---------- Validés (vue Admin : tous les exercices/catégories/concepts de spectacle actuellement
+   publics dans la bibliothèque, avec recherche) ---------- */
+function ValidesTab({ data, isAdmin, setTab }) {
+  const [query, setQuery] = useState("");
+
+  if (!isAdmin) {
+    return (
+      <div>
+        {setTab && <LibraryBackBtn label="Mon profil" onClick={() => setTab("profil")} />}
+        <Empty text="Réservé à l'Admin." />
+      </div>
+    );
+  }
+
+  const validExercises = data.exercises.filter((e) => !e.pending && !e.rejected);
+  const validCategories = data.categories.filter((c) => !c.pending && !c.rejected);
+  const validConcepts = data.showConcepts.filter((sc) => !sc.pending && !sc.rejected);
+
+  const q = query.trim();
+  const shownExercises = q ? validExercises.filter((e) => matchesKeywords(q, e.title)) : validExercises;
+  const shownCategories = q ? validCategories.filter((c) => matchesKeywords(q, c.name)) : validCategories;
+  const shownConcepts = q ? validConcepts.filter((sc) => matchesKeywords(q, sc.theme)) : validConcepts;
+
+  const Row = ({ label, sub }) => (
+    <div className="flex justify-between items-center text-sm py-1.5 border-b" style={{ borderColor: COLORS.cardEdge, fontFamily: FONT_BODY, color: COLORS.text }}>
+      <span>{label}</span>
+      {sub && <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{sub}</span>}
+    </div>
+  );
+
+  return (
+    <div>
+      {setTab && <LibraryBackBtn label="Mon profil" onClick={() => setTab("profil")} />}
+      <SectionHeader
+        icon={Check}
+        title="Validés"
+        subtitle="Tous les exercices, catégories et concepts de spectacle actuellement publics dans la bibliothèque."
+      />
+      <Field label="Chercher parmi les fiches validées">
+        <input className={inputClass} style={inputStyle} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Nom de la fiche…" />
+      </Field>
+
+      <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs uppercase block mt-4 mb-1">
+        Exercices ({shownExercises.length}{q ? ` / ${validExercises.length}` : ""})
+      </span>
+      <IndexCard>
+        {shownExercises.length === 0 && <Empty text="Aucun exercice ne correspond." />}
+        {shownExercises.map((e) => <Row key={e.id} label={e.title} sub={`${e.duration} min`} />)}
+      </IndexCard>
+
+      <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs uppercase block mt-4 mb-1">
+        Catégories ({shownCategories.length}{q ? ` / ${validCategories.length}` : ""})
+      </span>
+      <IndexCard>
+        {shownCategories.length === 0 && <Empty text="Aucune catégorie ne correspond." />}
+        {shownCategories.map((c) => <Row key={c.id} label={c.name} sub={`${c.durationLabel || `${c.duration || 5} min`}`} />)}
+      </IndexCard>
+
+      <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs uppercase block mt-4 mb-1">
+        Concepts de spectacle ({shownConcepts.length}{q ? ` / ${validConcepts.length}` : ""})
+      </span>
+      <IndexCard>
+        {shownConcepts.length === 0 && <Empty text="Aucun concept de spectacle ne correspond." />}
+        {shownConcepts.map((sc) => <Row key={sc.id} label={sc.theme} sub={sc.type} />)}
+      </IndexCard>
     </div>
   );
 }
