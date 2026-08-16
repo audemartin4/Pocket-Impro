@@ -2114,6 +2114,28 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
   const [signupError, setSignupError] = useState("");
   const [signupBusy, setSignupBusy] = useState(false);
 
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const deleteAccount = async () => {
+    setDeleteBusy(true);
+    setDeleteError("");
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setDeleteBusy(false); return; }
+    // On ne supprime que la fiche compte (pseudo/troupe/ville) : les exercices/catégories déjà
+    // validés gardent creatorUsername en texte simple (pas de lien vivant vers le compte), donc ils
+    // restent visibles dans la bibliothèque comme annoncé à l'utilisateur.
+    const { error } = await supabase.from("profiles").delete().eq("id", user.id);
+    if (error) {
+      setDeleteError("Impossible de supprimer le compte pour le moment. Réessaie plus tard.");
+      setDeleteBusy(false);
+      return;
+    }
+    await signOut();
+    setDeleteBusy(false);
+    setDeleteConfirmOpen(false);
+  };
+
   const nbFavoris = data.exercises.filter((e) => e.favorite).length + data.categories.filter((c) => c.favorite).length;
 
   const stats = [
@@ -2373,6 +2395,26 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
           </>
         )}
       </IndexCard>
+
+      {!realIsAdmin && currentUser && !deleteConfirmOpen && (
+        <div className="mt-2">
+          <Btn small variant="accent" onClick={() => { setDeleteConfirmOpen(true); setDeleteError(""); }}>
+            Supprimer mon compte
+          </Btn>
+        </div>
+      )}
+      {!realIsAdmin && currentUser && deleteConfirmOpen && (
+        <IndexCard style={{ borderColor: COLORS.accent, background: COLORS.accent + "11", marginTop: 8 }}>
+          <p className="text-sm mb-3" style={{ fontFamily: FONT_BODY, color: COLORS.ink }}>
+            Êtes-vous sûr de vouloir supprimer votre compte ? Votre compte n'existera plus mais vos contributions validées resteront dans la communauté.
+          </p>
+          {deleteError && <p className="text-xs mb-2" style={{ color: COLORS.accent, fontFamily: FONT_BODY }}>{deleteError}</p>}
+          <div className="flex gap-2">
+            <Btn small variant="accent" onClick={deleteAccount} disabled={deleteBusy}>Oui</Btn>
+            <Btn small variant="ghost" onClick={() => setDeleteConfirmOpen(false)} disabled={deleteBusy}>Non</Btn>
+          </div>
+        </IndexCard>
+      )}
 
       {isAdmin && (
         <button onClick={() => setTab("moderation")} className="w-full text-left mt-4">
