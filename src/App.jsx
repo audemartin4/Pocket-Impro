@@ -904,6 +904,53 @@ function mergeMissingCategories(data) {
     materialMusiqueV1 = true;
   }
 
+  // Fusionne une seule fois les tags identiques à la casse/accents près (ex. "Écoute"/"écoute"/
+  // "ecoute") en une seule forme canonique : priorité à la forme déjà présente dans la liste globale
+  // des tags, sinon à la variante accentuée (capitalisée). Ne se réexécute plus ensuite, pour ne pas
+  // revenir sur un renommage manuel ultérieur.
+  let tagCaseAccentMergeV1 = data._tagCaseAccentMergeV1;
+  if (!tagCaseAccentMergeV1) {
+    const hasAccent = (s) => /[àâäéèêëïîôöùûüÿçÀÂÄÉÈÊËÏÎÔÖÙÛÜŸÇ]/.test(s || "");
+    const allTags = new Set();
+    (objectifs || []).forEach((t) => allTags.add(t));
+    (exercises || []).forEach((e) => (e.objectives || []).forEach((t) => allTags.add(t)));
+    (categories || []).forEach((c) => (c.objectives || []).forEach((t) => allTags.add(t)));
+
+    const groups = {};
+    allTags.forEach((t) => { const n = normalize(t); (groups[n] = groups[n] || []).push(t); });
+
+    const objectifsSet = new Set(objectifs || []);
+    const canonicalOf = {};
+    Object.values(groups).forEach((variants) => {
+      if (variants.length < 2) { canonicalOf[variants[0]] = variants[0]; return; }
+      const inMaster = variants.find((v) => objectifsSet.has(v));
+      const chosen = inMaster || (() => {
+        const accented = variants.find((v) => hasAccent(v)) || variants[0];
+        return accented.charAt(0).toUpperCase() + accented.slice(1);
+      })();
+      variants.forEach((v) => { canonicalOf[v] = chosen; });
+    });
+
+    if (objectifs) objectifs = [...new Set(objectifs.map((t) => canonicalOf[t] || t))];
+    if (exercises) {
+      exercises = exercises.map((e) => {
+        if (!e.objectives || e.objectives.length === 0) return e;
+        const mapped = [...new Set(e.objectives.map((t) => canonicalOf[t] || t))];
+        if (mapped.length === e.objectives.length && mapped.every((t, i) => t === e.objectives[i])) return e;
+        return { ...e, objectives: mapped };
+      });
+    }
+    if (categories) {
+      categories = categories.map((c) => {
+        if (!c.objectives || c.objectives.length === 0) return c;
+        const mapped = [...new Set(c.objectives.map((t) => canonicalOf[t] || t))];
+        if (mapped.length === c.objectives.length && mapped.every((t, i) => t === c.objectives[i])) return c;
+        return { ...c, objectives: mapped };
+      });
+    }
+    tagCaseAccentMergeV1 = true;
+  }
+
   // Le niveau "Expert" est retiré de l'appli : on convertit les fiches déjà enregistrées vers "Avancé".
   if (exercises?.some((e) => e.level === "Expert")) {
     exercises = exercises.map((e) => (e.level === "Expert" ? { ...e, level: "Avancé" } : e));
@@ -921,9 +968,10 @@ function mergeMissingCategories(data) {
     thematiques === data.thematiques &&
     cercleTagV1 === data._cercleTagV1 &&
     musiqueTagV1 === data._musiqueTagV1 &&
-    materialMusiqueV1 === data._materialMusiqueV1
+    materialMusiqueV1 === data._materialMusiqueV1 &&
+    tagCaseAccentMergeV1 === data._tagCaseAccentMergeV1
   ) return data;
-  return { ...data, categories, showTypes, showConcepts, exercises, objectifs, thematiques, _cercleTagV1: cercleTagV1, _musiqueTagV1: musiqueTagV1, _materialMusiqueV1: materialMusiqueV1 };
+  return { ...data, categories, showTypes, showConcepts, exercises, objectifs, thematiques, _cercleTagV1: cercleTagV1, _musiqueTagV1: musiqueTagV1, _materialMusiqueV1: materialMusiqueV1, _tagCaseAccentMergeV1: tagCaseAccentMergeV1 };
 }
 
 /* ---------- Persistence ---------- */
