@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from "react";
 import {
   Sparkles, Shuffle, Clock, BookOpen, Users, Flame, ClipboardList,
   Plus, Trash2, Tag, ChevronRight, ChevronUp, ChevronDown, ChevronLeft, Download,
@@ -1514,7 +1514,7 @@ const TABS = [
 ];
 // Onglets qui relèvent de la Bibliothèque (hub + toutes ses sous-pages) — sert à n'afficher
 // le bouton "Remonter en haut" que sur ces pages-là.
-const LIBRARY_TABS = ["bibliotheque", "exercices", "exercices-crees", "categories", "categories-crees", "spectacles", "plans", "favoris", "moderation", "messages", "mes-messages", "messages-envoyes", "comptes", "valides"];
+const LIBRARY_TABS = ["bibliotheque", "exercices", "exercices-crees", "categories", "categories-crees", "spectacles", "spectacles-crees", "plans", "favoris", "moderation", "messages", "mes-messages", "messages-envoyes", "comptes", "valides", "parametres"];
 
 /* Bouton "← Bibliothèque" (ou autre cible), en haut à gauche des sous-pages de la Bibliothèque —
    même style visuel que les BackBtn internes utilisés pour la navigation par famille/tag. */
@@ -1736,6 +1736,7 @@ export default function ImproApp() {
         {tab === "categories" && <CategoriesTab data={data} update={update} isAdmin={isAdmin} currentUser={currentUser} profile={auth.profile} initialSearchQuery={librarySearchSeed} setTab={setTab} />}
         {tab === "categories-crees" && <CategoriesTab data={data} update={update} isAdmin={isAdmin} currentUser={currentUser} profile={auth.profile} onlyUserCreated setTab={setTab} />}
         {tab === "spectacles" && <SpectaclesTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} />}
+        {tab === "spectacles-crees" && <SpectaclesTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} onlyUserCreated />}
         {tab === "entrainement" && <EntrainementTab data={publicData} />}
         {tab === "plans" && <PlansTab data={publicData} update={update} setTab={setTab} />}
         {tab === "moderation" && <ModerationTab data={data} update={update} setTab={setTab} isAdmin={isAdmin} />}
@@ -1746,6 +1747,7 @@ export default function ImproApp() {
         {tab === "messages-envoyes" && <MessagesEnvoyesTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} />}
         {tab === "favoris" && <FavorisTab data={publicData} update={update} isAdmin={isAdmin} currentUser={currentUser} setTab={setTab} />}
         {tab === "profil" && <ProfilTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} realIsAdmin={auth.isAdmin} simulateMember={simulateMember} setSimulateMember={setSimulateMember} />}
+        {tab === "parametres" && <ParametresTab setTab={setTab} currentUser={currentUser} profile={auth.profile} />}
       </div>
       <SocialFooter />
       {LIBRARY_TABS.includes(tab) && <BackToTopButton />}
@@ -2275,6 +2277,7 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
     { label: "Spectacles enregistrés", n: data.spectaclePlans.length, icon: Theater, tab: "plans" },
     { label: "Catégories créées", n: data.categories.filter((c) => c.creatorUsername === currentUser).length, icon: Tag, tab: "categories-crees" },
     { label: "Exercices créés", n: data.exercises.filter((e) => e.creatorUsername === currentUser).length, icon: Users, tab: "exercices-crees" },
+    { label: "Concepts de spectacle créés", n: data.showConcepts.filter((sc) => sc.creatorUsername === currentUser).length, icon: Theater, tab: "spectacles-crees" },
     { label: "Favoris", n: nbFavoris, icon: Star, tab: "favoris" },
   ];
 
@@ -2528,24 +2531,20 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
         )}
       </IndexCard>
 
-      {!realIsAdmin && currentUser && !deleteConfirmOpen && (
-        <div className="mt-2">
-          <Btn small variant="accent" onClick={() => { setDeleteConfirmOpen(true); setDeleteError(""); }}>
-            Supprimer mon compte
-          </Btn>
-        </div>
-      )}
-      {!realIsAdmin && currentUser && deleteConfirmOpen && (
-        <IndexCard style={{ borderColor: COLORS.accent, background: COLORS.accent + "11", marginTop: 8 }}>
-          <p className="text-sm mb-3" style={{ fontFamily: FONT_BODY, color: COLORS.ink }}>
-            Êtes-vous sûr de vouloir supprimer votre compte ? Votre compte n'existera plus mais vos contributions validées resteront dans la communauté.
-          </p>
-          {deleteError && <p className="text-xs mb-2" style={{ color: COLORS.accent, fontFamily: FONT_BODY }}>{deleteError}</p>}
-          <div className="flex gap-2">
-            <Btn small variant="accent" onClick={deleteAccount} disabled={deleteBusy}>Oui</Btn>
-            <Btn small variant="ghost" onClick={() => setDeleteConfirmOpen(false)} disabled={deleteBusy}>Non</Btn>
-          </div>
-        </IndexCard>
+      {!isAdmin && currentUser && (
+        <button onClick={() => setTab("parametres")} className="w-full text-left mt-2">
+          <IndexCard style={{ cursor: "pointer" }}>
+            <div className="flex items-center gap-3">
+              <Pencil size={18} color={COLORS.textSoft} />
+              <div>
+                <div style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">Paramètres</div>
+                <div style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }} className="text-xs">
+                  Identifiant et troupe(s).
+                </div>
+              </div>
+            </div>
+          </IndexCard>
+        </button>
       )}
 
       {isAdmin && (
@@ -2645,7 +2644,7 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
                 <div>
                   <div style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">Validés</div>
                   <div style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }} className="text-xs">
-                    Tous les exercices, catégories et concepts de spectacle validés par la modération.
+                    Exercices, catégories et concepts de spectacle proposés par les troupes et validés par la modération.
                   </div>
                 </div>
               </div>
@@ -2653,8 +2652,8 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
                 className="text-sm px-2 py-0.5 rounded-full"
                 style={{ fontFamily: FONT_MONO, background: COLORS.cardEdge + "55", color: COLORS.textSoft }}
               >
-                {data.exercises.filter((e) => !e.pending && !e.rejected).length
-                  + data.categories.filter((c) => !c.pending && !c.rejected).length
+                {data.exercises.filter((e) => !e.pending && !e.rejected && e.creatorUsername).length
+                  + data.categories.filter((c) => !c.pending && !c.rejected && c.creatorUsername).length
                   + data.showConcepts.filter((sc) => !sc.pending && !sc.rejected).length}
               </span>
             </div>
@@ -2754,6 +2753,112 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
           )}
         </IndexCard>
       )}
+
+      {!realIsAdmin && currentUser && !deleteConfirmOpen && (
+        <div className="flex justify-end mt-6">
+          <Btn small variant="accent" onClick={() => { setDeleteConfirmOpen(true); setDeleteError(""); }}>
+            Supprimer mon compte
+          </Btn>
+        </div>
+      )}
+      {!realIsAdmin && currentUser && deleteConfirmOpen && (
+        <IndexCard style={{ borderColor: COLORS.accent, background: COLORS.accent + "11", marginTop: 24 }}>
+          <p className="text-sm mb-3" style={{ fontFamily: FONT_BODY, color: COLORS.ink }}>
+            Êtes-vous sûr de vouloir supprimer votre compte ? Votre compte n'existera plus mais vos contributions validées resteront dans la communauté.
+          </p>
+          {deleteError && <p className="text-xs mb-2" style={{ color: COLORS.accent, fontFamily: FONT_BODY }}>{deleteError}</p>}
+          <div className="flex gap-2 justify-end">
+            <Btn small variant="ghost" onClick={() => setDeleteConfirmOpen(false)} disabled={deleteBusy}>Non</Btn>
+            <Btn small variant="accent" onClick={deleteAccount} disabled={deleteBusy}>Oui</Btn>
+          </div>
+        </IndexCard>
+      )}
+    </div>
+  );
+}
+
+/* ---------- Paramètres (utilisateur non-admin : identifiant + troupe(s), un même comédien pouvant
+   appartenir à plusieurs troupes) ---------- */
+function ParametresTab({ setTab, currentUser, profile }) {
+  const [username, setUsername] = useState(currentUser || "");
+  const [troupes, setTroupes] = useState(() => (profile?.troupe || "").split(",").map((t) => t.trim()).filter(Boolean));
+  const [troupeInput, setTroupeInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  const addTroupe = () => {
+    const v = troupeInput.trim();
+    if (!v || troupes.includes(v)) { setTroupeInput(""); return; }
+    setTroupes([...troupes, v]);
+    setTroupeInput("");
+    setSaved(false);
+  };
+  const removeTroupe = (t) => { setTroupes(troupes.filter((x) => x !== t)); setSaved(false); };
+
+  const save = async () => {
+    const uname = username.trim();
+    if (!uname) { setError("L'identifiant ne peut pas être vide."); return; }
+    setBusy(true);
+    setError("");
+    setSaved(false);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setBusy(false); return; }
+    const { error: err } = await supabase
+      .from("profiles")
+      .update({ username: uname, troupe: troupes.join(", ") })
+      .eq("id", user.id);
+    setBusy(false);
+    if (err) {
+      setError(
+        err.message?.includes("duplicate") || err.message?.includes("username")
+          ? "Cet identifiant est déjà utilisé."
+          : "Impossible d'enregistrer pour le moment. Réessaie plus tard."
+      );
+      return;
+    }
+    setSaved(true);
+  };
+
+  if (!currentUser) {
+    return (
+      <div>
+        {setTab && <LibraryBackBtn label="Mon profil" onClick={() => setTab("profil")} />}
+        <Empty text="Connecte-toi pour accéder aux paramètres." />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {setTab && <LibraryBackBtn label="Mon profil" onClick={() => setTab("profil")} />}
+      <SectionHeader icon={Pencil} title="Paramètres" subtitle="Identifiant et troupe(s)." />
+      <IndexCard>
+        <Field label="Identifiant">
+          <input className={inputClass} style={inputStyle} value={username} onChange={(e) => { setUsername(e.target.value); setSaved(false); }} />
+        </Field>
+        <Field label="Troupe(s) — un même comédien peut appartenir à plusieurs troupes">
+          {troupes.length > 0 && (
+            <div className="flex flex-wrap mb-1">
+              {troupes.map((t) => <TagPill key={t} label={t} color={COLORS.brass} onRemove={() => removeTroupe(t)} />)}
+            </div>
+          )}
+          <div className="flex gap-1">
+            <input
+              className={inputClass}
+              style={inputStyle}
+              value={troupeInput}
+              onChange={(e) => setTroupeInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTroupe(); } }}
+              placeholder="Ajouter une troupe…"
+            />
+            <Btn small onClick={addTroupe}><Plus size={12} /></Btn>
+          </div>
+        </Field>
+        {error && <p className="text-xs mb-2" style={{ color: COLORS.accent, fontFamily: FONT_BODY }}>{error}</p>}
+        {saved && <p className="text-xs mb-2" style={{ color: COLORS.brass, fontFamily: FONT_BODY }}>Enregistré ✓</p>}
+        <Btn variant="accent" onClick={save} disabled={busy}><Check size={14} /> Enregistrer</Btn>
+      </IndexCard>
     </div>
   );
 }
@@ -3105,13 +3210,14 @@ function ExercicesTab({ data, update, isAdmin, currentUser, profile, onlyUserCre
   });
   const echGroupOrder = [...echGroupOrderRaw].sort((a, b) => a.localeCompare(b, "fr"));
 
-  const improGroupOrder = [];
+  const improGroupOrderRaw = [];
   const groupedImproByGroupe = {};
   impro.forEach((e) => {
     const g = e.groupe || "Sans classement";
-    if (!groupedImproByGroupe[g]) { groupedImproByGroupe[g] = []; improGroupOrder.push(g); }
+    if (!groupedImproByGroupe[g]) { groupedImproByGroupe[g] = []; improGroupOrderRaw.push(g); }
     groupedImproByGroupe[g].push(e);
   });
+  const improGroupOrder = [...improGroupOrderRaw].sort((a, b) => a.localeCompare(b, "fr"));
 
   const BackBtn = ({ onClick, label }) => (
     <button onClick={onClick} className="flex items-center gap-1 mb-3 text-sm" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
@@ -3681,6 +3787,25 @@ function Toast({ toast }) {
 }
 // Petit hook pour afficher un Toast pendant ~2,5s (~4,5s pour un type "notice", plus long à lire)
 // après une action réussie ou un point d'attention (repli de tirage épuisé, etc.).
+// Fige la position de scroll au moment de l'appel à `save()` et la réimpose juste après le prochain
+// rendu (puis encore une fois au frame suivant et 300ms plus tard, pour couvrir la fermeture animée
+// du clavier virtuel mobile). Sert à éviter le saut vers le bas de page quand la fermeture d'un
+// picker (recherche d'exercice/catégorie) réduit soudainement la hauteur du document : sans ça, le
+// navigateur clampe le scroll à la nouvelle hauteur, ce qui envoie l'utilisateur tout en bas.
+function usePreserveScroll() {
+  const scrollYRef = useRef(null);
+  useLayoutEffect(() => {
+    if (scrollYRef.current === null) return;
+    const y = scrollYRef.current;
+    scrollYRef.current = null;
+    window.scrollTo(0, y);
+    requestAnimationFrame(() => window.scrollTo(0, y));
+    const t = setTimeout(() => window.scrollTo(0, y), 300);
+    return () => clearTimeout(t);
+  });
+  return () => { scrollYRef.current = window.scrollY; };
+}
+
 function useToast() {
   const [toast, setToast] = useState(null);
   const show = (message, opts = {}) => {
@@ -4210,7 +4335,7 @@ function CategoriesTab({ data, update, isAdmin, currentUser, onlyUserCreated, in
 }
 
 /* ---------- Concepts de spectacle ---------- */
-function SpectaclesTab({ data, update, setTab, currentUser, isAdmin }) {
+function SpectaclesTab({ data, update, setTab, currentUser, isAdmin, onlyUserCreated }) {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState({ theme: "", description: "", type: "", categoryIds: [] });
   const [catSearch, setCatSearch] = useState("");
@@ -4225,9 +4350,10 @@ function SpectaclesTab({ data, update, setTab, currentUser, isAdmin }) {
 
   // Concepts visibles : validés pour tout le monde, + ceux du créateur courant (même en attente ou
   // refusés, pour qu'il puisse toujours les retrouver), + tout pour l'Admin (contexte de modération).
-  const visibleConcepts = data.showConcepts.filter((sc) =>
-    (!sc.pending && !sc.rejected) || sc.creatorUsername === currentUser || isAdmin
-  );
+  // "Mes concepts créés" (onlyUserCreated) : uniquement les siens, quel que soit leur statut.
+  const visibleConcepts = onlyUserCreated
+    ? data.showConcepts.filter((sc) => sc.creatorUsername === currentUser)
+    : data.showConcepts.filter((sc) => (!sc.pending && !sc.rejected) || sc.creatorUsername === currentUser || isAdmin);
 
   const resetDraft = () => { setDraft({ theme: "", description: "", type: "", categoryIds: [] }); setCatSearch(""); };
   const saveConcept = () => {
@@ -4247,11 +4373,11 @@ function SpectaclesTab({ data, update, setTab, currentUser, isAdmin }) {
 
   return (
     <div>
-      {setTab && <LibraryBackBtn onClick={() => setTab("bibliotheque")} />}
+      {setTab && <LibraryBackBtn label={onlyUserCreated ? "Mon profil" : "Bibliothèque"} onClick={() => setTab(onlyUserCreated ? "profil" : "bibliotheque")} />}
       <SectionHeader
         icon={Theater}
-        title="Concepts de spectacle"
-        subtitle="Tu as un concept de spectacle à partager à la communauté ? Crée le ici !"
+        title={onlyUserCreated ? "Concepts de spectacle créés" : "Concepts de spectacle"}
+        subtitle={onlyUserCreated ? "Tes concepts de spectacle proposés, quel que soit leur statut de validation." : "Tu as un concept de spectacle à partager à la communauté ? Crée le ici !"}
         action={canCreate ? <Btn variant="accent" small onClick={() => setAdding(true)}><Plus size={13} /> Soumettre un concept</Btn> : null}
       />
       <IndexCard style={{ borderColor: COLORS.accent, background: COLORS.accent + "15", marginBottom: 12 }} className="flex items-center gap-2">
@@ -4372,7 +4498,7 @@ function SpectaclesTab({ data, update, setTab, currentUser, isAdmin }) {
           </IndexCard>
         );
       })}
-      {visibleConcepts.length === 0 && !adding && <Empty text="Aucun concept de spectacle pour l'instant." />}
+      {visibleConcepts.length === 0 && !adding && <Empty text={onlyUserCreated ? "Tu n'as pas encore créé de concept de spectacle." : "Aucun concept de spectacle pour l'instant."} />}
     </div>
   );
 }
@@ -4649,12 +4775,13 @@ function buildCours(exercises, categories, { niveau, tempsTotal, nbEchauffements
   let tempsExercices = floorTo5(baseTemps * restePct * (4 / 7));
   tempsExercices += floorTo5(baseTemps - (tempsEchauffement + tempsExercices + tempsImpro));
   // Nombre d'éléments par section : choisi directement par l'utilisateur (menus déroulants), imposé
-  // tel quel (min = max = ce nombre), plutôt que déduit automatiquement d'une fourchette.
-  const minEchauffements = Math.max(1, nbEchauffements);
+  // tel quel (min = max = ce nombre, 0 accepté pour omettre complètement la section), plutôt que
+  // déduit automatiquement d'une fourchette.
+  const minEchauffements = Math.max(0, nbEchauffements);
   const maxEchauffements = minEchauffements;
-  const minExercices = Math.max(1, nbExercices);
+  const minExercices = Math.max(0, nbExercices);
   const maxExercices = minExercices;
-  const minImpro = Math.max(1, nbImpro);
+  const minImpro = Math.max(0, nbImpro);
   const maxImpro = minImpro;
   // Force le nombre d'éléments retenus dans la fourchette [min, max] (en piochant d'autres
   // éléments du pool si besoin pour atteindre le minimum), puis répartit le budget de la section
@@ -4802,7 +4929,7 @@ function buildCours(exercises, categories, { niveau, tempsTotal, nbEchauffements
     step = fillFromPool(warmupAll, remainingWarmupBudget, warmupRoom());
     warmups = [...warmups, ...step.picked]; remainingWarmupBudget = step.remaining;
   }
-  if (warmups.length === 0 && tempsEchauffement > 0) {
+  if (warmups.length === 0 && tempsEchauffement > 0 && maxEchauffements > 0) {
     const single = pickRandom(warmupAll);
     if (single) { warmups = [withActual(single, tempsEchauffement)]; used.add(single.id); }
   }
@@ -4810,8 +4937,9 @@ function buildCours(exercises, categories, { niveau, tempsTotal, nbEchauffements
   // Si demandé, l'exercice "Ambassadeur" est toujours placé en dernier échauffement — peu importe
   // la famille/l'objectif choisi, cette règle passe par-dessus la sélection habituelle. S'il n'y a
   // plus de place (nombre d'échauffements déjà atteint), on retire le dernier choisi pour lui faire
-  // de la place plutôt que de dépasser le nombre demandé.
-  if (faireAmbassadeur) {
+  // de la place plutôt que de dépasser le nombre demandé. Si 0 échauffement est demandé, on
+  // n'ajoute pas non plus l'Ambassadeur : la section reste bien vide comme voulu.
+  if (faireAmbassadeur && maxEchauffements > 0) {
     const ambassadeur = exercises.find((e) => e.title === "Ambassadeur" && !used.has(e.id) && fitsGroup(e));
     if (ambassadeur) {
       if (warmups.length >= maxEchauffements && warmups.length > 0) {
@@ -4986,7 +5114,7 @@ function buildCours(exercises, categories, { niveau, tempsTotal, nbEchauffements
   // "Posture confiante" ou "Enjeux", qui n'ont encore aucune catégorie rattachée — on propose
   // "Libre" en priorité (catégorie sans contrainte, sans famille) avant de retomber sur un tirage
   // complètement aléatoire dans le reste de la bibliothèque.
-  if (objectifs.length > 0 && impro.length === 0) {
+  if (objectifs.length > 0 && impro.length === 0 && maxImpro > 0) {
     const libre = categoriesDispo.find((c) => c.name === "Libre" && !usedCat.has(c.id));
     if (libre) {
       const dur = libre.duration || 5;
@@ -5001,7 +5129,7 @@ function buildCours(exercises, categories, { niveau, tempsTotal, nbEchauffements
     catStep = fillCategories(categoriesDispo, remainingImproBudget, maxImpro - impro.length);
     impro = [...impro, ...catStep.picked]; remainingImproBudget = catStep.remaining;
   }
-  if (impro.length === 0 && tempsImpro > 0) {
+  if (impro.length === 0 && tempsImpro > 0 && maxImpro > 0) {
     const single = pickRandomByFamily(categoriesDispo);
     if (single) impro = [{ ...single, actualDuration: single.duration || 5 }];
   }
@@ -5091,7 +5219,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
     setNiveau(val);
     suggestCounts(tempsTotal, val);
   };
-  const nombresPossibles = Array.from({ length: 10 }, (_, i) => i + 1); // 1 à 10
+  const nombresPossibles = Array.from({ length: 11 }, (_, i) => i); // 0 à 10
 
   const [picker, setPicker] = useState(null); // { mode: "add" } | { mode: "replace", slot, idx }
   const [catPicker, setCatPicker] = useState(null); // { mode: "add" } | { mode: "replace", idx }
@@ -5131,8 +5259,10 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
   const usedIds = () => new Set([...(plan?.warmups || []).map((e) => e.id), ...(plan?.middle || []).map((e) => e.id)]);
   const usedCatIds = () => new Set((plan?.impro || []).map((c) => c.id));
 
+  const saveScroll = usePreserveScroll();
   const pickManually = (ex) => {
     if (!plan || !picker) return;
+    saveScroll();
     if (picker.mode === "add") {
       setPlan({ ...plan, middle: [...plan.middle, ex] });
     } else if (picker.slot === "warmup") {
@@ -5145,6 +5275,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
 
   const pickCatManually = (cat) => {
     if (!plan || !catPicker) return;
+    saveScroll();
     if (catPicker.mode === "add") setPlan({ ...plan, impro: [...plan.impro, cat] });
     else setPlan({ ...plan, impro: plan.impro.map((c, i) => (i === catPicker.idx ? cat : c)) });
     setCatPicker(null);
@@ -5671,10 +5802,15 @@ function buildSpectacle(categories, { format, niveau, duree, entracteOn, integre
   };
   const byLevel = (c) => !niveau || c.level === niveau;
   const categoriesNiveau = categories.filter(allowedLevel);
+  // La catégorie "Libre" est retirée des pools normaux : elle n'est plus piochée par hasard comme
+  // les autres, mais insérée volontairement à un rythme fixe (voir pickFor plus bas), pour toutes
+  // les durées de spectacle.
+  const libre = categories.find((c) => c.name === "Libre");
+  const categoriesSansLibre = libre ? categoriesNiveau.filter((c) => c.id !== libre.id) : categoriesNiveau;
   // Priorité aux catégories classées pour ce type de spectacle (champ showTypes, à renseigner sur
   // les fiches catégorie) ; le reste de la bibliothèque comble ensuite le temps restant.
-  const familyPool = format ? categoriesNiveau.filter((c) => c.showTypes?.includes(format)) : [];
-  const otherPool = categoriesNiveau.filter((c) => !familyPool.includes(c));
+  const familyPool = format ? categoriesSansLibre.filter((c) => c.showTypes?.includes(format)) : [];
+  const otherPool = categoriesSansLibre.filter((c) => !familyPool.includes(c));
   // Introduction et salut final réservent toujours 5 min chacun ; l'entracte, si coché, réserve
   // 15 min fixes. Le temps restant est ce qui est disponible pour les catégories jouées (et les
   // transitions entre elles).
@@ -5698,30 +5834,16 @@ function buildSpectacle(categories, { format, niveau, duree, entracteOn, integre
     : duree === 120 ? 6
     : Math.max(1, Math.round(budget2 / avgWithTransition));
 
-  const pickFor = (budget, exclude, maxCount, guaranteed) => {
+  const pickFor = (budget, exclude, maxCount) => {
     let b = budget, picked = [];
-    // Le pool exclu pour CETTE partie (localUsed) inclut la catégorie garantie, pour ne pas la
-    // repiocher deux fois dans la même partie — mais on ne l'ajoute PAS à `exclude` (partagé entre
-    // les deux parties) puisqu'elle doit pouvoir réapparaître une fois dans l'autre partie aussi.
     const localUsed = new Set(exclude);
-    // Garantit une catégorie "Libre" en tout début de partie (si trouvée et budget suffisant) —
-    // voir l'appel de pickFor plus bas pour la règle exacte (1 par partie si entracte, 1 seule au
-    // total sinon).
-    if (guaranteed && !localUsed.has(guaranteed.id) && maxCount > 0) {
-      const dur = guaranteed.duration || 5;
-      if (fitsBudget(dur, b)) {
-        picked.push({ ...guaranteed, actualDuration: Math.min(dur, b) });
-        localUsed.add(guaranteed.id);
-        b = consumeBudget(dur, b);
-      }
-    }
-    const fillFrom = (pool) => {
-      let remaining = pool.filter((c) => !localUsed.has(c.id));
-      while (b > 0 && picked.length < maxCount && remaining.length > 0) {
-        const last = picked[picked.length - 1];
-        // On évite d'enchaîner deux catégories à la suite avec la même énergie quand elle est
-        // marquée (Forte ou Faible — Modérée n'est pas jugée assez tranchée pour poser problème),
-        // et d'enchaîner deux catégories du même genre (famille) à la suite.
+    // Pioche une catégorie "normale" (hors Libre) dans le pool prioritaire (classé pour ce type de
+    // spectacle), puis dans le reste de la bibliothèque si besoin — mêmes règles de diversité
+    // qu'avant (pas deux catégories de suite avec la même énergie marquée ou le même genre).
+    const pickNormal = (transition) => {
+      const last = picked[picked.length - 1];
+      const tryPool = (pool) => {
+        const remaining = pool.filter((c) => !localUsed.has(c.id));
         const candidates = remaining.filter((c) => {
           if (last) {
             if ((last.energy === "Forte" || last.energy === "Faible") && c.energy === last.energy) return false;
@@ -5737,36 +5859,37 @@ function buildSpectacle(categories, { format, niveau, duree, entracteOn, integre
         const ordered = integrerFavoris
           ? [...prioritized].sort((a, b2) => (a.favorite ? 0 : 1) - (b2.favorite ? 0 : 1))
           : shuffleArray(prioritized);
-        // Chaque catégorie après la première consomme aussi ~2 min de transition (présentation
-        // de la catégorie suivante), en plus de sa propre durée.
-        const transition = picked.length > 0 ? SPECTACLE_TRANSITION_MIN : 0;
-        let chosen = null;
         for (const c of ordered) {
           const dur = c.duration || 5;
-          if (fitsBudget(dur + transition, b)) { chosen = c; break; }
+          if (fitsBudget(dur + transition, b)) return c;
         }
-        if (!chosen) break;
-        const dur = chosen.duration || 5;
-        picked.push({ ...chosen, actualDuration: Math.min(dur, Math.max(0, b - transition)) });
-        exclude.add(chosen.id);
-        localUsed.add(chosen.id);
-        b = consumeBudget(dur + transition, b);
-        remaining = remaining.filter((x) => x.id !== chosen.id);
-      }
+        return null;
+      };
+      return tryPool(familyPool) || tryPool(otherPool);
     };
-    // On épuise d'abord les catégories classées pour ce type de spectacle, puis on comble le
-    // temps restant avec le reste de la bibliothèque.
-    fillFrom(familyPool);
-    if (b > 0 && picked.length < maxCount) fillFrom(otherPool);
+    while (b > 0 && picked.length < maxCount) {
+      // Chaque catégorie après la première consomme aussi ~2 min de transition (présentation de
+      // la catégorie suivante), en plus de sa propre durée.
+      const transition = picked.length > 0 ? SPECTACLE_TRANSITION_MIN : 0;
+      // Une catégorie générée sur 3 (positions 3, 6, 9…) est la catégorie "Libre" — pour toutes
+      // les durées de spectacle. Si elle ne rentre pas dans le budget restant à ce moment-là, on
+      // retombe simplement sur une catégorie normale plutôt que de casser le rythme.
+      const wantsLibre = libre && (picked.length + 1) % 3 === 0 && fitsBudget((libre.duration || 5) + transition, b);
+      const chosen = wantsLibre ? libre : pickNormal(transition);
+      if (!chosen) break;
+      const dur = chosen.duration || 5;
+      picked.push({ ...chosen, actualDuration: Math.min(dur, Math.max(0, b - transition)) });
+      // "Libre" reste volontairement hors de `exclude`/`localUsed` : elle peut revenir à chaque
+      // 3e position, y compris plusieurs fois dans la même partie ou dans l'autre partie.
+      if (chosen !== libre) { exclude.add(chosen.id); localUsed.add(chosen.id); }
+      b = consumeBudget(dur + transition, b);
+    }
     return picked;
   };
 
   const exclude = new Set();
-  // Une catégorie "Libre" est proposée automatiquement dans chaque partie du spectacle : les deux
-  // parties si l'entracte est coché, une seule fois sinon (il n'y a alors qu'une seule partie).
-  const libre = categories.find((c) => c.name === "Libre");
-  const first = pickFor(budget1, exclude, maxCount1, libre);
-  const second = entracteOn ? pickFor(budget2, exclude, maxCount2, libre) : [];
+  const first = pickFor(budget1, exclude, maxCount1);
+  const second = entracteOn ? pickFor(budget2, exclude, maxCount2) : [];
   return { first, second, budget1, budget2 };
 }
 
@@ -5835,8 +5958,10 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
     const copy = { ...result, [part]: result[part].map((c, i) => (i === idx ? { ...pick, matchMode: "Mixte" } : c)) };
     setResult(copy);
   };
+  const saveScroll = usePreserveScroll();
   const pickCatManually = (cat) => {
     if (!result || !catPicker) return;
+    saveScroll();
     const catWithMode = { ...cat, matchMode: "Mixte" };
     let copy;
     if (catPicker.mode === "add") {
@@ -6259,8 +6384,10 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
     const pick = pickRandom(matched.length > 0 ? matched : pool);
     if (pick) setList((prev) => prev.map((e, i) => (i === idx ? { ...pick, actualDuration: pick.duration } : e)));
   };
+  const saveScroll = usePreserveScroll();
   const pickManually = (ex) => {
     if (!picker) return;
+    saveScroll();
     if (picker.mode === "add") setList((prev) => [...prev, ex]);
     else setList((prev) => prev.map((e, i) => (i === picker.idx ? ex : e)));
     setPicker(null);
@@ -6815,8 +6942,10 @@ function ValidesTab({ data, isAdmin, setTab }) {
     );
   }
 
-  const validExercises = data.exercises.filter((e) => !e.pending && !e.rejected);
-  const validCategories = data.categories.filter((c) => !c.pending && !c.rejected);
+  // Ne garde que les fiches proposées par une troupe utilisatrice — les fiches créées par
+  // l'Admin lui-même (creatorUsername vide) n'ont pas à figurer dans cette liste de suivi.
+  const validExercises = data.exercises.filter((e) => !e.pending && !e.rejected && e.creatorUsername);
+  const validCategories = data.categories.filter((c) => !c.pending && !c.rejected && c.creatorUsername);
   const validConcepts = data.showConcepts.filter((sc) => !sc.pending && !sc.rejected);
 
   const q = query.trim();
@@ -6824,10 +6953,15 @@ function ValidesTab({ data, isAdmin, setTab }) {
   const shownCategories = q ? validCategories.filter((c) => matchesKeywords(q, c.name)) : validCategories;
   const shownConcepts = q ? validConcepts.filter((sc) => matchesKeywords(q, sc.theme)) : validConcepts;
 
-  const Row = ({ label, sub }) => (
-    <div className="flex justify-between items-center text-sm py-1.5 border-b" style={{ borderColor: COLORS.cardEdge, fontFamily: FONT_BODY, color: COLORS.text }}>
-      <span>{label}</span>
-      {sub && <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{sub}</span>}
+  const creatorLabel = (item) => `${item.creatorUsername} — ${item.creatorTroupe ? `Troupe ${item.creatorTroupe}` : "Sans troupe renseignée"}`;
+
+  const Row = ({ label, sub, creator }) => (
+    <div className="text-sm py-1.5 border-b" style={{ borderColor: COLORS.cardEdge, fontFamily: FONT_BODY, color: COLORS.text }}>
+      <div className="flex justify-between items-center">
+        <span>{label}</span>
+        {sub && <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{sub}</span>}
+      </div>
+      {creator && <div style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs mt-0.5">{creator}</div>}
     </div>
   );
 
@@ -6837,7 +6971,7 @@ function ValidesTab({ data, isAdmin, setTab }) {
       <SectionHeader
         icon={Check}
         title="Validés"
-        subtitle="Tous les exercices, catégories et concepts de spectacle actuellement publics dans la bibliothèque."
+        subtitle="Exercices, catégories et concepts de spectacle proposés par les troupes et validés par la modération."
       />
       <Field label="Chercher parmi les fiches validées">
         <input className={inputClass} style={inputStyle} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Nom de la fiche…" />
@@ -6848,7 +6982,7 @@ function ValidesTab({ data, isAdmin, setTab }) {
       </span>
       <IndexCard>
         {shownExercises.length === 0 && <Empty text="Aucun exercice ne correspond." />}
-        {shownExercises.map((e) => <Row key={e.id} label={e.title} sub={`${e.duration} min`} />)}
+        {shownExercises.map((e) => <Row key={e.id} label={e.title} sub={`${e.duration} min`} creator={creatorLabel(e)} />)}
       </IndexCard>
 
       <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs uppercase block mt-4 mb-1">
@@ -6856,7 +6990,7 @@ function ValidesTab({ data, isAdmin, setTab }) {
       </span>
       <IndexCard>
         {shownCategories.length === 0 && <Empty text="Aucune catégorie ne correspond." />}
-        {shownCategories.map((c) => <Row key={c.id} label={c.name} sub={`${c.durationLabel || `${c.duration || 5} min`}`} />)}
+        {shownCategories.map((c) => <Row key={c.id} label={c.name} sub={`${c.durationLabel || `${c.duration || 5} min`}`} creator={creatorLabel(c)} />)}
       </IndexCard>
 
       <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs uppercase block mt-4 mb-1">
@@ -6864,7 +6998,7 @@ function ValidesTab({ data, isAdmin, setTab }) {
       </span>
       <IndexCard>
         {shownConcepts.length === 0 && <Empty text="Aucun concept de spectacle ne correspond." />}
-        {shownConcepts.map((sc) => <Row key={sc.id} label={sc.theme} sub={sc.type} />)}
+        {shownConcepts.map((sc) => <Row key={sc.id} label={sc.theme} sub={sc.type} creator={sc.creatorUsername ? creatorLabel(sc) : null} />)}
       </IndexCard>
     </div>
   );
