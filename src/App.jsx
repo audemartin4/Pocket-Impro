@@ -2293,7 +2293,14 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
     setForgotError("");
     const { error } = await resetPasswordForEmail(email);
     setForgotBusy(false);
-    if (error) { setForgotError("Impossible d'envoyer l'email pour le moment. Réessaie plus tard."); return; }
+    if (error) {
+      setForgotError(
+        error.message?.toLowerCase().includes("rate limit")
+          ? "Trop de tentatives récentes — Supabase limite le nombre d'emails envoyés par heure. Réessaie dans quelques minutes."
+          : `Impossible d'envoyer l'email pour le moment (${error.message || "erreur inconnue"}). Réessaie plus tard.`
+      );
+      return;
+    }
     setMode("forgot-sent");
   };
 
