@@ -6,7 +6,7 @@ import {
   Facebook, Instagram
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
-import { useAuthUser, signIn, signUp, signOut } from "./auth.js";
+import { useAuthUser, signIn, signUp, signOut, resetPasswordForEmail, updatePassword } from "./auth.js";
 
 /* ---------- Tokens ---------- */
 const COLORS = {
@@ -1725,6 +1725,10 @@ export default function ImproApp() {
       </div>
 
       <div className="max-w-2xl mx-auto px-4 py-5">
+        {auth.passwordRecovery ? (
+          <ResetPasswordScreen onDone={() => { auth.clearPasswordRecovery(); setTab("profil"); }} />
+        ) : (
+        <>
         {tab === "accueil" && <Accueil setTab={setTab} hasCoursPlan={!!coursPlan} hasSpectaclePlan={!!spectaclePlan} hasEchauffementPlan={!!echauffementPlan} />}
         {tab === "gen-cours" && <GenerateurCoursTab data={publicData} allData={data} update={update} plan={coursPlan} setPlan={setCoursPlan} currentUser={currentUser} setTab={setTab} />}
         {tab === "gen-spectacle" && <GenerateurSpectacleTab data={publicData} allData={data} update={update} plan={spectaclePlan} setPlan={setSpectaclePlan} currentUser={currentUser} setTab={setTab} />}
@@ -1748,6 +1752,8 @@ export default function ImproApp() {
         {tab === "favoris" && <FavorisTab data={publicData} update={update} isAdmin={isAdmin} currentUser={currentUser} setTab={setTab} />}
         {tab === "profil" && <ProfilTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} realIsAdmin={auth.isAdmin} simulateMember={simulateMember} setSimulateMember={setSimulateMember} />}
         {tab === "parametres" && <ParametresTab setTab={setTab} currentUser={currentUser} profile={auth.profile} />}
+        </>
+        )}
       </div>
       <SocialFooter />
       {LIBRARY_TABS.includes(tab) && <BackToTopButton />}
@@ -2233,12 +2239,63 @@ function FavorisTab({ data, update, isAdmin, currentUser, setTab }) {
   );
 }
 
+/* Écran de récupération de mot de passe : affiché à la place du contenu normal (voir ImproApp,
+   auth.passwordRecovery) quand on arrive via le lien reçu par email — Supabase a déjà établi une
+   session temporaire à ce stade, il ne reste plus qu'à définir le nouveau mot de passe. */
+function ResetPasswordScreen({ onDone }) {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    if (password.length < 6) { setError("Le mot de passe doit faire au moins 6 caractères."); return; }
+    if (password !== confirm) { setError("Les deux mots de passe ne correspondent pas."); return; }
+    setBusy(true);
+    setError("");
+    const { error: err } = await updatePassword(password);
+    setBusy(false);
+    if (err) { setError("Impossible d'enregistrer ce mot de passe pour le moment. Réessaie plus tard."); return; }
+    onDone();
+  };
+
+  return (
+    <div>
+      <SectionHeader icon={LogIn} title="Nouveau mot de passe" subtitle="Choisis un nouveau mot de passe pour ton compte." />
+      <IndexCard>
+        <Field label="Nouveau mot de passe">
+          <PasswordInput value={password} onChange={(e) => { setPassword(e.target.value); setError(""); }} />
+        </Field>
+        <Field label="Confirme le mot de passe">
+          <PasswordInput value={confirm} onChange={(e) => { setConfirm(e.target.value); setError(""); }} onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
+        </Field>
+        {error && <p className="text-xs mb-2" style={{ color: COLORS.accent, fontFamily: FONT_BODY }}>{error}</p>}
+        <Btn variant="accent" onClick={submit} disabled={busy}><Check size={14} /> Enregistrer le mot de passe</Btn>
+      </IndexCard>
+    </div>
+  );
+}
+
 function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIsAdmin, simulateMember, setSimulateMember }) {
-  const [mode, setMode] = useState("login"); // "login" | "signup" | "signup-done"
+  const [mode, setMode] = useState("login"); // "login" | "signup" | "signup-done" | "forgot" | "forgot-sent"
   const [loginEmail, setLoginEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [loginBusy, setLoginBusy] = useState(false);
+
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotError, setForgotError] = useState("");
+  const [forgotBusy, setForgotBusy] = useState(false);
+  const sendForgotPassword = async () => {
+    const email = forgotEmail.trim();
+    if (!email) { setForgotError("Merci de renseigner ton adresse mail."); return; }
+    setForgotBusy(true);
+    setForgotError("");
+    const { error } = await resetPasswordForEmail(email);
+    setForgotBusy(false);
+    if (error) { setForgotError("Impossible d'envoyer l'email pour le moment. Réessaie plus tard."); return; }
+    setMode("forgot-sent");
+  };
 
   const [signupEmail, setSignupEmail] = useState("");
   const [signupUsername, setSignupUsername] = useState("");
@@ -2488,11 +2545,57 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
             {loginError && <p className="text-xs mb-2" style={{ color: COLORS.accent, fontFamily: FONT_BODY }}>{loginError}</p>}
             <Btn variant="accent" onClick={login} disabled={loginBusy}><LogIn size={14} /> Se connecter</Btn>
             <button
-              onClick={() => { setMode("signup"); setLoginError(""); }}
+              onClick={() => { setMode("forgot"); setForgotEmail(loginEmail); setForgotError(""); }}
               className="block mt-3 text-xs underline"
               style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}
             >
+              Mot de passe oublié ?
+            </button>
+            <button
+              onClick={() => { setMode("signup"); setLoginError(""); }}
+              className="block mt-1 text-xs underline"
+              style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}
+            >
               Pas encore de compte ? Créer un compte
+            </button>
+          </>
+        ) : mode === "forgot" ? (
+          <>
+            <p className="text-sm mb-3" style={{ fontFamily: FONT_BODY, color: COLORS.text }}>
+              Indique ton adresse mail : tu recevras un lien pour choisir un nouveau mot de passe.
+            </p>
+            <Field label="Adresse mail">
+              <input
+                type="email"
+                className={inputClass}
+                style={inputStyle}
+                value={forgotEmail}
+                onChange={(e) => { setForgotEmail(e.target.value); setForgotError(""); }}
+                onKeyDown={(e) => { if (e.key === "Enter") sendForgotPassword(); }}
+                placeholder="toi@exemple.com"
+              />
+            </Field>
+            {forgotError && <p className="text-xs mb-2" style={{ color: COLORS.accent, fontFamily: FONT_BODY }}>{forgotError}</p>}
+            <Btn variant="accent" onClick={sendForgotPassword} disabled={forgotBusy}><Mail size={14} /> Envoyer le lien</Btn>
+            <button
+              onClick={() => { setMode("login"); setForgotError(""); }}
+              className="block mt-3 text-xs underline"
+              style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}
+            >
+              Retour à la connexion
+            </button>
+          </>
+        ) : mode === "forgot-sent" ? (
+          <>
+            <p className="text-sm mb-3" style={{ fontFamily: FONT_BODY, color: COLORS.text }}>
+              Email envoyé ✓ Clique sur le lien reçu pour choisir un nouveau mot de passe.
+            </p>
+            <button
+              onClick={() => setMode("login")}
+              className="block text-xs underline"
+              style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}
+            >
+              Retour à la connexion
             </button>
           </>
         ) : (
