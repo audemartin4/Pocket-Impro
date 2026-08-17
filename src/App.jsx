@@ -2856,7 +2856,7 @@ function ParametresTab({ setTab, currentUser, profile }) {
           </div>
         </Field>
         {error && <p className="text-xs mb-2" style={{ color: COLORS.accent, fontFamily: FONT_BODY }}>{error}</p>}
-        {saved && <p className="text-xs mb-2" style={{ color: COLORS.brass, fontFamily: FONT_BODY }}>Enregistré ✓</p>}
+        {saved && <p className="text-xs mb-2" style={{ color: COLORS.brass, fontFamily: FONT_BODY }}>Déconnecte puis reconnecte toi pour mettre à jour tes changements.</p>}
         <Btn variant="accent" onClick={save} disabled={busy}><Check size={14} /> Enregistrer</Btn>
       </IndexCard>
     </div>
@@ -4216,7 +4216,9 @@ function CategoriesTab({ data, update, isAdmin, currentUser, onlyUserCreated, in
 
   const grouped = {};
   baseCategories.forEach((c) => {
-    const tags = c.tags?.length ? c.tags : ["Sans section"];
+    // La catégorie "Libre" (sans genre) a sa propre section dédiée plutôt qu'un générique
+    // "Sans section" — c'est la seule catégorie de la bibliothèque sans genre renseigné.
+    const tags = c.tags?.length ? c.tags : ["Libre"];
     tags.forEach((t) => { (grouped[t] = grouped[t] || []).push(c); });
   });
   const tagKeys = [
