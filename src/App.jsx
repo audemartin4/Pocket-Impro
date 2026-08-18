@@ -6268,14 +6268,19 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                           </div>
                         )}
                       </div>
-                      {(c.tags || []).length > 0 && (
-                        <span
-                          className="inline-block text-xs px-2 py-0.5 rounded-full mt-1 mb-1"
-                          style={{ fontFamily: FONT_MONO, background: "#B3382C", color: "#fff" }}
-                        >
-                          {c.tags.join(" · ")}
-                        </span>
-                      )}
+                      {/* Hauteur toujours réservée (même sans tag, comme pour "Libre") pour éviter que la
+                          carte suivante ne se décale et que le clic sur "Aléatoire" d'une carte voisine
+                          n'atterrisse par erreur sur un autre bouton après le remplacement. */}
+                      <div className="mt-1 mb-1" style={{ minHeight: 22 }}>
+                        {(c.tags || []).length > 0 && (
+                          <span
+                            className="inline-block text-xs px-2 py-0.5 rounded-full"
+                            style={{ fontFamily: FONT_MONO, background: "#B3382C", color: "#fff" }}
+                          >
+                            {c.tags.join(" · ")}
+                          </span>
+                        )}
+                      </div>
                       <div className="flex flex-wrap items-center gap-2 text-xs mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
                         <span>{c.actualDuration ?? c.duration ?? 5} min</span>
                         {c.energy && <span>· {ENERGY_DOT[c.energy] || ""} énergie {c.energy}</span>}
@@ -6283,7 +6288,10 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                       <p
                         style={{
                           fontFamily: FONT_BODY, color: COLORS.textSoft,
-                          ...(expandedId === c.id ? {} : { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }),
+                          // Hauteur minimale de 2 lignes réservée même pour les résumés courts (ex. "Libre"),
+                          // pour éviter un décalage des cartes suivantes qui ferait rater le bon bouton en cas
+                          // de clics rapprochés sur "Aléatoire".
+                          ...(expandedId === c.id ? {} : { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", minHeight: "2.6em" }),
                         }}
                         className="text-sm"
                       >
@@ -6375,14 +6383,19 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                           </div>
                         )}
                       </div>
-                      {(c.tags || []).length > 0 && (
-                        <span
-                          className="inline-block text-xs px-2 py-0.5 rounded-full mt-1 mb-1"
-                          style={{ fontFamily: FONT_MONO, background: "#B3382C", color: "#fff" }}
-                        >
-                          {c.tags.join(" · ")}
-                        </span>
-                      )}
+                      {/* Hauteur toujours réservée (même sans tag, comme pour "Libre") pour éviter que la
+                          carte suivante ne se décale et que le clic sur "Aléatoire" d'une carte voisine
+                          n'atterrisse par erreur sur un autre bouton après le remplacement. */}
+                      <div className="mt-1 mb-1" style={{ minHeight: 22 }}>
+                        {(c.tags || []).length > 0 && (
+                          <span
+                            className="inline-block text-xs px-2 py-0.5 rounded-full"
+                            style={{ fontFamily: FONT_MONO, background: "#B3382C", color: "#fff" }}
+                          >
+                            {c.tags.join(" · ")}
+                          </span>
+                        )}
+                      </div>
                       <div className="flex flex-wrap items-center gap-2 text-xs mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
                         <span>{c.actualDuration ?? c.duration ?? 5} min</span>
                         {c.energy && <span>· {ENERGY_DOT[c.energy] || ""} énergie {c.energy}</span>}
@@ -6390,7 +6403,10 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                       <p
                         style={{
                           fontFamily: FONT_BODY, color: COLORS.textSoft,
-                          ...(expandedId === c.id ? {} : { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }),
+                          // Hauteur minimale de 2 lignes réservée même pour les résumés courts (ex. "Libre"),
+                          // pour éviter un décalage des cartes suivantes qui ferait rater le bon bouton en cas
+                          // de clics rapprochés sur "Aléatoire".
+                          ...(expandedId === c.id ? {} : { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", minHeight: "2.6em" }),
                         }}
                         className="text-sm"
                       >
