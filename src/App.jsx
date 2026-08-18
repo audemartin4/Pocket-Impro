@@ -6589,6 +6589,9 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
     <div>
       <Toast toast={toastMsg} />
       <SectionHeader icon={Flame} title="Créer un échauffement" subtitle="Une préparation rapide, immédiatement utilisable." />
+      <p className="text-sm mb-3" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+        Il est possible que tu n'aies pas le temps de faire toutes les exercices proposées, n'hésite pas à en sauter ou en ajouter lors de ton échauffement. Improvise et adapte !
+      </p>
       <IndexCard style={{ borderColor: COLORS.accent, background: COLORS.accent + "15", marginBottom: 12 }} className="flex items-center gap-2">
         <AlertTriangle size={18} color={COLORS.accent} />
         <span style={{ fontFamily: FONT_BODY, color: COLORS.accent }} className="text-xs font-medium">
