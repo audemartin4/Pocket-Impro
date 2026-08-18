@@ -5973,11 +5973,10 @@ const SPECTACLE_SALUT_MIN = 5;
 const SPECTACLE_ENTRACTE_MIN = 15;
 // Temps de transition réservé entre deux catégories (présentation de la catégorie suivante).
 const SPECTACLE_TRANSITION_MIN = 2;
-// Durée moyenne supposée d'une catégorie, pour déduire un nombre de catégories cohérent avec la
-// durée voulue (la plupart des catégories durent entre 2 et 6 minutes) — calé sur la référence :
-// cabaret + entracte + 90 min → 5 à 6 catégories par partie.
-// Référence : 6 catégories ≈ 40 minutes de spectacle, soit une durée moyenne de 40/6 min par catégorie.
-const SPECTACLE_CATEGORY_AVG_MIN = 40 / 6;
+// Durée moyenne réaliste d'une catégorie jouée en spectacle, pour déduire un nombre de catégories
+// cohérent avec la durée voulue — en scène, une catégorie dépasse rarement 4 min (plutôt 3-4 min),
+// sauf les catégories Univers qui peuvent aller jusqu'à 6 min.
+const SPECTACLE_CATEGORY_AVG_MIN = 3.5;
 
 function timeToMinutes(hhmm) {
   const [h, m] = hhmm.split(":").map(Number);
@@ -6055,23 +6054,13 @@ function buildSpectacle(categories, { format, niveau, duree, entracteOn, integre
   const budget1 = entracteOn ? Math.round(categoryBudget / 2) : categoryBudget;
   const budget2 = entracteOn ? categoryBudget - budget1 : 0;
   // La durée moyenne d'une catégorie inclut la transition de ~2 min vers la suivante, pour ne pas
-  // surestimer le nombre de catégories qui tiennent réellement dans le temps imparti.
+  // surestimer le nombre de catégories qui tiennent réellement dans le temps imparti. Nombre de
+  // catégories ciblé par demi-spectacle, déduit du budget disponible — la bibliothèque (pool
+  // disponible, contraintes de diversité) fait naturellement varier ce nombre de ± 1 par entracte
+  // (± 2 sur l'ensemble du spectacle), sans qu'il soit besoin de l'imposer.
   const avgWithTransition = SPECTACLE_CATEGORY_AVG_MIN + SPECTACLE_TRANSITION_MIN;
-  // Nombre de catégories ciblé (± 1 selon ce que la bibliothèque peut réellement fournir) : valeurs
-  // établies pour les formats courts, peu importe le calcul par durée moyenne — 4 pour 30 min,
-  // 8 pour 60 min (réparties en 2 si l'entracte est coché), 6+6 pour 120 min + entracte. Le temps de
-  // chaque catégorie retenue est ensuite réparti à parts égales sur le budget réel (voir plus bas),
-  // pour que la durée totale du spectacle corresponde à la durée demandée.
-  const maxCount1 =
-    duree === 30 ? (entracteOn ? 2 : 4)
-    : duree === 60 ? (entracteOn ? 4 : 8)
-    : duree === 120 && entracteOn ? 6
-    : Math.max(1, Math.round(budget1 / avgWithTransition));
-  const maxCount2 = !entracteOn ? 0
-    : duree === 30 ? 2
-    : duree === 60 ? 4
-    : duree === 120 ? 6
-    : Math.max(1, Math.round(budget2 / avgWithTransition));
+  const maxCount1 = Math.max(1, Math.round(budget1 / avgWithTransition));
+  const maxCount2 = entracteOn ? Math.max(1, Math.round(budget2 / avgWithTransition)) : 0;
 
   const pickFor = (budget, exclude, maxCount) => {
     let b = budget, picked = [];
@@ -6110,6 +6099,9 @@ function buildSpectacle(categories, { format, niveau, duree, entracteOn, integre
       // Chaque catégorie après la première consomme aussi ~2 min de transition (présentation de
       // la catégorie suivante), en plus de sa propre durée.
       const transition = picked.length > 0 ? SPECTACLE_TRANSITION_MIN : 0;
+      // On s'arrête dès qu'il ne reste plus assez de temps pour donner une durée correcte à une
+      // catégorie de plus, plutôt que d'en ajouter une et l'écraser à 0 ou 1 minute.
+      if (b - transition < MIN_CARD_DURATION) break;
       // Une catégorie générée sur 3 (positions 3, 6, 9…) est la catégorie "Libre" — pour toutes
       // les durées de spectacle. Si elle ne rentre pas dans le budget restant à ce moment-là, on
       // retombe simplement sur une catégorie normale plutôt que de casser le rythme.
@@ -6117,22 +6109,15 @@ function buildSpectacle(categories, { format, niveau, duree, entracteOn, integre
       const chosen = wantsLibre ? libre : pickNormal(transition);
       if (!chosen) break;
       const dur = chosen.duration || 5;
-      picked.push(chosen);
+      // Durée réellement affichée : celle de la fiche (typiquement 3-4 min, jusqu'à 6 pour les
+      // catégories Univers), resserrée seulement si besoin pour tenir dans le temps restant.
+      picked.push({ ...chosen, actualDuration: Math.max(MIN_CARD_DURATION, Math.min(dur, Math.max(0, b - transition))) });
       // "Libre" reste volontairement hors de `exclude`/`localUsed` : elle peut revenir à chaque
       // 3e position, y compris plusieurs fois dans la même partie ou dans l'autre partie.
       if (chosen !== libre) { exclude.add(chosen.id); localUsed.add(chosen.id); }
       b = consumeBudget(dur + transition, b);
     }
-    // Répartit le budget total (catégories + transitions) à parts égales entre les catégories
-    // retenues, plutôt que de garder la durée suggérée de chaque fiche (qui laissait souvent du
-    // temps inutilisé en fin de spectacle) — avec un plancher de MIN_CARD_DURATION pour ne jamais
-    // écraser une catégorie à 0 ou 1 minute.
-    if (picked.length === 0) return picked;
-    const transitionsTotal = (picked.length - 1) * SPECTACLE_TRANSITION_MIN;
-    const categoryTimeBudget = Math.max(0, budget - transitionsTotal);
-    const per = Math.floor(categoryTimeBudget / picked.length);
-    const remainder = categoryTimeBudget - per * picked.length;
-    return picked.map((c, idx) => ({ ...c, actualDuration: Math.max(MIN_CARD_DURATION, per + (idx < remainder ? 1 : 0)) }));
+    return picked;
   };
 
   const exclude = new Set();
