@@ -5548,7 +5548,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
       )}
       <SectionHeader icon={BookOpen} title="Créer un cours" subtitle="Une séance complète, à ajuster ensuite." />
       <p className="text-sm mb-3" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-        Il est possible que tu n'aies pas le temps de faire tous les exercices proposés, n'hésite pas à en sauter ou en ajouter lors de ton cours. Improvise et adapte !
+        Il est possible que tu n'aies pas le temps de faire tous les exercices proposés, n'hésite pas à en supprimer ou en ajouter lors de ton cours. Improvise et adapte !
       </p>
       <Toast toast={toastMsg} />
       <IndexCard>
@@ -6194,7 +6194,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
       )}
       <SectionHeader icon={Theater} title="Créer un spectacle" subtitle="Un déroulé complet, prêt à ajuster." />
       <p className="text-sm mb-3" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-        Il est possible que tu n'aies pas le temps de faire toutes les catégories proposées, n'hésite pas à en sauter ou en ajouter lors de ton spectacle. Improvise et adapte !
+        Il est possible que tu n'aies pas le temps de faire toutes les catégories proposées, n'hésite pas à en supprimer ou en ajouter lors de ton spectacle. Improvise et adapte !
       </p>
       <Toast toast={toastMsg} />
       <IndexCard>
@@ -6653,7 +6653,7 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
       <Toast toast={toastMsg} />
       <SectionHeader icon={Flame} title="Créer un échauffement" subtitle="Une préparation rapide, immédiatement utilisable." />
       <p className="text-sm mb-3" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-        Il est possible que tu n'aies pas le temps de faire toutes les exercices proposées, n'hésite pas à en sauter ou en ajouter lors de ton échauffement. Improvise et adapte !
+        Il est possible que tu n'aies pas le temps de faire tous les échauffements proposés, n'hésite pas à en supprimer ou en ajouter lors de ton échauffement. Improvise et adapte !
       </p>
       <IndexCard style={{ borderColor: COLORS.accent, background: COLORS.accent + "15", marginBottom: 12 }} className="flex items-center gap-2">
         <AlertTriangle size={18} color={COLORS.accent} />
