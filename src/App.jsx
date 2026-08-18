@@ -5528,6 +5528,9 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
         />
       )}
       <SectionHeader icon={BookOpen} title="Créer un cours" subtitle="Une séance complète, à ajuster ensuite." />
+      <p className="text-sm mb-3" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+        Il est possible que tu n'aies pas le temps de faire tous les exercices proposés, n'hésite pas à en sauter ou en ajouter lors de ton cours. Improvise et adapte !
+      </p>
       <Toast toast={toastMsg} />
       <IndexCard>
         <div className="grid grid-cols-2 gap-2">
