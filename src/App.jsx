@@ -5908,6 +5908,47 @@ const SPECTACLE_CATEGORY_AVG_MIN = 40 / 6;
 // Temps de transition réservé entre deux catégories (présentation de la catégorie suivante).
 const SPECTACLE_TRANSITION_MIN = 2;
 
+function timeToMinutes(hhmm) {
+  const [h, m] = hhmm.split(":").map(Number);
+  return h * 60 + m;
+}
+function minutesToTime(total) {
+  const t = ((Math.round(total) % (24 * 60)) + 24 * 60) % (24 * 60);
+  const h = Math.floor(t / 60);
+  const m = t % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+// Options du menu déroulant "heure de début", toutes les 15 min sur 24h.
+const SPECTACLE_START_TIME_OPTIONS = Array.from({ length: 24 * 4 }, (_, i) => minutesToTime(i * 15));
+
+// Calcule, à partir d'une heure de début, l'heure estimée de chaque catégorie en appliquant les
+// mêmes règles de timing que le générateur : 5 min d'intro, ~2 min de transition entre deux
+// catégories consécutives (sauf la première de chaque partie), puis l'entracte (si coché) entre
+// les deux parties. Utilisé à la fois par l'écran (GenerateurSpectacleTab) et par l'export PDF,
+// pour être certain que les heures affichées correspondent exactement.
+function computeSpectacleSchedule(firstDurations, secondDurations, entracteOn, startTime) {
+  if (!startTime) return null;
+  let cursor = timeToMinutes(startTime) + SPECTACLE_INTRO_MIN;
+  const firstTimes = firstDurations.map((dur, i) => {
+    if (i > 0) cursor += SPECTACLE_TRANSITION_MIN;
+    const t = cursor;
+    cursor += dur;
+    return t;
+  });
+  let entracteStart = null;
+  if (entracteOn) {
+    entracteStart = cursor;
+    cursor += SPECTACLE_ENTRACTE_MIN;
+  }
+  const secondTimes = secondDurations.map((dur, i) => {
+    if (i > 0) cursor += SPECTACLE_TRANSITION_MIN;
+    const t = cursor;
+    cursor += dur;
+    return t;
+  });
+  return { firstTimes, secondTimes, entracteStart, salutStart: cursor };
+}
+
 function buildSpectacle(categories, { format, niveau, duree, entracteOn, integrerFavoris }) {
   // Le niveau coché est prioritaire, mais un niveau adjacent reste autorisé (Débutant coché →
   // Confirmé accepté, pas Avancé ; Avancé coché → Confirmé accepté, pas Débutant). Les fiches
@@ -6028,6 +6069,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
   const [niveau, setNiveau] = useState("");
   const [entracteOn, setEntracteOn] = useState(true);
   const [integrerFavoris, setIntegrerFavoris] = useState(false);
+  const [startTime, setStartTime] = useState("");
   const result = plan;
   const setResult = setPlan;
   const [toastMsg, showToast] = useToast();
@@ -6102,6 +6144,16 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
   // pour qu'il affiche exactement les mêmes durées/total que cet écran (voir exportSpectaclePlanPDF).
   const durationsById = {};
   allCats.forEach((c) => { durationsById[c.id] = c.actualDuration ?? c.duration ?? 5; });
+  // Heures estimées de passage de chaque catégorie, calculées à partir de l'heure de début choisie
+  // (nulles si aucune heure n'a été précisée) — voir computeSpectacleSchedule.
+  const schedule = result && startTime
+    ? computeSpectacleSchedule(
+        result.first.map((c) => c.actualDuration ?? c.duration ?? 5),
+        result.second.map((c) => c.actualDuration ?? c.duration ?? 5),
+        entracteOn,
+        startTime
+      )
+    : null;
 
   return (
     <div>
@@ -6160,12 +6212,18 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
         </div>
         <OuiNonField label="Intégrer mes favoris ?" value={integrerFavoris} onChange={setIntegrerFavoris} />
         <OuiNonField label="Avec entracte (15 min réservées) ?" value={entracteOn} onChange={setEntracteOn} />
+        <Field label="À quelle heure commence ton spectacle ?">
+          <select className={inputClass} style={inputStyle} value={startTime} onChange={(e) => setStartTime(e.target.value)}>
+            <option value="">Heure non précisée</option>
+            {SPECTACLE_START_TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </Field>
         <Btn variant="accent" onClick={generate}><Sparkles size={14} /> Créer</Btn>
       </IndexCard>
 
       {result && (
         <>
-          <IndexCard><span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">Introduction — {SPECTACLE_INTRO_MIN} min</span></IndexCard>
+          <IndexCard><span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">Introduction — {SPECTACLE_INTRO_MIN} min{startTime ? ` — ${startTime}` : ""}</span></IndexCard>
           <DropZone />
           {result.first.map((c, i) => (
             <React.Fragment key={`${c.id}-${i}`}>
@@ -6180,6 +6238,11 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                   userSelect: "none", WebkitUserSelect: "none", touchAction: "none",
                 }}
               >
+                {schedule && (
+                  <div className="text-xs font-semibold mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.brass }}>
+                    🕐 {minutesToTime(schedule.firstTimes[i])}
+                  </div>
+                )}
                 <IndexCard>
                   <div className="flex justify-between items-start">
                     <div className="flex-1" onClick={() => handleCardTap(c.id)} style={{ cursor: "pointer" }}>
@@ -6260,7 +6323,9 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
           ))}
           {entracteOn && (
             <IndexCard style={{ background: COLORS.brass, border: `2px solid ${COLORS.ink}`, textAlign: "center", padding: "14px" }}>
-              <span style={{ fontFamily: FONT_MONO, color: COLORS.card }} className="text-lg font-bold uppercase tracking-wide">Entracte — {SPECTACLE_ENTRACTE_MIN} min</span>
+              <span style={{ fontFamily: FONT_MONO, color: COLORS.card }} className="text-lg font-bold uppercase tracking-wide">
+                Entracte — {SPECTACLE_ENTRACTE_MIN} min{schedule ? ` — ${minutesToTime(schedule.entracteStart)}` : ""}
+              </span>
             </IndexCard>
           )}
           <div className="mb-2">
@@ -6280,6 +6345,11 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                   userSelect: "none", WebkitUserSelect: "none", touchAction: "none",
                 }}
               >
+                {schedule && (
+                  <div className="text-xs font-semibold mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.brass }}>
+                    🕐 {minutesToTime(schedule.secondTimes[i])}
+                  </div>
+                )}
                 <IndexCard>
                   <div className="flex justify-between items-start">
                     <div className="flex-1" onClick={() => handleCardTap(c.id)} style={{ cursor: "pointer" }}>
@@ -6369,7 +6439,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
               onCancel={() => setCatPicker(null)}
             />
           )}
-          <IndexCard><span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">Salut final — {SPECTACLE_SALUT_MIN} min</span></IndexCard>
+          <IndexCard><span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">Salut final — {SPECTACLE_SALUT_MIN} min{schedule ? ` — ${minutesToTime(schedule.salutStart)}` : ""}</span></IndexCard>
 
           <div className="flex gap-2 mt-2 mb-2">
             <Btn
@@ -6381,6 +6451,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                   categoryIds: allCats.map((c) => c.id),
                   durationsById,
                   entracte: entracteOn ? { duree: SPECTACLE_ENTRACTE_MIN, firstCount: result.first.length } : null,
+                  startTime: startTime || null,
                 },
                 data
               )}
@@ -6398,6 +6469,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                     categoryIds: allCats.map((c) => c.id),
                     durationsById,
                     entracte: entracteOn ? { duree: SPECTACLE_ENTRACTE_MIN, firstCount: result.first.length } : null,
+                    startTime: startTime || null,
                   });
                   return d;
                 });
@@ -7463,24 +7535,38 @@ function exportSpectaclePlanPDF(plan, data) {
 
   // Bloc entracte mis en valeur : espace avant/après + texte plus grand et centré, pour qu'il
   // ressorte visuellement au milieu du déroulé plutôt que de se confondre avec les catégories.
-  const addEntracteBlock = () => {
+  const addEntracteBlock = (startMin) => {
     if (y > 270) { doc.addPage(); y = 18; }
     y += 6;
     doc.setFontSize(15);
     doc.setFont(undefined, "bold");
-    doc.text(`— Entracte (${entracte.duree} min) —`, pageWidth / 2, y, { align: "center" });
+    const label = `— Entracte (${entracte.duree} min)${startMin != null ? ` — ${minutesToTime(startMin)}` : ""} —`;
+    doc.text(label, pageWidth / 2, y, { align: "center" });
     y += 13;
   };
 
-  addLine("Introduction", { bold: true, gap: 9 });
+  // Heures estimées de chaque catégorie, si une heure de début a été précisée sur l'écran de
+  // génération — voir computeSpectacleSchedule (même calcul que sur l'écran, pour que les heures
+  // affichées ici correspondent exactement à celles vues avant l'export).
+  const schedule = plan.startTime
+    ? computeSpectacleSchedule(
+        catIds.slice(0, placementIdx).map((id) => Number(durationsById[id] ?? 5)),
+        catIds.slice(placementIdx).map((id) => Number(durationsById[id] ?? 5)),
+        !!entracte,
+        plan.startTime
+      )
+    : null;
+
+  addLine(`Introduction${plan.startTime ? ` — ${plan.startTime}` : ""}`, { bold: true, gap: 9 });
 
   catIds.forEach((id, i) => {
     if (entracte && i === placementIdx) {
-      addEntracteBlock();
+      addEntracteBlock(schedule ? schedule.entracteStart : null);
     }
+    const timeLabel = schedule ? ` — ${minutesToTime(i < placementIdx ? schedule.firstTimes[i] : schedule.secondTimes[i - placementIdx])}` : "";
     const c = data.categories.find((x) => x.id === id);
-    if (!c) { addLine(`${i + 1}. (catégorie supprimée)`, { gap: 8 }); return; }
-    addLine(`${i + 1}. ${c.name} — ${catDuration(c)} min`, { bold: true, gap: 6 });
+    if (!c) { addLine(`${i + 1}. (catégorie supprimée)${timeLabel}`, { gap: 8 }); return; }
+    addLine(`${i + 1}. ${c.name}${timeLabel} — ${catDuration(c)} min`, { bold: true, gap: 6 });
     addLine(c.summary, { size: 10, gap: 9 });
     if (c.archetypes?.length > 0) {
       addLine(`Archétypes : ${c.archetypes.map((a) => a.name).join(", ")}`, { size: 9, gap: 9 });
@@ -7488,10 +7574,10 @@ function exportSpectaclePlanPDF(plan, data) {
   });
 
   if (entracte && placementIdx >= catIds.length) {
-    addEntracteBlock();
+    addEntracteBlock(schedule ? schedule.entracteStart : null);
   }
 
-  addLine("Salut final", { bold: true, gap: 9 });
+  addLine(`Salut final${schedule ? ` — ${minutesToTime(schedule.salutStart)}` : ""}`, { bold: true, gap: 9 });
 
   doc.save(`${plan.name || "spectacle"}.pdf`);
 }
