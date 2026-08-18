@@ -1821,9 +1821,13 @@ const IDEE_CATEGORIES = [
 ];
 
 function GenererIdeesTab({ setTab }) {
-  const [picked, setPicked] = useState(null); // { key, label, value }
+  // Un tirage par catégorie, indépendant des autres (objet plutôt qu'une seule valeur) : cliquer sur
+  // une catégorie ne doit plus effacer le tirage déjà affiché pour une autre — chacun reste visible
+  // jusqu'à ce qu'on le ferme explicitement avec sa croix.
+  const [picked, setPicked] = useState({}); // { [cat.key]: value }
 
-  const draw = (cat) => setPicked({ key: cat.key, label: cat.label, value: cat.list[Math.floor(Math.random() * cat.list.length)] });
+  const draw = (cat) => setPicked((prev) => ({ ...prev, [cat.key]: cat.list[Math.floor(Math.random() * cat.list.length)] }));
+  const dismiss = (key) => setPicked((prev) => { const next = { ...prev }; delete next[key]; return next; });
 
   return (
     <div>
@@ -1847,14 +1851,14 @@ function GenererIdeesTab({ setTab }) {
             >
               <Shuffle size={20} /> {cat.label}{cat.underConstruction ? " (en travaux)" : ""}
             </button>
-            {picked && picked.key === cat.key && (
+            {picked[cat.key] !== undefined && (
               <IndexCard className="mt-2">
                 <div className="flex justify-between items-start">
                   <div>
-                    <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">{picked.label}</span>
-                    <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-xl font-semibold mt-1">{picked.value}</h3>
+                    <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">{cat.label}</span>
+                    <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-xl font-semibold mt-1">{picked[cat.key]}</h3>
                   </div>
-                  <button onClick={() => setPicked(null)} title="Cacher"><X size={16} color={COLORS.textSoft} /></button>
+                  <button onClick={() => dismiss(cat.key)} title="Cacher"><X size={16} color={COLORS.textSoft} /></button>
                 </div>
               </IndexCard>
             )}
