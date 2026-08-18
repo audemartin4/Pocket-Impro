@@ -5596,50 +5596,55 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                           <Star size={18} color={c.favorite ? COLORS.brass : COLORS.textSoft} fill={c.favorite ? COLORS.brass : "none"} />
                         </button>
                       </div>
-                      {(c.tags || []).length > 0 && (
-                        <span
-                          className="inline-block text-xs px-2 py-0.5 rounded-full mt-1 mb-1"
-                          style={{ fontFamily: FONT_MONO, background: "#B3382C", color: "#fff" }}
-                        >
-                          {c.tags.join(" · ")}
-                        </span>
-                      )}
-                      {c.matchInfo?.type === "family" && (
-                        <span
-                          className="inline-block text-xs px-2 py-0.5 rounded-full mt-1 mb-1 ml-1"
-                          style={{ fontFamily: FONT_MONO, background: COLORS.accent, color: "#fff" }}
-                        >
-                          famille d'objectif
-                        </span>
-                      )}
-                      {c.matchInfo?.type === "tag" && (
-                        <span
-                          className="inline-block text-xs px-2 py-0.5 rounded-full mt-1 mb-1 ml-1"
-                          style={{ fontFamily: FONT_MONO, color: COLORS.accent, border: `1px solid ${COLORS.accent}` }}
-                        >
-                          via tag : {c.matchInfo.tag}
-                        </span>
-                      )}
-                      {c.matchInfo?.type === "priority" && (
-                        <span
-                          className="inline-block text-xs px-2 py-0.5 rounded-full mt-1 mb-1 ml-1"
-                          style={{ fontFamily: FONT_MONO, background: COLORS.brass, color: "#fff" }}
-                        >
-                          recommandée
-                        </span>
-                      )}
-                      {c.matchInfo?.type === "exhausted" && (
-                        <span
-                          className="inline-block text-xs px-2 py-0.5 rounded-full mt-1 mb-1 ml-1"
-                          style={{ fontFamily: FONT_MONO, color: "#B3382C", border: "1px solid #B3382C" }}
-                        >
-                          tags correspondants épuisés
-                        </span>
-                      )}
+                      {/* Hauteur toujours réservée (même sans tag, comme pour "Libre") pour éviter que la
+                          carte suivante ne se décale et que le clic sur "Aléatoire" d'une carte voisine
+                          n'atterrisse par erreur sur un autre bouton après le remplacement. */}
+                      <div className="flex flex-wrap items-center mt-1 mb-1" style={{ minHeight: 22 }}>
+                        {(c.tags || []).length > 0 && (
+                          <span
+                            className="inline-block text-xs px-2 py-0.5 rounded-full"
+                            style={{ fontFamily: FONT_MONO, background: "#B3382C", color: "#fff" }}
+                          >
+                            {c.tags.join(" · ")}
+                          </span>
+                        )}
+                        {c.matchInfo?.type === "family" && (
+                          <span
+                            className="inline-block text-xs px-2 py-0.5 rounded-full ml-1"
+                            style={{ fontFamily: FONT_MONO, background: COLORS.accent, color: "#fff" }}
+                          >
+                            famille d'objectif
+                          </span>
+                        )}
+                        {c.matchInfo?.type === "tag" && (
+                          <span
+                            className="inline-block text-xs px-2 py-0.5 rounded-full ml-1"
+                            style={{ fontFamily: FONT_MONO, color: COLORS.accent, border: `1px solid ${COLORS.accent}` }}
+                          >
+                            via tag : {c.matchInfo.tag}
+                          </span>
+                        )}
+                        {c.matchInfo?.type === "priority" && (
+                          <span
+                            className="inline-block text-xs px-2 py-0.5 rounded-full ml-1"
+                            style={{ fontFamily: FONT_MONO, background: COLORS.brass, color: "#fff" }}
+                          >
+                            recommandée
+                          </span>
+                        )}
+                        {c.matchInfo?.type === "exhausted" && (
+                          <span
+                            className="inline-block text-xs px-2 py-0.5 rounded-full ml-1"
+                            style={{ fontFamily: FONT_MONO, color: "#B3382C", border: "1px solid #B3382C" }}
+                          >
+                            tags correspondants épuisés
+                          </span>
+                        )}
+                      </div>
                       <p
                         style={{
                           fontFamily: FONT_BODY, color: COLORS.textSoft,
-                          ...(isExpanded ? {} : { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }),
+                          ...(isExpanded ? {} : { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", minHeight: "2.6em" }),
                         }}
                         className="text-sm"
                       >
@@ -5703,50 +5708,47 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                         <Star size={18} color={it.ex.favorite ? COLORS.brass : COLORS.textSoft} fill={it.ex.favorite ? COLORS.brass : "none"} />
                       </button>
                     </div>
-                    {it.slot === "warmup" && it.ex.groupe && (
-                      <span
-                        className="inline-block text-xs px-2 py-0.5 rounded-full mt-1 mb-1"
-                        style={{ fontFamily: FONT_MONO, background: COLORS.accent, color: "#fff" }}
-                      >
-                        {it.ex.groupe}
-                      </span>
-                    )}
-                    {it.slot !== "warmup" && it.ex.groupe && (
-                      <span
-                        className="inline-block text-xs px-2 py-0.5 rounded-full mt-1 mb-1"
-                        style={{ fontFamily: FONT_MONO, background: COLORS.accent, color: "#fff" }}
-                      >
-                        {it.ex.groupe}
-                      </span>
-                    )}
-                    {it.slot !== "warmup" && it.ex.matchInfo?.type === "tag" && (
-                      <span
-                        className="inline-block text-xs px-2 py-0.5 rounded-full mt-1 mb-1 ml-1"
-                        style={{ fontFamily: FONT_MONO, color: COLORS.accent, border: `1px solid ${COLORS.accent}` }}
-                      >
-                        via tag : {it.ex.matchInfo.tag}
-                      </span>
-                    )}
-                    {it.slot !== "warmup" && it.ex.matchInfo?.type === "exhausted" && (
-                      <span
-                        className="inline-block text-xs px-2 py-0.5 rounded-full mt-1 mb-1 ml-1"
-                        style={{ fontFamily: FONT_MONO, color: "#B3382C", border: "1px solid #B3382C" }}
-                      >
-                        tags correspondants épuisés
-                      </span>
-                    )}
-                    {it.slot !== "warmup" && it.ex.phase === "Pré-impro" && (
-                      <span
-                        className="inline-block text-xs px-2 py-0.5 rounded-full mt-1 mb-1 ml-1"
-                        style={{ fontFamily: FONT_MONO, background: "#B3382C", color: "#fff" }}
-                      >
-                        Exercice pré-impro
-                      </span>
-                    )}
+                    {/* Hauteur toujours réservée (même sans badge) pour éviter que la carte suivante ne
+                        se décale et que le clic sur "Aléatoire" d'une carte voisine n'atterrisse par
+                        erreur sur un autre bouton après le remplacement. */}
+                    <div className="flex flex-wrap items-center mt-1 mb-1" style={{ minHeight: 22 }}>
+                      {it.ex.groupe && (
+                        <span
+                          className="inline-block text-xs px-2 py-0.5 rounded-full"
+                          style={{ fontFamily: FONT_MONO, background: COLORS.accent, color: "#fff" }}
+                        >
+                          {it.ex.groupe}
+                        </span>
+                      )}
+                      {it.slot !== "warmup" && it.ex.matchInfo?.type === "tag" && (
+                        <span
+                          className="inline-block text-xs px-2 py-0.5 rounded-full ml-1"
+                          style={{ fontFamily: FONT_MONO, color: COLORS.accent, border: `1px solid ${COLORS.accent}` }}
+                        >
+                          via tag : {it.ex.matchInfo.tag}
+                        </span>
+                      )}
+                      {it.slot !== "warmup" && it.ex.matchInfo?.type === "exhausted" && (
+                        <span
+                          className="inline-block text-xs px-2 py-0.5 rounded-full ml-1"
+                          style={{ fontFamily: FONT_MONO, color: "#B3382C", border: "1px solid #B3382C" }}
+                        >
+                          tags correspondants épuisés
+                        </span>
+                      )}
+                      {it.slot !== "warmup" && it.ex.phase === "Pré-impro" && (
+                        <span
+                          className="inline-block text-xs px-2 py-0.5 rounded-full ml-1"
+                          style={{ fontFamily: FONT_MONO, background: "#B3382C", color: "#fff" }}
+                        >
+                          Exercice pré-impro
+                        </span>
+                      )}
+                    </div>
                     <p
                       style={{
                         fontFamily: FONT_BODY, color: COLORS.textSoft,
-                        ...(isExpanded ? {} : { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }),
+                        ...(isExpanded ? {} : { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", minHeight: "2.6em" }),
                       }}
                       className="text-sm"
                     >
@@ -6673,18 +6675,23 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
                 <div className="flex justify-between items-start">
                   <div className="flex-1" onClick={() => handleCardTap(e.id)} style={{ cursor: "pointer" }}>
                     <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{e.title}</h3>
-                    {e.groupe && (
-                      <span
-                        className="inline-block text-xs px-2 py-0.5 rounded-full mt-1 mb-1"
-                        style={{ fontFamily: FONT_MONO, background: COLORS.accent, color: "#fff" }}
-                      >
-                        {e.groupe}
-                      </span>
-                    )}
+                    {/* Hauteur toujours réservée (même sans badge) pour éviter que la carte suivante ne
+                        se décale et que le clic sur "Aléatoire" d'une carte voisine n'atterrisse par
+                        erreur sur un autre bouton après le remplacement. */}
+                    <div className="mt-1 mb-1" style={{ minHeight: 22 }}>
+                      {e.groupe && (
+                        <span
+                          className="inline-block text-xs px-2 py-0.5 rounded-full"
+                          style={{ fontFamily: FONT_MONO, background: COLORS.accent, color: "#fff" }}
+                        >
+                          {e.groupe}
+                        </span>
+                      )}
+                    </div>
                     <p
                       style={{
                         fontFamily: FONT_BODY, color: COLORS.textSoft,
-                        ...(isExpanded ? {} : { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }),
+                        ...(isExpanded ? {} : { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", minHeight: "2.6em" }),
                       }}
                       className="text-sm"
                     >
