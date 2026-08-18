@@ -6325,9 +6325,9 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
             </select>
           </Field>
         </div>
+        <OuiNonField label="Commencer par un échauffement de scène ?" value={commencerEchauffementScene} onChange={setCommencerEchauffementScene} />
         <OuiNonField label="Intégrer mes favoris ?" value={integrerFavoris} onChange={setIntegrerFavoris} />
         <OuiNonField label="Avec entracte (15 min réservées) ?" value={entracteOn} onChange={setEntracteOn} />
-        <OuiNonField label="Commencer par un échauffement de scène ?" value={commencerEchauffementScene} onChange={setCommencerEchauffementScene} />
         <Field label="À quelle heure commence ton spectacle ?">
           <select className={inputClass} style={inputStyle} value={startTime} onChange={(e) => setStartTime(e.target.value)}>
             <option value="">Heure non précisée</option>
