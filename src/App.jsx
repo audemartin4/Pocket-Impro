@@ -565,7 +565,7 @@ const EXERCICES_PRE_IMPRO = [
   { title: "Machine", summary: "À partir d'un titre de machine imaginaire donné (ex. machine à faire des serpents), les joueurs se placent les uns après les autres avec un mouvement et un son répétitifs pour former une machine collective.", level: "Débutant", objectives: ["Imagination", "Physique", "Voix", "Mime"], players: 0, duration: 4, energy: "Forte", material: "Aucun", format: "En groupe simultané" },
   { title: "Course au ralenti + public", summary: "Tous les joueurs démarrent une course au ralenti maximum, le plus expressif possible, pendant que certains jouent le public qui les accompagne. Variante : en relais.", level: "Débutant", objectives: ["Imagination", "Physique", "Mime", "Musique"], players: 0, duration: 4, energy: "Modérée", material: "Musique (type \"Les Chariots de feu\")", format: "En groupe simultané" },
   { title: "Bataille au ralenti", summary: "Comme la course au ralenti, mais sous forme de bataille à l'arme blanche entre 2 clans, joué au ralenti et de façon très expressive.", level: "Débutant", objectives: ["Imagination", "Physique", "Mime", "Musique"], players: 0, duration: 4, energy: "Modérée", material: "Musique (type \"Les Chariots de feu\")", format: "En groupe simultané" },
-  { title: "Devinettes", groupe: "Physique", summary: "Peut se faire de différentes façons, le but étant de faire deviner des choses au public : des lieux (le MC donne un lieu aux joueurs sans que le public sache ; ils le jouent en muet jusqu'à ce que quelqu'un du public trouve), des tableaux ou des films (les joueurs prennent des poses sur scène que le public doit reconnaître), ou des œuvres — films, livres (les joueurs jouent une scène dans l'univers de l'œuvre sans être trop évident).", level: "Débutant", objectives: ["Imagination", "Mime", "Jeu"], players: 0, duration: 5, energy: "Modérée", material: "Aucun", format: "Tour à tour avec spectateur", warmup: true, stageWarmup: true },
+  { title: "Devinettes", groupe: "Physique", summary: "Peut se faire de différentes façons, le but étant de faire deviner des choses au public : des lieux (le MC donne un lieu aux joueurs sans que le public sache ; ils le jouent en muet jusqu'à ce que quelqu'un du public trouve), des tableaux ou des films (les joueurs prennent des poses sur scène que le public doit reconnaître), ou des œuvres — films, livres (les joueurs jouent une scène dans l'univers de l'œuvre sans être trop évident).", level: "Débutant", objectives: ["Imagination", "Mime", "Jeu"], players: 0, duration: 5, energy: "Forte", material: "Aucun", format: "Tour à tour avec spectateur", warmup: true, stageWarmup: true },
   { title: "Pluie de compliments", groupe: "Groupe, prénoms et confiance", summary: "Les joueurs doivent aller dans le public et faire une déclaration d'amour ou de compliments à un maximum de spectateurs.", level: "Débutant", objectives: ["Confiance", "Jeu", "Cohésion"], players: 0, duration: 3, energy: "Forte", material: "Aucun", format: "Déambulation", warmup: true, stageWarmup: true },
   { title: "Tous pour 1", summary: "Le groupe serré ne communique que par gestes et bruits. Un leader tient un objet, fait un geste et un bruit que tout le monde reproduit, puis en fait un nouveau ; après 1min30 il passe l'objet à un nouveau leader qui recommence avec un nouvel objet.", level: "Confirmé", objectives: ["Imagination", "Physique", "Mime", "Voix"], players: 0, duration: 6, energy: "Modérée", material: "Aucun", format: "En groupe simultané" },
   { title: "Soultrain d'imitation", summary: "2 lignes de joueurs se font face. Les deux joueurs aux extrémités s'approchent l'un de l'autre en s'imitant et en amplifiant le trait imité, puis se retournent et traversent la ligne en amplifiant encore leur personnage.", level: "Confirmé", objectives: ["Imagination", "Physique", "Mime", "Personnages", "Écoute", "Observation"], players: 0, duration: 6, energy: "Forte", material: "Aucun", format: "Tour à tour avec spectateur" },
@@ -977,6 +977,16 @@ function mergeMissingCategories(data) {
     stageWarmupBatch2V1 = true;
   }
 
+  // Corrige une seule fois l'énergie de la fiche "Devinettes" (Modérée → Forte) — ne se réexécute
+  // plus ensuite, pour ne pas revenir sur une modification manuelle ultérieure.
+  let devinettesEnergyV1 = data._devinettesEnergyV1;
+  if (!devinettesEnergyV1 && exercises) {
+    exercises = exercises.map((e) =>
+      e.title === "Devinettes" && e.energy !== "Forte" ? { ...e, energy: "Forte" } : e
+    );
+    devinettesEnergyV1 = true;
+  }
+
   // Le niveau "Expert" est retiré de l'appli : on convertit les fiches déjà enregistrées vers "Avancé".
   if (exercises?.some((e) => e.level === "Expert")) {
     exercises = exercises.map((e) => (e.level === "Expert" ? { ...e, level: "Avancé" } : e));
@@ -997,9 +1007,10 @@ function mergeMissingCategories(data) {
     materialMusiqueV1 === data._materialMusiqueV1 &&
     tagCaseAccentMergeV1 === data._tagCaseAccentMergeV1 &&
     stageWarmupMachineV1 === data._stageWarmupMachineV1 &&
-    stageWarmupBatch2V1 === data._stageWarmupBatch2V1
+    stageWarmupBatch2V1 === data._stageWarmupBatch2V1 &&
+    devinettesEnergyV1 === data._devinettesEnergyV1
   ) return data;
-  return { ...data, categories, showTypes, showConcepts, exercises, objectifs, thematiques, _cercleTagV1: cercleTagV1, _musiqueTagV1: musiqueTagV1, _materialMusiqueV1: materialMusiqueV1, _tagCaseAccentMergeV1: tagCaseAccentMergeV1, _stageWarmupMachineV1: stageWarmupMachineV1, _stageWarmupBatch2V1: stageWarmupBatch2V1 };
+  return { ...data, categories, showTypes, showConcepts, exercises, objectifs, thematiques, _cercleTagV1: cercleTagV1, _musiqueTagV1: musiqueTagV1, _materialMusiqueV1: materialMusiqueV1, _tagCaseAccentMergeV1: tagCaseAccentMergeV1, _stageWarmupMachineV1: stageWarmupMachineV1, _stageWarmupBatch2V1: stageWarmupBatch2V1, _devinettesEnergyV1: devinettesEnergyV1 };
 }
 
 /* ---------- Persistence ---------- */
