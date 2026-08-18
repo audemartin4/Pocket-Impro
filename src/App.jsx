@@ -6162,7 +6162,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
           <IndexCard><span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">Introduction — {SPECTACLE_INTRO_MIN} min</span></IndexCard>
           <DropZone />
           {result.first.map((c, i) => (
-            <React.Fragment key={c.id}>
+            <React.Fragment key={`${c.id}-${i}`}>
               <div
                 data-drop-card="true"
                 data-list="first"
@@ -6260,7 +6260,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
           </div>
           <DropZone />
           {result.second.map((c, i) => (
-            <React.Fragment key={c.id}>
+            <React.Fragment key={`${c.id}-${i}`}>
               <div
                 data-drop-card="true"
                 data-list="second"
