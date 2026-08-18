@@ -5966,11 +5966,6 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
 const SPECTACLE_INTRO_MIN = 5;
 const SPECTACLE_SALUT_MIN = 5;
 const SPECTACLE_ENTRACTE_MIN = 15;
-// Durée moyenne supposée d'une catégorie, pour déduire un nombre de catégories cohérent avec la
-// durée voulue (la plupart des catégories durent entre 2 et 6 minutes) — calé sur la référence :
-// cabaret + entracte + 90 min → 5 à 6 catégories par partie.
-// Référence : 6 catégories ≈ 40 minutes de spectacle, soit une durée moyenne de 40/6 min par catégorie.
-const SPECTACLE_CATEGORY_AVG_MIN = 40 / 6;
 // Temps de transition réservé entre deux catégories (présentation de la catégorie suivante).
 const SPECTACLE_TRANSITION_MIN = 2;
 
@@ -5984,8 +5979,9 @@ function minutesToTime(total) {
   const m = t % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
-// Options du menu déroulant "heure de début", toutes les 15 min sur 24h.
-const SPECTACLE_START_TIME_OPTIONS = Array.from({ length: 24 * 4 }, (_, i) => minutesToTime(i * 15));
+// Options du menu déroulant "heure de début", toutes les 15 min de 9h à 22h (créneaux réalistes
+// pour un spectacle — pas besoin de couvrir toute la journée).
+const SPECTACLE_START_TIME_OPTIONS = Array.from({ length: 53 }, (_, i) => minutesToTime(9 * 60 + i * 15));
 
 // Calcule, à partir d'une heure de début, l'heure estimée de chaque catégorie en appliquant les
 // mêmes règles de timing que le générateur : 5 min d'intro, ~2 min de transition entre deux
@@ -5994,9 +5990,11 @@ const SPECTACLE_START_TIME_OPTIONS = Array.from({ length: 24 * 4 }, (_, i) => mi
 // pour être certain que les heures affichées correspondent exactement.
 function computeSpectacleSchedule(firstDurations, secondDurations, entracteOn, startTime, stageWarmupMinutes = 0) {
   if (!startTime) return null;
-  const stageWarmupStart = stageWarmupMinutes > 0 ? timeToMinutes(startTime) : null;
-  const introStart = timeToMinutes(startTime) + (stageWarmupMinutes || 0);
-  let cursor = introStart + SPECTACLE_INTRO_MIN;
+  // L'échauffement de scène (s'il est activé) passe juste après l'introduction, jamais avant :
+  // le spectacle commence toujours par l'introduction.
+  const introStart = timeToMinutes(startTime);
+  const stageWarmupStart = stageWarmupMinutes > 0 ? introStart + SPECTACLE_INTRO_MIN : null;
+  let cursor = introStart + SPECTACLE_INTRO_MIN + (stageWarmupMinutes || 0);
   const firstTimes = firstDurations.map((dur, i) => {
     if (i > 0) cursor += SPECTACLE_TRANSITION_MIN;
     const t = cursor;
@@ -6046,21 +6044,16 @@ function buildSpectacle(categories, { format, niveau, duree, entracteOn, integre
   const categoryBudget = Math.max(0, duree - overhead);
   const budget1 = entracteOn ? Math.round(categoryBudget / 2) : categoryBudget;
   const budget2 = entracteOn ? categoryBudget - budget1 : 0;
-  // La durée moyenne d'une catégorie inclut désormais la transition de ~2 min vers la suivante,
-  // pour ne pas surestimer le nombre de catégories qui tiennent réellement dans le temps imparti.
-  const avgWithTransition = SPECTACLE_CATEGORY_AVG_MIN + SPECTACLE_TRANSITION_MIN;
-  // Nombre de catégories imposé pour les formats courts, peu importe le calcul par durée moyenne :
-  // 4 pour 30 min, 8 pour 60 min (réparties en 2 si l'entracte est coché).
-  const maxCount1 =
-    duree === 30 ? (entracteOn ? 2 : 4)
-    : duree === 60 ? (entracteOn ? 4 : 8)
-    : duree === 120 && entracteOn ? 6
-    : Math.max(1, Math.round(budget1 / avgWithTransition));
-  const maxCount2 = !entracteOn ? 0
-    : duree === 30 ? 2
-    : duree === 60 ? 4
-    : duree === 120 ? 6
-    : Math.max(1, Math.round(budget2 / avgWithTransition));
+  // Le nombre de catégories n'est plus plafonné à une valeur fixe par durée : c'est le budget de
+  // temps restant (budget1/budget2) qui détermine combien de catégories sont réellement proposées,
+  // pour que la durée totale du spectacle corresponde à la durée demandée. Auparavant, un plafond
+  // fixe (ex. 6 catégories pour 120 min + entracte) pouvait arrêter le tirage bien avant d'avoir
+  // consommé tout le budget disponible, écourtant le spectacle de plusieurs dizaines de minutes.
+  // Le plafond ci-dessous ne sert que de garde-fou contre un nombre de catégories absurde si la
+  // bibliothèque ne contenait que des fiches extrêmement courtes.
+  const SAFETY_MAX_CATEGORIES = 25;
+  const maxCount1 = SAFETY_MAX_CATEGORIES;
+  const maxCount2 = entracteOn ? SAFETY_MAX_CATEGORIES : 0;
 
   const pickFor = (budget, exclude, maxCount) => {
     let b = budget, picked = [];
@@ -6137,7 +6130,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
   const [niveau, setNiveau] = useState("");
   const [entracteOn, setEntracteOn] = useState(true);
   const [integrerFavoris, setIntegrerFavoris] = useState(false);
-  const [startTime, setStartTime] = useState("");
+  const [startTime, setStartTime] = useState("20:00");
   const [commencerEchauffementScene, setCommencerEchauffementScene] = useState(false);
   const result = plan;
   const setResult = setPlan;
@@ -6171,6 +6164,10 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
     if (!result) return;
     setResult({ ...result, stageWarmup: ex });
     setStageWarmupPicker(false);
+  };
+  const removeStageWarmup = () => {
+    if (!result) return;
+    setResult({ ...result, stageWarmup: null });
   };
 
   const setMatchMode = (part, idx, mode) => {
@@ -6324,10 +6321,15 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
 
       {result && (
         <>
+          {/* Le spectacle commence toujours par l'introduction : aucune catégorie (ni l'échauffement de
+              scène) n'est jamais placée avant elle. L'échauffement de scène, s'il est activé, passe en
+              tout premier juste après. */}
+          <IndexCard><span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">Introduction — {SPECTACLE_INTRO_MIN} min{schedule ? ` — ${minutesToTime(schedule.introStart)}` : ""}</span></IndexCard>
+          <DropZone />
           {result.stageWarmup && (
             <>
               {schedule && (
-                <div className="text-xs font-semibold mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.brass }}>
+                <div className="text-xs font-semibold mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.brass, marginTop: -6, lineHeight: 1 }}>
                   🕐 {minutesToTime(schedule.stageWarmupStart)}
                 </div>
               )}
@@ -6355,10 +6357,13 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                     <Btn small variant="ghost" onClick={() => setStageWarmupPicker(true)}>Modifier</Btn>
                   </div>
                 </div>
+                <div className="flex justify-end items-center mt-2">
+                  <button onClick={removeStageWarmup} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
+                </div>
               </IndexCard>
               {stageWarmupPicker && (
                 <ExercisePicker
-                  exercises={data.exercises.filter((e) => e.warmup)}
+                  exercises={data.exercises}
                   excludeIds={[result.stageWarmup.id]}
                   onSelect={pickStageWarmupManually}
                   onCancel={() => setStageWarmupPicker(false)}
@@ -6367,8 +6372,6 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
               <DropZone />
             </>
           )}
-          <IndexCard><span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">Introduction — {SPECTACLE_INTRO_MIN} min{schedule ? ` — ${minutesToTime(schedule.introStart)}` : ""}</span></IndexCard>
-          <DropZone />
           {result.first.map((c, i) => (
             <React.Fragment key={`${c.id}-${i}`}>
               <div
@@ -6383,7 +6386,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                 }}
               >
                 {schedule && (
-                  <div className="text-xs font-semibold mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.brass }}>
+                  <div className="text-xs font-semibold mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.brass, marginTop: -6, lineHeight: 1 }}>
                     🕐 {minutesToTime(schedule.firstTimes[i])}
                   </div>
                 )}
@@ -6498,7 +6501,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                 }}
               >
                 {schedule && (
-                  <div className="text-xs font-semibold mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.brass }}>
+                  <div className="text-xs font-semibold mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.brass, marginTop: -6, lineHeight: 1 }}>
                     🕐 {minutesToTime(schedule.secondTimes[i])}
                   </div>
                 )}
@@ -7744,12 +7747,14 @@ function exportSpectaclePlanPDF(plan, data) {
       )
     : null;
 
+  // Le spectacle commence toujours par l'introduction ; l'échauffement de scène (s'il est activé)
+  // passe juste après, jamais avant.
+  addLine(`Introduction${schedule ? ` — ${minutesToTime(schedule.introStart)}` : ""}`, { bold: true, gap: 9 });
+
   if (plan.stageWarmup) {
     const timeLabel = schedule ? ` — ${minutesToTime(schedule.stageWarmupStart)}` : "";
     addLine(`Échauffement de scène : ${plan.stageWarmup.title}${timeLabel} — ${plan.stageWarmup.duration} min`, { bold: true, gap: 9 });
   }
-
-  addLine(`Introduction${schedule ? ` — ${minutesToTime(schedule.introStart)}` : ""}`, { bold: true, gap: 9 });
 
   catIds.forEach((id, i) => {
     if (entracte && i === placementIdx) {
