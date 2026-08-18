@@ -5382,9 +5382,15 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
     if (picker.mode === "add") {
       setPlan({ ...plan, middle: [...plan.middle, ex] });
     } else if (picker.slot === "warmup") {
-      setPlan({ ...plan, warmups: plan.warmups.map((e, i) => (i === picker.idx ? ex : e)) });
+      // On garde le temps réservé pour ce créneau (resserré pour tenir dans la durée du cours),
+      // plutôt que la durée brute de la fiche choisie, pour ne pas faire dériver le total affiché.
+      const oldBudget = plan.warmups[picker.idx]?.actualDuration ?? plan.warmups[picker.idx]?.duration ?? 5;
+      const exWithDuration = { ...ex, actualDuration: Math.min(ex.duration ?? 5, oldBudget) };
+      setPlan({ ...plan, warmups: plan.warmups.map((e, i) => (i === picker.idx ? exWithDuration : e)) });
     } else {
-      setPlan({ ...plan, middle: plan.middle.map((e, i) => (i === picker.idx ? ex : e)) });
+      const oldBudget = plan.middle[picker.idx]?.actualDuration ?? plan.middle[picker.idx]?.duration ?? 5;
+      const exWithDuration = { ...ex, actualDuration: Math.min(ex.duration ?? 5, oldBudget) };
+      setPlan({ ...plan, middle: plan.middle.map((e, i) => (i === picker.idx ? exWithDuration : e)) });
     }
     setPicker(null);
   };
@@ -5392,8 +5398,14 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
   const pickCatManually = (cat) => {
     if (!plan || !catPicker) return;
     saveScroll();
-    if (catPicker.mode === "add") setPlan({ ...plan, impro: [...plan.impro, cat] });
-    else setPlan({ ...plan, impro: plan.impro.map((c, i) => (i === catPicker.idx ? cat : c)) });
+    if (catPicker.mode === "add") {
+      setPlan({ ...plan, impro: [...plan.impro, cat] });
+    } else {
+      // Idem : on garde le temps réservé pour ce créneau plutôt que la durée brute de la fiche.
+      const oldBudget = plan.impro[catPicker.idx]?.actualDuration ?? plan.impro[catPicker.idx]?.duration ?? 5;
+      const catWithDuration = { ...cat, actualDuration: Math.min(cat.duration ?? 5, oldBudget) };
+      setPlan({ ...plan, impro: plan.impro.map((c, i) => (i === catPicker.idx ? catWithDuration : c)) });
+    }
     setCatPicker(null);
   };
 
@@ -5441,7 +5453,11 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
     } else if (source === poolBase && (objectifs.length > 0 || thematiques.length > 0)) {
       matchInfo = { type: "exhausted" };
     }
-    const withMatch = { ...pick, matchInfo };
+    // On garde le temps réservé pour ce créneau (resserré pour tenir dans la durée du cours),
+    // plutôt que la durée brute de la fiche tirée, pour ne pas faire dériver le total affiché.
+    const oldList = slot === "warmup" ? plan.warmups : plan.middle;
+    const oldBudget = oldList[idx]?.actualDuration ?? oldList[idx]?.duration ?? 5;
+    const withMatch = { ...pick, matchInfo, actualDuration: Math.min(pick.duration ?? 5, oldBudget) };
     if (slot === "warmup") setPlan({ ...plan, warmups: plan.warmups.map((e, i) => (i === idx ? withMatch : e)) });
     else setPlan({ ...plan, middle: plan.middle.map((e, i) => (i === idx ? withMatch : e)) });
   };
@@ -5488,7 +5504,10 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
     } else if (source === pool && (objectifs.length > 0 || thematiques.length > 0)) {
       matchInfo = { type: "exhausted" };
     }
-    setPlan({ ...plan, impro: plan.impro.map((c, i) => (i === idx ? { ...pick, matchInfo } : c)) });
+    // Idem : on garde le temps réservé pour ce créneau plutôt que la durée brute de la fiche tirée.
+    const oldBudget = plan.impro[idx]?.actualDuration ?? plan.impro[idx]?.duration ?? 5;
+    const actualDuration = Math.min(pick.duration ?? 5, oldBudget);
+    setPlan({ ...plan, impro: plan.impro.map((c, i) => (i === idx ? { ...pick, matchInfo, actualDuration } : c)) });
   };
   const removeCat = (idx) => {
     if (!plan) return;
@@ -6118,18 +6137,25 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
     const byFormat = format ? pool.filter((c) => c.showTypes?.includes(format)) : [];
     const pick = pickRandom(byFormat.length > 0 ? byFormat : pool);
     if (!pick) return;
-    const copy = { ...result, [part]: result[part].map((c, i) => (i === idx ? { ...pick, matchMode: "Mixte" } : c)) };
+    // On garde le temps réservé pour ce créneau (resserré pour tenir dans la durée du spectacle),
+    // plutôt que la durée brute de la fiche tirée, pour ne pas faire dériver le total affiché.
+    const oldBudget = result[part][idx]?.actualDuration ?? result[part][idx]?.duration ?? 5;
+    const actualDuration = Math.min(pick.duration ?? 5, oldBudget);
+    const copy = { ...result, [part]: result[part].map((c, i) => (i === idx ? { ...pick, matchMode: "Mixte", actualDuration } : c)) };
     setResult(copy);
   };
   const saveScroll = usePreserveScroll();
   const pickCatManually = (cat) => {
     if (!result || !catPicker) return;
     saveScroll();
-    const catWithMode = { ...cat, matchMode: "Mixte" };
     let copy;
     if (catPicker.mode === "add") {
+      const catWithMode = { ...cat, matchMode: "Mixte" };
       copy = { ...result, [catPicker.part]: [...result[catPicker.part], catWithMode] };
     } else {
+      // Idem : on garde le temps réservé pour ce créneau plutôt que la durée brute de la fiche.
+      const oldBudget = result[catPicker.part][catPicker.idx]?.actualDuration ?? result[catPicker.part][catPicker.idx]?.duration ?? 5;
+      const catWithMode = { ...cat, matchMode: "Mixte", actualDuration: Math.min(cat.duration ?? 5, oldBudget) };
       copy = { ...result, [catPicker.part]: result[catPicker.part].map((c, i) => (i === catPicker.idx ? catWithMode : c)) };
     }
     setResult(copy);
@@ -6145,7 +6171,11 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
   // Durées effectivement retenues (resserrées pour tenir dans le temps demandé) — transmises au PDF
   // pour qu'il affiche exactement les mêmes durées/total que cet écran (voir exportSpectaclePlanPDF).
   const durationsById = {};
-  allCats.forEach((c) => { durationsById[c.id] = c.actualDuration ?? c.duration ?? 5; });
+  const matchModeById = {};
+  allCats.forEach((c) => {
+    durationsById[c.id] = c.actualDuration ?? c.duration ?? 5;
+    if (format === "Match") matchModeById[c.id] = c.matchMode || "Mixte";
+  });
   // Heures estimées de passage de chaque catégorie, calculées à partir de l'heure de début choisie
   // (nulles si aucune heure n'a été précisée) — voir computeSpectacleSchedule.
   const schedule = result && startTime
@@ -6246,7 +6276,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                   </div>
                 )}
                 <IndexCard>
-                  <div className="flex justify-between items-start">
+                  <div className="flex justify-between items-start gap-2">
                     <div className="flex-1" onClick={() => handleCardTap(c.id)} style={{ cursor: "pointer" }}>
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5">
@@ -6361,7 +6391,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                   </div>
                 )}
                 <IndexCard>
-                  <div className="flex justify-between items-start">
+                  <div className="flex justify-between items-start gap-2">
                     <div className="flex-1" onClick={() => handleCardTap(c.id)} style={{ cursor: "pointer" }}>
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5">
@@ -6468,6 +6498,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                   format, duree,
                   categoryIds: allCats.map((c) => c.id),
                   durationsById,
+                  matchModeById,
                   entracte: entracteOn ? { duree: SPECTACLE_ENTRACTE_MIN, firstCount: result.first.length } : null,
                   startTime: startTime || null,
                 },
@@ -6486,6 +6517,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                     id: uid(), name, format, duree,
                     categoryIds: allCats.map((c) => c.id),
                     durationsById,
+                    matchModeById,
                     entracte: entracteOn ? { duree: SPECTACLE_ENTRACTE_MIN, firstCount: result.first.length } : null,
                     startTime: startTime || null,
                   });
@@ -6592,14 +6624,27 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
     // cochée ou que les possibilités sont épuisées, on continue avec le reste.
     const matched = tags.length > 0 ? pool.filter((e) => tags.includes(e.groupe)) : [];
     const pick = pickRandom(matched.length > 0 ? matched : pool);
-    if (pick) setList((prev) => prev.map((e, i) => (i === idx ? { ...pick, actualDuration: pick.duration } : e)));
+    // On garde le temps réservé pour ce créneau (resserré pour tenir dans la durée de l'échauffement),
+    // plutôt que la durée brute de la fiche tirée, pour ne pas faire dériver le total affiché.
+    if (pick) setList((prev) => prev.map((e, i) => {
+      if (i !== idx) return e;
+      const oldBudget = e?.actualDuration ?? e?.duration ?? 5;
+      return { ...pick, actualDuration: Math.min(pick.duration ?? 5, oldBudget) };
+    }));
   };
   const saveScroll = usePreserveScroll();
   const pickManually = (ex) => {
     if (!picker) return;
     saveScroll();
-    if (picker.mode === "add") setList((prev) => [...prev, ex]);
-    else setList((prev) => prev.map((e, i) => (i === picker.idx ? ex : e)));
+    if (picker.mode === "add") {
+      setList((prev) => [...prev, ex]);
+    } else {
+      setList((prev) => prev.map((e, i) => {
+        if (i !== picker.idx) return e;
+        const oldBudget = e?.actualDuration ?? e?.duration ?? 5;
+        return { ...ex, actualDuration: Math.min(ex.duration ?? 5, oldBudget) };
+      }));
+    }
     setPicker(null);
   };
 
@@ -7538,6 +7583,7 @@ function exportSpectaclePlanPDF(plan, data) {
 
   const durationsById = plan.durationsById || {};
   const catDuration = (c) => Number(durationsById[c.id] ?? c.duration ?? 5);
+  const matchModeById = plan.matchModeById || {};
 
   addLine(`Spectacle : ${plan.name}`, { size: 16, bold: true, gap: 10 });
   addLine(`Format : ${plan.format || "non précisé"} — Durée totale estimée : ${plan.duree} min`, { size: 11, gap: 10 });
@@ -7592,7 +7638,8 @@ function exportSpectaclePlanPDF(plan, data) {
     const timeLabel = schedule ? ` — ${minutesToTime(i < placementIdx ? schedule.firstTimes[i] : schedule.secondTimes[i - placementIdx])}` : "";
     const c = data.categories.find((x) => x.id === id);
     if (!c) { addLine(`${i + 1}. (catégorie supprimée)${timeLabel}`, { gap: 8 }); return; }
-    addLine(`${i + 1}. ${c.name}${timeLabel} — ${catDuration(c)} min`, { bold: true, gap: 6 });
+    const modeLabel = plan.format === "Match" ? ` (${matchModeById[id] || "Mixte"})` : "";
+    addLine(`${i + 1}. ${c.name}${modeLabel}${timeLabel} — ${catDuration(c)} min`, { bold: true, gap: 6 });
     addLine(c.summary, { size: 10, gap: 9 });
     if (c.archetypes?.length > 0) {
       addLine(`Archétypes : ${c.archetypes.map((a) => a.name).join(", ")}`, { size: 9, gap: 9 });
