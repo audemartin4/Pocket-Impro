@@ -5971,8 +5971,8 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
 const SPECTACLE_INTRO_MIN = 5;
 const SPECTACLE_SALUT_MIN = 5;
 const SPECTACLE_ENTRACTE_MIN = 15;
-// Temps de transition réservé entre deux catégories (présentation de la catégorie suivante).
-const SPECTACLE_TRANSITION_MIN = 2;
+// Temps de transition réservé entre deux catégories (présentation de la catégorie suivante par le MC).
+const SPECTACLE_TRANSITION_MIN = 3;
 // Durée moyenne réaliste d'une catégorie jouée en spectacle, pour déduire un nombre de catégories
 // cohérent avec la durée voulue — en scène, une catégorie dépasse rarement 4 min (plutôt 3-4 min),
 // sauf les catégories Univers qui peuvent aller jusqu'à 6 min.
@@ -6053,14 +6053,20 @@ function buildSpectacle(categories, { format, niveau, duree, entracteOn, integre
   const categoryBudget = Math.max(0, duree - overhead);
   const budget1 = entracteOn ? Math.round(categoryBudget / 2) : categoryBudget;
   const budget2 = entracteOn ? categoryBudget - budget1 : 0;
-  // La durée moyenne d'une catégorie inclut la transition de ~2 min vers la suivante, pour ne pas
-  // surestimer le nombre de catégories qui tiennent réellement dans le temps imparti. Nombre de
-  // catégories ciblé par demi-spectacle, déduit du budget disponible — la bibliothèque (pool
-  // disponible, contraintes de diversité) fait naturellement varier ce nombre de ± 1 par entracte
-  // (± 2 sur l'ensemble du spectacle), sans qu'il soit besoin de l'imposer.
+  // La durée moyenne d'une catégorie inclut la transition vers la suivante, pour ne pas surestimer
+  // le nombre de catégories qui tiennent réellement dans le temps imparti. Nombre de catégories
+  // ciblé par demi-spectacle, déduit du budget disponible — la bibliothèque (pool disponible,
+  // contraintes de diversité) fait naturellement varier ce nombre de ± 1 par entracte (± 2 sur
+  // l'ensemble du spectacle), sans qu'il soit besoin de l'imposer.
   const avgWithTransition = SPECTACLE_CATEGORY_AVG_MIN + SPECTACLE_TRANSITION_MIN;
-  const maxCount1 = Math.max(1, Math.round(budget1 / avgWithTransition));
-  const maxCount2 = entracteOn ? Math.max(1, Math.round(budget2 / avgWithTransition)) : 0;
+  let maxCount1 = Math.max(1, Math.round(budget1 / avgWithTransition));
+  let maxCount2 = entracteOn ? Math.max(1, Math.round(budget2 / avgWithTransition)) : 0;
+  // Pour un spectacle de 120 min avec entracte, on ne dépasse jamais 8 catégories par demi-spectacle
+  // (le calcul ci-dessus vise naturellement plutôt 6-7, mais ce plafond garde une marge de sécurité).
+  if (duree === 120 && entracteOn) {
+    maxCount1 = Math.min(maxCount1, 8);
+    maxCount2 = Math.min(maxCount2, 8);
+  }
 
   const pickFor = (budget, exclude, maxCount) => {
     let b = budget, picked = [];
@@ -6397,7 +6403,9 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                   userSelect: "none", WebkitUserSelect: "none", touchAction: "none",
                 }}
               >
-                {schedule && (
+                {/* Seule la dernière catégorie avant l'entracte (ou la dernière du spectacle si pas
+                    d'entracte) affiche son heure — pas chaque carte, pour ne pas surcharger l'écran. */}
+                {schedule && i === result.first.length - 1 && (
                   <div className="text-xs font-semibold mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.brass, marginTop: -6, lineHeight: 1 }}>
                     🕐 {minutesToTime(schedule.firstTimes[i])}
                   </div>
@@ -6512,7 +6520,8 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                   userSelect: "none", WebkitUserSelect: "none", touchAction: "none",
                 }}
               >
-                {schedule && (
+                {/* Seule la dernière catégorie du spectacle affiche son heure — pas chaque carte. */}
+                {schedule && i === result.second.length - 1 && (
                   <div className="text-xs font-semibold mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.brass, marginTop: -6, lineHeight: 1 }}>
                     🕐 {minutesToTime(schedule.secondTimes[i])}
                   </div>
