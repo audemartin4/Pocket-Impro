@@ -954,6 +954,17 @@ function mergeMissingCategories(data) {
     tagCaseAccentMergeV1 = true;
   }
 
+  // Marque une seule fois la fiche "Machine" comme utilisable en échauffement et éligible comme
+  // échauffement de scène pour ouvrir un spectacle — ne se réexécute plus ensuite, pour ne pas
+  // revenir sur un décochage manuel ultérieur.
+  let stageWarmupMachineV1 = data._stageWarmupMachineV1;
+  if (!stageWarmupMachineV1 && exercises) {
+    exercises = exercises.map((e) =>
+      e.title === "Machine" && !e.stageWarmup ? { ...e, warmup: true, stageWarmup: true } : e
+    );
+    stageWarmupMachineV1 = true;
+  }
+
   // Le niveau "Expert" est retiré de l'appli : on convertit les fiches déjà enregistrées vers "Avancé".
   if (exercises?.some((e) => e.level === "Expert")) {
     exercises = exercises.map((e) => (e.level === "Expert" ? { ...e, level: "Avancé" } : e));
@@ -972,9 +983,10 @@ function mergeMissingCategories(data) {
     cercleTagV1 === data._cercleTagV1 &&
     musiqueTagV1 === data._musiqueTagV1 &&
     materialMusiqueV1 === data._materialMusiqueV1 &&
-    tagCaseAccentMergeV1 === data._tagCaseAccentMergeV1
+    tagCaseAccentMergeV1 === data._tagCaseAccentMergeV1 &&
+    stageWarmupMachineV1 === data._stageWarmupMachineV1
   ) return data;
-  return { ...data, categories, showTypes, showConcepts, exercises, objectifs, thematiques, _cercleTagV1: cercleTagV1, _musiqueTagV1: musiqueTagV1, _materialMusiqueV1: materialMusiqueV1, _tagCaseAccentMergeV1: tagCaseAccentMergeV1 };
+  return { ...data, categories, showTypes, showConcepts, exercises, objectifs, thematiques, _cercleTagV1: cercleTagV1, _musiqueTagV1: musiqueTagV1, _materialMusiqueV1: materialMusiqueV1, _tagCaseAccentMergeV1: tagCaseAccentMergeV1, _stageWarmupMachineV1: stageWarmupMachineV1 };
 }
 
 /* ---------- Persistence ---------- */
@@ -2980,7 +2992,7 @@ function ParametresTab({ setTab, currentUser, profile }) {
 /* ---------- Exercices ---------- */
 function ExerciseForm({ initial, showTypes, objectifsList, thematiquesList, familiesList, onCreateFamily, isAdmin, creatorTroupe, creatorUsername, onSave, onCancel }) {
   const [f, setF] = useState(
-    initial || { title: "", summary: "", level: "Débutant", objectives: [], thematiques: [], players: 2, duration: 10, format: "Solo simultané", groupSize: 2, warmup: false, application: false, showTypes: [], phase: "Impro", favorite: false, createdByUser: true, showTroupeOnCard: false }
+    initial || { title: "", summary: "", level: "Débutant", objectives: [], thematiques: [], players: 2, duration: 10, format: "Solo simultané", groupSize: 2, warmup: false, stageWarmup: false, application: false, showTypes: [], phase: "Impro", favorite: false, createdByUser: true, showTroupeOnCard: false }
   );
   const isCommunitySubmission = !initial && !isAdmin;
   return (
@@ -3063,9 +3075,17 @@ function ExerciseForm({ initial, showTypes, objectifsList, thematiquesList, fami
         </label>
       </Field>
       {f.warmup && (
-        <Field label="Types de spectacle concernés (vide = tous)">
-          <MultiTagPicker allOptions={showTypes} selected={f.showTypes} onChange={(v) => setF({ ...f, showTypes: v })} placeholder="Ajouter un type…" />
-        </Field>
+        <>
+          <Field label="Échauffement de scène">
+            <label className="flex items-center gap-2 text-sm" style={{ fontFamily: FONT_BODY, color: COLORS.text }}>
+              <input type="checkbox" checked={!!f.stageWarmup} onChange={(e) => setF({ ...f, stageWarmup: e.target.checked })} />
+              Cet échauffement peut servir d'échauffement de scène pour commencer un spectacle.
+            </label>
+          </Field>
+          <Field label="Types de spectacle concernés (vide = tous)">
+            <MultiTagPicker allOptions={showTypes} selected={f.showTypes} onChange={(v) => setF({ ...f, showTypes: v })} placeholder="Ajouter un type…" />
+          </Field>
+        </>
       )}
       {isCommunitySubmission && (
         <IndexCard style={{ background: COLORS.cardEdge + "33" }}>
@@ -5948,9 +5968,11 @@ const SPECTACLE_START_TIME_OPTIONS = Array.from({ length: 24 * 4 }, (_, i) => mi
 // catégories consécutives (sauf la première de chaque partie), puis l'entracte (si coché) entre
 // les deux parties. Utilisé à la fois par l'écran (GenerateurSpectacleTab) et par l'export PDF,
 // pour être certain que les heures affichées correspondent exactement.
-function computeSpectacleSchedule(firstDurations, secondDurations, entracteOn, startTime) {
+function computeSpectacleSchedule(firstDurations, secondDurations, entracteOn, startTime, stageWarmupMinutes = 0) {
   if (!startTime) return null;
-  let cursor = timeToMinutes(startTime) + SPECTACLE_INTRO_MIN;
+  const stageWarmupStart = stageWarmupMinutes > 0 ? timeToMinutes(startTime) : null;
+  const introStart = timeToMinutes(startTime) + (stageWarmupMinutes || 0);
+  let cursor = introStart + SPECTACLE_INTRO_MIN;
   const firstTimes = firstDurations.map((dur, i) => {
     if (i > 0) cursor += SPECTACLE_TRANSITION_MIN;
     const t = cursor;
@@ -5968,10 +5990,10 @@ function computeSpectacleSchedule(firstDurations, secondDurations, entracteOn, s
     cursor += dur;
     return t;
   });
-  return { firstTimes, secondTimes, entracteStart, salutStart: cursor };
+  return { firstTimes, secondTimes, entracteStart, salutStart: cursor, stageWarmupStart, introStart };
 }
 
-function buildSpectacle(categories, { format, niveau, duree, entracteOn, integrerFavoris }) {
+function buildSpectacle(categories, { format, niveau, duree, entracteOn, integrerFavoris, stageWarmupMinutes = 0 }) {
   // Le niveau coché est prioritaire, mais un niveau adjacent reste autorisé (Débutant coché →
   // Confirmé accepté, pas Avancé ; Avancé coché → Confirmé accepté, pas Débutant). Les fiches
   // sans niveau précisé restent toujours autorisées.
@@ -5996,7 +6018,7 @@ function buildSpectacle(categories, { format, niveau, duree, entracteOn, integre
   // Introduction et salut final réservent toujours 5 min chacun ; l'entracte, si coché, réserve
   // 15 min fixes. Le temps restant est ce qui est disponible pour les catégories jouées (et les
   // transitions entre elles).
-  const overhead = SPECTACLE_INTRO_MIN + SPECTACLE_SALUT_MIN + (entracteOn ? SPECTACLE_ENTRACTE_MIN : 0);
+  const overhead = SPECTACLE_INTRO_MIN + SPECTACLE_SALUT_MIN + (entracteOn ? SPECTACLE_ENTRACTE_MIN : 0) + (stageWarmupMinutes || 0);
   const categoryBudget = Math.max(0, duree - overhead);
   const budget1 = entracteOn ? Math.round(categoryBudget / 2) : categoryBudget;
   const budget2 = entracteOn ? categoryBudget - budget1 : 0;
@@ -6092,18 +6114,39 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
   const [entracteOn, setEntracteOn] = useState(true);
   const [integrerFavoris, setIntegrerFavoris] = useState(false);
   const [startTime, setStartTime] = useState("");
+  const [commencerEchauffementScene, setCommencerEchauffementScene] = useState(false);
   const result = plan;
   const setResult = setPlan;
   const [toastMsg, showToast] = useToast();
   const [name, setName] = useState("");
   const [catPicker, setCatPicker] = useState(null); // { part, idx }
+  const [stageWarmupPicker, setStageWarmupPicker] = useState(false);
   const [expandedId, setExpandedId] = useState(null); // affiche la description complète d'une carte
   const handleCardTap = (id) => setExpandedId(expandedId === id ? null : id);
 
   const generate = () => {
-    const built = buildSpectacle(data.categories, { format, niveau, duree, entracteOn, integrerFavoris });
+    // L'échauffement de scène (si coché) est tiré en premier, car sa durée réduit le temps
+    // disponible pour les catégories (voir buildSpectacle) — il doit toujours passer avant
+    // l'introduction et n'est jamais réinséré après l'entracte.
+    const stageWarmupPool = data.exercises.filter((e) => e.stageWarmup);
+    const stageWarmup = commencerEchauffementScene ? pickRandom(stageWarmupPool) : null;
+    const built = buildSpectacle(data.categories, { format, niveau, duree, entracteOn, integrerFavoris, stageWarmupMinutes: stageWarmup?.duration || 0 });
     const withMode = (arr) => arr.map((c) => ({ ...c, matchMode: "Mixte" }));
-    setResult({ ...built, first: withMode(built.first), second: withMode(built.second) });
+    setResult({ ...built, first: withMode(built.first), second: withMode(built.second), stageWarmup });
+  };
+
+  const replaceStageWarmup = () => {
+    if (!result) return;
+    const used = new Set(result.stageWarmup ? [result.stageWarmup.id] : []);
+    const pool = data.exercises.filter((e) => e.stageWarmup && !used.has(e.id));
+    const pick = pickRandom(pool.length > 0 ? pool : data.exercises.filter((e) => e.stageWarmup));
+    if (!pick) return;
+    setResult({ ...result, stageWarmup: pick });
+  };
+  const pickStageWarmupManually = (ex) => {
+    if (!result) return;
+    setResult({ ...result, stageWarmup: ex });
+    setStageWarmupPicker(false);
   };
 
   const setMatchMode = (part, idx, mode) => {
@@ -6183,7 +6226,8 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
         result.first.map((c) => c.actualDuration ?? c.duration ?? 5),
         result.second.map((c) => c.actualDuration ?? c.duration ?? 5),
         entracteOn,
-        startTime
+        startTime,
+        result.stageWarmup?.duration || 0
       )
     : null;
 
@@ -6244,6 +6288,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
         </div>
         <OuiNonField label="Intégrer mes favoris ?" value={integrerFavoris} onChange={setIntegrerFavoris} />
         <OuiNonField label="Avec entracte (15 min réservées) ?" value={entracteOn} onChange={setEntracteOn} />
+        <OuiNonField label="Commencer par un échauffement de scène ?" value={commencerEchauffementScene} onChange={setCommencerEchauffementScene} />
         <Field label="À quelle heure commence ton spectacle ?">
           <select className={inputClass} style={inputStyle} value={startTime} onChange={(e) => setStartTime(e.target.value)}>
             <option value="">Heure non précisée</option>
@@ -6255,7 +6300,50 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
 
       {result && (
         <>
-          <IndexCard><span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">Introduction — {SPECTACLE_INTRO_MIN} min{startTime ? ` — ${startTime}` : ""}</span></IndexCard>
+          {result.stageWarmup && (
+            <>
+              {schedule && (
+                <div className="text-xs font-semibold mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.brass }}>
+                  🕐 {minutesToTime(schedule.stageWarmupStart)}
+                </div>
+              )}
+              <IndexCard>
+                <div className="flex justify-between items-start gap-2">
+                  <div className="flex-1">
+                    <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{result.stageWarmup.title}</h3>
+                    <div className="mt-1 mb-1" style={{ minHeight: 22 }}>
+                      {result.stageWarmup.groupe && (
+                        <span className="inline-block text-xs px-2 py-0.5 rounded-full" style={{ fontFamily: FONT_MONO, background: COLORS.accent, color: "#fff" }}>
+                          {result.stageWarmup.groupe}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-xs mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
+                      <span>{result.stageWarmup.duration} min</span>
+                      {result.stageWarmup.energy && <span>· {ENERGY_DOT[result.stageWarmup.energy] || ""} énergie {result.stageWarmup.energy}</span>}
+                    </div>
+                    <p style={{ fontFamily: FONT_BODY, color: COLORS.textSoft, minHeight: "2.6em" }} className="text-sm">
+                      {result.stageWarmup.summary}
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-1 items-end">
+                    <Btn small variant="ghost" onClick={replaceStageWarmup}>Aléatoire</Btn>
+                    <Btn small variant="ghost" onClick={() => setStageWarmupPicker(true)}>Modifier</Btn>
+                  </div>
+                </div>
+              </IndexCard>
+              {stageWarmupPicker && (
+                <ExercisePicker
+                  exercises={data.exercises.filter((e) => e.warmup)}
+                  excludeIds={[result.stageWarmup.id]}
+                  onSelect={pickStageWarmupManually}
+                  onCancel={() => setStageWarmupPicker(false)}
+                />
+              )}
+              <DropZone />
+            </>
+          )}
+          <IndexCard><span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">Introduction — {SPECTACLE_INTRO_MIN} min{schedule ? ` — ${minutesToTime(schedule.introStart)}` : ""}</span></IndexCard>
           <DropZone />
           {result.first.map((c, i) => (
             <React.Fragment key={`${c.id}-${i}`}>
@@ -6501,6 +6589,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                   matchModeById,
                   entracte: entracteOn ? { duree: SPECTACLE_ENTRACTE_MIN, firstCount: result.first.length } : null,
                   startTime: startTime || null,
+                  stageWarmup: result.stageWarmup ? { title: result.stageWarmup.title, duration: result.stageWarmup.duration } : null,
                 },
                 data
               )}
@@ -6520,6 +6609,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                     matchModeById,
                     entracte: entracteOn ? { duree: SPECTACLE_ENTRACTE_MIN, firstCount: result.first.length } : null,
                     startTime: startTime || null,
+                    stageWarmup: result.stageWarmup ? { title: result.stageWarmup.title, duration: result.stageWarmup.duration } : null,
                   });
                   return d;
                 });
@@ -7625,11 +7715,17 @@ function exportSpectaclePlanPDF(plan, data) {
         catIds.slice(0, placementIdx).map((id) => Number(durationsById[id] ?? 5)),
         catIds.slice(placementIdx).map((id) => Number(durationsById[id] ?? 5)),
         !!entracte,
-        plan.startTime
+        plan.startTime,
+        plan.stageWarmup?.duration || 0
       )
     : null;
 
-  addLine(`Introduction${plan.startTime ? ` — ${plan.startTime}` : ""}`, { bold: true, gap: 9 });
+  if (plan.stageWarmup) {
+    const timeLabel = schedule ? ` — ${minutesToTime(schedule.stageWarmupStart)}` : "";
+    addLine(`Échauffement de scène : ${plan.stageWarmup.title}${timeLabel} — ${plan.stageWarmup.duration} min`, { bold: true, gap: 9 });
+  }
+
+  addLine(`Introduction${schedule ? ` — ${minutesToTime(schedule.introStart)}` : ""}`, { bold: true, gap: 9 });
 
   catIds.forEach((id, i) => {
     if (entracte && i === placementIdx) {
