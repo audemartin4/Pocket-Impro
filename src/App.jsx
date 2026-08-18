@@ -6109,6 +6109,9 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
         <DragGhost x={dragPos.x} y={dragPos.y} title={draggedCat.name} subtitle={`${draggedCat.duration || 5} min`} />
       )}
       <SectionHeader icon={Theater} title="Créer un spectacle" subtitle="Un déroulé complet, prêt à ajuster." />
+      <p className="text-sm mb-3" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+        Il est possible que tu n'aies pas le temps de faire toutes les catégories proposées, n'hésite pas à en sauter ou en ajouter lors de ton spectacle. Improvise et adapte !
+      </p>
       <Toast toast={toastMsg} />
       <IndexCard>
         <div className="grid grid-cols-2 gap-2">
@@ -6156,11 +6159,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
           </Field>
         </div>
         <OuiNonField label="Intégrer mes favoris ?" value={integrerFavoris} onChange={setIntegrerFavoris} />
-        <Field label="Entracte">
-          <label className="flex items-center gap-2 text-sm mb-2" style={{ fontFamily: FONT_BODY, color: COLORS.text }}>
-            <input type="checkbox" checked={entracteOn} onChange={(e) => setEntracteOn(e.target.checked)} /> Avec entracte (15 min réservées)
-          </label>
-        </Field>
+        <OuiNonField label="Avec entracte (15 min réservées) ?" value={entracteOn} onChange={setEntracteOn} />
         <Btn variant="accent" onClick={generate}><Sparkles size={14} /> Créer</Btn>
       </IndexCard>
 
@@ -6260,7 +6259,9 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
             </React.Fragment>
           ))}
           {entracteOn && (
-            <IndexCard><span style={{ fontFamily: FONT_MONO, color: COLORS.brass }} className="text-xs uppercase">Entracte — {SPECTACLE_ENTRACTE_MIN} min</span></IndexCard>
+            <IndexCard style={{ background: COLORS.brass, border: `2px solid ${COLORS.ink}`, textAlign: "center", padding: "14px" }}>
+              <span style={{ fontFamily: FONT_MONO, color: COLORS.card }} className="text-lg font-bold uppercase tracking-wide">Entracte — {SPECTACLE_ENTRACTE_MIN} min</span>
+            </IndexCard>
           )}
           <div className="mb-2">
             <Btn small variant="accent" onClick={() => setCatPicker({ mode: "add", part: "first" })}><Plus size={13} /> Ajouter une catégorie</Btn>
@@ -7460,11 +7461,22 @@ function exportSpectaclePlanPDF(plan, data) {
     }
   }
 
+  // Bloc entracte mis en valeur : espace avant/après + texte plus grand et centré, pour qu'il
+  // ressorte visuellement au milieu du déroulé plutôt que de se confondre avec les catégories.
+  const addEntracteBlock = () => {
+    if (y > 270) { doc.addPage(); y = 18; }
+    y += 6;
+    doc.setFontSize(15);
+    doc.setFont(undefined, "bold");
+    doc.text(`— Entracte (${entracte.duree} min) —`, pageWidth / 2, y, { align: "center" });
+    y += 13;
+  };
+
   addLine("Introduction", { bold: true, gap: 9 });
 
   catIds.forEach((id, i) => {
     if (entracte && i === placementIdx) {
-      addLine(`— Entracte (${entracte.duree} min) —`, { bold: true, gap: 9 });
+      addEntracteBlock();
     }
     const c = data.categories.find((x) => x.id === id);
     if (!c) { addLine(`${i + 1}. (catégorie supprimée)`, { gap: 8 }); return; }
@@ -7476,7 +7488,7 @@ function exportSpectaclePlanPDF(plan, data) {
   });
 
   if (entracte && placementIdx >= catIds.length) {
-    addLine(`— Entracte (${entracte.duree} min) —`, { bold: true, gap: 9 });
+    addEntracteBlock();
   }
 
   addLine("Salut final", { bold: true, gap: 9 });
