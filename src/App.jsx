@@ -240,6 +240,11 @@ const matchesKeywords = (query, ...fields) => {
 const DURATION_TOLERANCE = 2;
 const fitsBudget = (duration, remaining) => duration <= remaining + DURATION_TOLERANCE;
 const consumeBudget = (duration, remaining) => Math.max(0, remaining - Math.min(duration, remaining));
+// Durée minimale affichée sur une carte générée (cours, spectacle, échauffement) : en dessous, une
+// scène ou un exercice n'a plus vraiment de sens à jouer. Utilisée pour ne jamais retenir un élément
+// de plus une fois qu'il ne reste plus assez de budget pour lui laisser une durée correcte — mieux
+// vaut terminer un peu plus tôt que d'écraser un élément à 0 ou 1 minute.
+const MIN_CARD_DURATION = 2;
 const SECTIONS_EXERCICE = ["Échauffement", "Pré-impro", "Impro"];
 const FORMATS_JEU = ["Solo simultané", "En groupe simultané", "Tour à tour avec spectateur", "En cercle", "Déambulation"];
 const CONTEXTES_ECHAUFFEMENT = ["Match", "Cabaret", "Format Long", "Spectacle personnalisé"];
@@ -4960,7 +4965,7 @@ function buildCours(exercises, categories, { niveau, tempsTotal, nbEchauffements
     if (items.length === 0) return items;
     const per = Math.floor(totalBudget / items.length);
     const remainder = totalBudget - per * items.length;
-    return items.map((it, idx) => ({ ...it, actualDuration: Math.max(1, per + (idx < remainder ? 1 : 0)) }));
+    return items.map((it, idx) => ({ ...it, actualDuration: Math.max(MIN_CARD_DURATION, per + (idx < remainder ? 1 : 0)) }));
   };
   // Priorise les éléments non utilisés lors de la dernière génération (anti-répétition), puis,
   // si demandé, les favoris — sans jamais passer avant la correspondance thématique/objectifs,
@@ -5968,6 +5973,11 @@ const SPECTACLE_SALUT_MIN = 5;
 const SPECTACLE_ENTRACTE_MIN = 15;
 // Temps de transition réservé entre deux catégories (présentation de la catégorie suivante).
 const SPECTACLE_TRANSITION_MIN = 2;
+// Durée moyenne supposée d'une catégorie, pour déduire un nombre de catégories cohérent avec la
+// durée voulue (la plupart des catégories durent entre 2 et 6 minutes) — calé sur la référence :
+// cabaret + entracte + 90 min → 5 à 6 catégories par partie.
+// Référence : 6 catégories ≈ 40 minutes de spectacle, soit une durée moyenne de 40/6 min par catégorie.
+const SPECTACLE_CATEGORY_AVG_MIN = 40 / 6;
 
 function timeToMinutes(hhmm) {
   const [h, m] = hhmm.split(":").map(Number);
@@ -6044,16 +6054,24 @@ function buildSpectacle(categories, { format, niveau, duree, entracteOn, integre
   const categoryBudget = Math.max(0, duree - overhead);
   const budget1 = entracteOn ? Math.round(categoryBudget / 2) : categoryBudget;
   const budget2 = entracteOn ? categoryBudget - budget1 : 0;
-  // Le nombre de catégories n'est plus plafonné à une valeur fixe par durée : c'est le budget de
-  // temps restant (budget1/budget2) qui détermine combien de catégories sont réellement proposées,
-  // pour que la durée totale du spectacle corresponde à la durée demandée. Auparavant, un plafond
-  // fixe (ex. 6 catégories pour 120 min + entracte) pouvait arrêter le tirage bien avant d'avoir
-  // consommé tout le budget disponible, écourtant le spectacle de plusieurs dizaines de minutes.
-  // Le plafond ci-dessous ne sert que de garde-fou contre un nombre de catégories absurde si la
-  // bibliothèque ne contenait que des fiches extrêmement courtes.
-  const SAFETY_MAX_CATEGORIES = 25;
-  const maxCount1 = SAFETY_MAX_CATEGORIES;
-  const maxCount2 = entracteOn ? SAFETY_MAX_CATEGORIES : 0;
+  // La durée moyenne d'une catégorie inclut la transition de ~2 min vers la suivante, pour ne pas
+  // surestimer le nombre de catégories qui tiennent réellement dans le temps imparti.
+  const avgWithTransition = SPECTACLE_CATEGORY_AVG_MIN + SPECTACLE_TRANSITION_MIN;
+  // Nombre de catégories ciblé (± 1 selon ce que la bibliothèque peut réellement fournir) : valeurs
+  // établies pour les formats courts, peu importe le calcul par durée moyenne — 4 pour 30 min,
+  // 8 pour 60 min (réparties en 2 si l'entracte est coché), 6+6 pour 120 min + entracte. Le temps de
+  // chaque catégorie retenue est ensuite réparti à parts égales sur le budget réel (voir plus bas),
+  // pour que la durée totale du spectacle corresponde à la durée demandée.
+  const maxCount1 =
+    duree === 30 ? (entracteOn ? 2 : 4)
+    : duree === 60 ? (entracteOn ? 4 : 8)
+    : duree === 120 && entracteOn ? 6
+    : Math.max(1, Math.round(budget1 / avgWithTransition));
+  const maxCount2 = !entracteOn ? 0
+    : duree === 30 ? 2
+    : duree === 60 ? 4
+    : duree === 120 ? 6
+    : Math.max(1, Math.round(budget2 / avgWithTransition));
 
   const pickFor = (budget, exclude, maxCount) => {
     let b = budget, picked = [];
@@ -6099,13 +6117,22 @@ function buildSpectacle(categories, { format, niveau, duree, entracteOn, integre
       const chosen = wantsLibre ? libre : pickNormal(transition);
       if (!chosen) break;
       const dur = chosen.duration || 5;
-      picked.push({ ...chosen, actualDuration: Math.min(dur, Math.max(0, b - transition)) });
+      picked.push(chosen);
       // "Libre" reste volontairement hors de `exclude`/`localUsed` : elle peut revenir à chaque
       // 3e position, y compris plusieurs fois dans la même partie ou dans l'autre partie.
       if (chosen !== libre) { exclude.add(chosen.id); localUsed.add(chosen.id); }
       b = consumeBudget(dur + transition, b);
     }
-    return picked;
+    // Répartit le budget total (catégories + transitions) à parts égales entre les catégories
+    // retenues, plutôt que de garder la durée suggérée de chaque fiche (qui laissait souvent du
+    // temps inutilisé en fin de spectacle) — avec un plancher de MIN_CARD_DURATION pour ne jamais
+    // écraser une catégorie à 0 ou 1 minute.
+    if (picked.length === 0) return picked;
+    const transitionsTotal = (picked.length - 1) * SPECTACLE_TRANSITION_MIN;
+    const categoryTimeBudget = Math.max(0, budget - transitionsTotal);
+    const per = Math.floor(categoryTimeBudget / picked.length);
+    const remainder = categoryTimeBudget - per * picked.length;
+    return picked.map((c, idx) => ({ ...c, actualDuration: Math.max(MIN_CARD_DURATION, per + (idx < remainder ? 1 : 0)) }));
   };
 
   const exclude = new Set();
@@ -6691,21 +6718,23 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
       // épuisées, continue avec le reste du pool fourni.
       const shuffled = shuffleArray([...pool.filter(byLevel), ...pool]);
       for (const e of shuffled) {
-        if (budget <= 0) break;
+        // On s'arrête dès qu'il ne reste plus assez de budget pour une durée correcte, plutôt que
+        // de retenir un exercice de plus et l'écraser à 0 ou 1 minute.
+        if (budget < MIN_CARD_DURATION) break;
         if (picked.find((p) => p.id === e.id)) continue;
         if (fitsBudget(e.duration, budget)) { picked.push({ ...e, actualDuration: Math.min(e.duration, budget) }); budget = consumeBudget(e.duration, budget); }
       }
     };
     // Si les joueurs ne se connaissent pas, on intègre en priorité un échauffement de la famille
     // "Groupe, prénoms et confiance" (dès que le budget le permet).
-    if (joueursSeConnaissent === false) {
+    if (joueursSeConnaissent === false && budget >= MIN_CARD_DURATION) {
       const famillePool = warmupAll.filter((e) => e.groupe === "Groupe, prénoms et confiance" && fitsBudget(e.duration, budget));
       const famillePick = pickRandom(famillePool);
       if (famillePick) { picked.push({ ...famillePick, actualDuration: Math.min(famillePick.duration, budget) }); budget = consumeBudget(famillePick.duration, budget); }
     }
     // Au-delà de 6 participants, on intègre obligatoirement un échauffement de la famille "Cercle"
     // (plus adapté aux grands groupes) dès que le budget le permet.
-    if (participants > 6) {
+    if (participants > 6 && budget >= MIN_CARD_DURATION) {
       const cerclePool = warmupAll.filter((e) => e.groupe === "Cercle" && !picked.find((p) => p.id === e.id) && fitsBudget(e.duration, budget));
       const cerclePick = pickRandom(cerclePool);
       if (cerclePick) { picked.push({ ...cerclePick, actualDuration: Math.min(cerclePick.duration, budget) }); budget = consumeBudget(cerclePick.duration, budget); }
