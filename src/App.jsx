@@ -1989,6 +1989,9 @@ function Accueil({ setTab, hasCoursPlan, hasSpectaclePlan, hasEchauffementPlan }
           </button>
         ))}
       </div>
+      <p className="text-xs text-center mt-6" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+        Prochainement : Créer un ambassadeur
+      </p>
     </div>
   );
 }
@@ -6485,9 +6488,12 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                 <div className="flex justify-between items-start gap-2">
                   <div className="flex-1">
                     <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{result.stageWarmup.title}</h3>
-                    <div className="mt-1 mb-1" style={{ minHeight: 22 }}>
+                    <div className="flex flex-wrap items-center mt-1 mb-1" style={{ minHeight: 22 }}>
+                      <span className="inline-block text-xs px-2 py-0.5 rounded-full" style={{ fontFamily: FONT_MONO, background: COLORS.brass, color: "#fff" }}>
+                        Échauffement de scène
+                      </span>
                       {result.stageWarmup.groupe && (
-                        <span className="inline-block text-xs px-2 py-0.5 rounded-full" style={{ fontFamily: FONT_MONO, background: COLORS.accent, color: "#fff" }}>
+                        <span className="inline-block text-xs px-2 py-0.5 rounded-full ml-1" style={{ fontFamily: FONT_MONO, background: COLORS.accent, color: "#fff" }}>
                           {result.stageWarmup.groupe}
                         </span>
                       )}
@@ -6569,12 +6575,19 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                           carte suivante ne se décale et que le clic sur "Aléatoire" d'une carte voisine
                           n'atterrisse par erreur sur un autre bouton après le remplacement. */}
                       <div className="mt-1 mb-1" style={{ minHeight: 22 }}>
-                        {(c.tags || []).length > 0 && (
+                        {(c.tags || []).length > 0 ? (
                           <span
                             className="inline-block text-xs px-2 py-0.5 rounded-full"
                             style={{ fontFamily: FONT_MONO, background: "#B3382C", color: "#fff" }}
                           >
                             {c.tags.join(" · ")}
+                          </span>
+                        ) : c.name === "Libre" && (
+                          <span
+                            className="inline-block text-xs px-2 py-0.5 rounded-full"
+                            style={{ fontFamily: FONT_MONO, background: COLORS.brass, color: "#fff" }}
+                          >
+                            Libre
                           </span>
                         )}
                       </div>
@@ -6626,6 +6639,9 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
               <DropZone />
             </React.Fragment>
           ))}
+          <div className="mb-2">
+            <Btn small variant="accent" onClick={() => setCatPicker({ mode: "add", part: "first" })}><Plus size={13} /> Ajouter une catégorie</Btn>
+          </div>
           {entracteOn && (
             <IndexCard style={{ background: COLORS.brass, border: `2px solid ${COLORS.ink}`, textAlign: "center", padding: "14px" }}>
               <span style={{ fontFamily: FONT_MONO, color: COLORS.card }} className="text-lg font-bold uppercase tracking-wide">
@@ -6633,9 +6649,6 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
               </span>
             </IndexCard>
           )}
-          <div className="mb-2">
-            <Btn small variant="accent" onClick={() => setCatPicker({ mode: "add", part: "first" })}><Plus size={13} /> Ajouter une catégorie</Btn>
-          </div>
           <DropZone />
           {result.second.map((c, i) => (
             <React.Fragment key={`${c.id}-${i}`}>
@@ -6685,12 +6698,19 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                           carte suivante ne se décale et que le clic sur "Aléatoire" d'une carte voisine
                           n'atterrisse par erreur sur un autre bouton après le remplacement. */}
                       <div className="mt-1 mb-1" style={{ minHeight: 22 }}>
-                        {(c.tags || []).length > 0 && (
+                        {(c.tags || []).length > 0 ? (
                           <span
                             className="inline-block text-xs px-2 py-0.5 rounded-full"
                             style={{ fontFamily: FONT_MONO, background: "#B3382C", color: "#fff" }}
                           >
                             {c.tags.join(" · ")}
+                          </span>
+                        ) : c.name === "Libre" && (
+                          <span
+                            className="inline-block text-xs px-2 py-0.5 rounded-full"
+                            style={{ fontFamily: FONT_MONO, background: COLORS.brass, color: "#fff" }}
+                          >
+                            Libre
                           </span>
                         )}
                       </div>
@@ -6864,9 +6884,15 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
       if (cerclePick) { picked.push({ ...cerclePick, actualDuration: Math.min(cerclePick.duration, budget) }); budget = consumeBudget(cerclePick.duration, budget); }
     }
     // On épuise d'abord les exercices qui matchent les tags cochés, puis on comble avec le reste
-    // de la bibliothèque pour respecter le temps disponible demandé.
-    fillFrom(matchedPool);
-    if (budget > 0) fillFrom(otherPool);
+    // de la bibliothèque pour respecter le temps disponible demandé. Si un échauffement "Groupe,
+    // prénoms et confiance" a déjà été ajouté ci-dessus (joueurs qui ne se connaissent pas), on
+    // évite d'en reproposer un autre dans cette génération automatique — un clic sur "Aléatoire"
+    // pourra quand même en repiocher un ensuite, à la demande de l'utilisateur.
+    const alreadyHasGroupeFamily = joueursSeConnaissent === false && picked.some((p) => p.groupe === "Groupe, prénoms et confiance");
+    const matchedPoolForFill = alreadyHasGroupeFamily ? matchedPool.filter((e) => e.groupe !== "Groupe, prénoms et confiance") : matchedPool;
+    const otherPoolForFill = alreadyHasGroupeFamily ? otherPool.filter((e) => e.groupe !== "Groupe, prénoms et confiance") : otherPool;
+    fillFrom(matchedPoolForFill);
+    if (budget > 0) fillFrom(otherPoolForFill);
     // On propose toujours au moins 2 échauffements, même si le temps choisi est très court.
     if (picked.length < 2) {
       const remaining = [...warmupAll].filter((e) => !picked.find((p) => p.id === e.id)).sort((a, b) => a.duration - b.duration);
