@@ -5775,7 +5775,9 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                     </div>
                   </div>
                   <div className="flex justify-between items-center mt-2">
-                    <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{c.actualDuration ?? c.duration ?? 5} min</span>
+                    <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
+                      {c.actualDuration ?? c.duration ?? 5} min · Nombre de joueurs : {c.playersMin ? (c.playersMin === c.playersMax ? c.playersMin : `${c.playersMin} à ${c.playersMax || c.playersMin}`) : "Illimité"}
+                    </span>
                     <div className="flex items-center gap-3">
                       <DragHandleLabel />
                       <button onClick={() => removeCat(it.idx)} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
@@ -5868,7 +5870,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                     </p>
                     {isExpanded && (
                       <div className="mt-1 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-                        <div>{it.ex.level || "Niveau non précisé"} · Nombre de joueurs : {it.ex.players > 0 ? it.ex.players : "Illimité"}</div>
+                        <div>{it.ex.level || "Niveau non précisé"}</div>
                         {it.ex.objectives?.length > 0 && <div>Objectifs : {it.ex.objectives.join(", ")}</div>}
                         {it.ex.energy && <div>Énergie : {it.ex.energy}</div>}
                         {it.ex.material && it.ex.material !== "Aucun" && <div>Matériel : {it.ex.material}</div>}
@@ -5882,7 +5884,9 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                 </div>
                 <div className="flex justify-between items-center mt-2">
                   <div className="flex items-center gap-2">
-                    <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{it.ex.actualDuration ?? it.ex.duration} min</span>
+                    <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
+                      {it.ex.actualDuration ?? it.ex.duration} min · Nombre de joueurs : {it.ex.players > 0 ? it.ex.players : "Illimité"}
+                    </span>
                     {(it.ex.format || "Solo simultané") === "Tour à tour avec spectateur" ? (
                       <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ fontFamily: FONT_MONO, background: COLORS.brass + "33", color: COLORS.brass }}>
                         🟠 chacun son tour{wait > 0 ? ` · ~${wait} min d'attente/élève` : ""}
@@ -7044,7 +7048,7 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
                     </p>
                     {isExpanded && (
                       <div className="mt-1 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-                        <div>{e.level || "Niveau non précisé"} · Nombre de joueurs : {e.players > 0 ? e.players : "Illimité"}</div>
+                        <div>{e.level || "Niveau non précisé"}</div>
                         {e.objectives?.length > 0 && <div>Objectifs : {e.objectives.join(", ")}</div>}
                         {e.energy && <div>Énergie : {e.energy}</div>}
                         {e.material && e.material !== "Aucun" && <div>Matériel : {e.material}</div>}
@@ -7058,7 +7062,9 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
                 </div>
                 <div className="flex justify-between items-center mt-2">
                   <div className="flex items-center gap-2">
-                    <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{e.actualDuration ?? e.duration} min</span>
+                    <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
+                      {e.actualDuration ?? e.duration} min · Nombre de joueurs : {e.players > 0 ? e.players : "Illimité"}
+                    </span>
                     <button onClick={() => toggleFavorite(e.id)} title="Favori">
                       <Star size={22} color={e.favorite ? COLORS.brass : COLORS.textSoft} fill={e.favorite ? COLORS.brass : "none"} />
                     </button>
