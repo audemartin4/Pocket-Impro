@@ -6671,8 +6671,9 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                   userSelect: "none", WebkitUserSelect: "none", touchAction: "none",
                 }}
               >
-                {/* Seule la dernière catégorie du spectacle affiche son heure — pas chaque carte. */}
-                {schedule && i === result.second.length - 1 && (
+                {/* Seules la première catégorie après l'entracte et la dernière du spectacle affichent
+                    leur heure — pas chaque carte. */}
+                {schedule && (i === 0 || i === result.second.length - 1) && (
                   <div className="text-xs font-semibold mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.brass, marginTop: -6, lineHeight: 1 }}>
                     🕐 {minutesToTime(schedule.secondTimes[i])}
                   </div>
