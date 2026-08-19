@@ -1953,7 +1953,7 @@ function Accueil({ setTab, hasCoursPlan, hasSpectaclePlan, hasEchauffementPlan }
         Ta boîte à outils d'impro
       </h1>
       <p style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }} className="text-sm mb-5">
-        Les données affichées sont des exemples de départ — remplace-les par ton propre contenu au fil du temps.
+        Tu es improvisateur et tu veux gagner du temps ? Crée tes cours, tes spectacles et échauffements en quelques clics !
       </p>
       {hasCoursPlan && (
         <button onClick={() => setTab("gen-cours")} className="flex items-center gap-3 px-4 py-3 rounded-sm mb-2"
@@ -5868,7 +5868,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                     </p>
                     {isExpanded && (
                       <div className="mt-1 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-                        <div>{it.ex.level || "Niveau non précisé"} · {it.ex.players > 0 ? `${it.ex.players} élève${it.ex.players > 1 ? "s" : ""}` : "Illimité"}</div>
+                        <div>{it.ex.level || "Niveau non précisé"} · Nombre de joueurs : {it.ex.players > 0 ? it.ex.players : "Illimité"}</div>
                         {it.ex.objectives?.length > 0 && <div>Objectifs : {it.ex.objectives.join(", ")}</div>}
                         {it.ex.energy && <div>Énergie : {it.ex.energy}</div>}
                         {it.ex.material && it.ex.material !== "Aucun" && <div>Matériel : {it.ex.material}</div>}
@@ -6594,6 +6594,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                       <div className="flex flex-wrap items-center gap-2 text-xs mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
                         <span>{c.actualDuration ?? c.duration ?? 5} min</span>
                         {c.energy && <span>· {ENERGY_DOT[c.energy] || ""} énergie {c.energy}</span>}
+                        <span>· Nombre de joueurs : {c.playersMin ? (c.playersMin === c.playersMax ? c.playersMin : `${c.playersMin} à ${c.playersMax || c.playersMin}`) : "Illimité"}</span>
                       </div>
                       <p
                         style={{
@@ -6619,8 +6620,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                       <Btn small variant="ghost" onClick={() => setCatPicker({ part: "first", idx: i })}>Modifier</Btn>
                     </div>
                   </div>
-                  <div className="flex justify-between items-center mt-2">
-                    <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{c.actualDuration ?? c.duration ?? 5} min</span>
+                  <div className="flex justify-end items-center mt-2">
                     <div className="flex items-center gap-3">
                       <DragHandleLabel />
                       <button onClick={() => removeCat("first", i)} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
@@ -6639,9 +6639,13 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
               <DropZone />
             </React.Fragment>
           ))}
-          <div className="mb-2">
-            <Btn small variant="accent" onClick={() => setCatPicker({ mode: "add", part: "first" })}><Plus size={13} /> Ajouter une catégorie</Btn>
-          </div>
+          {/* Ce bouton n'a d'utilité que lorsqu'il y a un entracte : sans entracte, le second bouton
+              "Ajouter une catégorie" (part="first" aussi dans ce cas) suffit déjà en bas de page. */}
+          {entracteOn && (
+            <div className="mb-2">
+              <Btn small variant="accent" onClick={() => setCatPicker({ mode: "add", part: "first" })}><Plus size={13} /> Ajouter une catégorie</Btn>
+            </div>
+          )}
           {entracteOn && (
             <IndexCard style={{ background: COLORS.brass, border: `2px solid ${COLORS.ink}`, textAlign: "center", padding: "14px" }}>
               <span style={{ fontFamily: FONT_MONO, color: COLORS.card }} className="text-lg font-bold uppercase tracking-wide">
@@ -6717,6 +6721,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                       <div className="flex flex-wrap items-center gap-2 text-xs mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
                         <span>{c.actualDuration ?? c.duration ?? 5} min</span>
                         {c.energy && <span>· {ENERGY_DOT[c.energy] || ""} énergie {c.energy}</span>}
+                        <span>· Nombre de joueurs : {c.playersMin ? (c.playersMin === c.playersMax ? c.playersMin : `${c.playersMin} à ${c.playersMax || c.playersMin}`) : "Illimité"}</span>
                       </div>
                       <p
                         style={{
@@ -6742,8 +6747,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                       <Btn small variant="ghost" onClick={() => setCatPicker({ part: "second", idx: i })}>Modifier</Btn>
                     </div>
                   </div>
-                  <div className="flex justify-between items-center mt-2">
-                    <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{c.actualDuration ?? c.duration ?? 5} min</span>
+                  <div className="flex justify-end items-center mt-2">
                     <div className="flex items-center gap-3">
                       <DragHandleLabel />
                       <button onClick={() => removeCat("second", i)} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
@@ -7040,7 +7044,7 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
                     </p>
                     {isExpanded && (
                       <div className="mt-1 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-                        <div>{e.level || "Niveau non précisé"} · {e.players > 0 ? `${e.players} élève${e.players > 1 ? "s" : ""}` : "Illimité"}</div>
+                        <div>{e.level || "Niveau non précisé"} · Nombre de joueurs : {e.players > 0 ? e.players : "Illimité"}</div>
                         {e.objectives?.length > 0 && <div>Objectifs : {e.objectives.join(", ")}</div>}
                         {e.energy && <div>Énergie : {e.energy}</div>}
                         {e.material && e.material !== "Aucun" && <div>Matériel : {e.material}</div>}
