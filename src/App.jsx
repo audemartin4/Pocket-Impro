@@ -6354,6 +6354,13 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
       const niveauIdx = NIVEAU_ORDER.indexOf(niveau);
       pool = pool.filter((c) => !c.level || NIVEAU_ORDER.indexOf(c.level) === -1 || Math.abs(NIVEAU_ORDER.indexOf(c.level) - niveauIdx) <= 1);
     }
+    // La toute première catégorie de chaque partie priorise les catégories cochées "peut ouvrir un
+    // spectacle" ; une fois ce vivier épuisé, on retombe sur le reste de la bibliothèque (Best-of
+    // reste de toute façon exclue ici, ce n'est jamais un créneau de clôture).
+    if (idx === 0) {
+      const openerPool = pool.filter((c) => c.canOpenShow);
+      if (openerPool.length > 0) pool = openerPool;
+    }
     const byFormat = format ? pool.filter((c) => c.showTypes?.includes(format)) : [];
     const pick = pickRandom(byFormat.length > 0 ? byFormat : pool);
     if (!pick) return;
