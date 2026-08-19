@@ -4748,6 +4748,13 @@ const playersLabel = (c) => {
   if (c.playersMax === 8) return c.playersMin > 2 ? `illimité (minimum ${c.playersMin})` : "illimité";
   return `${c.playersMin}-${c.playersMax} joueurs`;
 };
+// Même convention que playersLabel (playersMax=8 = "pas de maximum précisé"), mais formatée pour
+// suivre le préfixe "Nombre de joueurs :" affiché sur les cartes générées (sans redire "joueurs").
+const playersCountText = (c) => {
+  if (!c.playersMin) return "Illimité";
+  if (c.playersMax === 8) return c.playersMin > 2 ? `Illimité (minimum ${c.playersMin})` : "Illimité";
+  return c.playersMin === c.playersMax ? `${c.playersMin}` : `${c.playersMin} à ${c.playersMax}`;
+};
 
 function reorderArray(arr, fromIndex, insertAt) {
   const copy = [...arr];
@@ -5776,7 +5783,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                   </div>
                   <div className="flex justify-between items-center mt-2">
                     <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
-                      {c.actualDuration ?? c.duration ?? 5} min · Nombre de joueurs : {c.playersMin ? (c.playersMin === c.playersMax ? c.playersMin : `${c.playersMin} à ${c.playersMax || c.playersMin}`) : "Illimité"}
+                      {c.actualDuration ?? c.duration ?? 5} min · Nombre de joueurs : {playersCountText(c)}
                     </span>
                     <div className="flex items-center gap-3">
                       <DragHandleLabel />
@@ -6605,7 +6612,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                       <div className="flex flex-wrap items-center gap-2 text-xs mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
                         <span>{c.actualDuration ?? c.duration ?? 5} min</span>
                         {c.energy && <span>· {ENERGY_DOT[c.energy] || ""} énergie {c.energy}</span>}
-                        <span>· Nombre de joueurs : {c.playersMin ? (c.playersMin === c.playersMax ? c.playersMin : `${c.playersMin} à ${c.playersMax || c.playersMin}`) : "Illimité"}</span>
+                        <span>· Nombre de joueurs : {playersCountText(c)}</span>
                       </div>
                       <p
                         style={{
@@ -6733,7 +6740,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                       <div className="flex flex-wrap items-center gap-2 text-xs mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
                         <span>{c.actualDuration ?? c.duration ?? 5} min</span>
                         {c.energy && <span>· {ENERGY_DOT[c.energy] || ""} énergie {c.energy}</span>}
-                        <span>· Nombre de joueurs : {c.playersMin ? (c.playersMin === c.playersMax ? c.playersMin : `${c.playersMin} à ${c.playersMax || c.playersMin}`) : "Illimité"}</span>
+                        <span>· Nombre de joueurs : {playersCountText(c)}</span>
                       </div>
                       <p
                         style={{
