@@ -2272,7 +2272,7 @@ function Accueil({ setTab, hasCoursPlan, hasSpectaclePlan, hasEchauffementPlan }
         ))}
       </div>
       <p className="text-xs text-center mt-6" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-        Prochainement : Créer un ambassadeur
+        Prochainement : Créer un ambassadeur --- Choix par tranche d'âge
       </p>
     </div>
   );
