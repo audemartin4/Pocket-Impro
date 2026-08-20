@@ -264,9 +264,7 @@ const SEED = {
   categories: [
   ],
   exercises: [],
-  showConcepts: [
-    { id: uid(), theme: "Amour", type: "Match", categoryIds: [] },
-  ],
+  showConcepts: [],
   coursePlans: [],
   spectaclePlans: [],
 };
@@ -1168,6 +1166,15 @@ function mergeMissingCategories(data) {
     universLexiqueV1 = true;
   }
 
+  // Supprime une seule fois le concept de spectacle "Amour" (fiche vide, sans catégories, retirée à
+  // la demande) — ne se réexécute plus ensuite, pour ne pas revenir sur un concept recréé
+  // manuellement sous le même nom.
+  let removedAmourConceptV1 = data._removedAmourConceptV1;
+  if (!removedAmourConceptV1 && showConcepts) {
+    showConcepts = showConcepts.filter((sc) => !(sc.theme === "Amour" && (sc.categoryIds || []).length === 0));
+    removedAmourConceptV1 = true;
+  }
+
   // Le niveau "Expert" est retiré de l'appli : on convertit les fiches déjà enregistrées vers "Avancé".
   if (exercises?.some((e) => e.level === "Expert")) {
     exercises = exercises.map((e) => (e.level === "Expert" ? { ...e, level: "Avancé" } : e));
@@ -1196,9 +1203,10 @@ function mergeMissingCategories(data) {
     comedieMusicaleLieuxV1 === data._comedieMusicaleLieuxV1 &&
     universArchetypesV2 === data._universArchetypesV2 &&
     universArchetypesV3 === data._universArchetypesV3 &&
-    universLexiqueV1 === data._universLexiqueV1
+    universLexiqueV1 === data._universLexiqueV1 &&
+    removedAmourConceptV1 === data._removedAmourConceptV1
   ) return data;
-  return { ...data, categories, showTypes, showConcepts, exercises, objectifs, thematiques, _cercleTagV1: cercleTagV1, _musiqueTagV1: musiqueTagV1, _materialMusiqueV1: materialMusiqueV1, _tagCaseAccentMergeV1: tagCaseAccentMergeV1, _stageWarmupMachineV1: stageWarmupMachineV1, _stageWarmupBatch2V1: stageWarmupBatch2V1, _devinettesEnergyV1: devinettesEnergyV1, _canOpenShowDefaultsV1: canOpenShowDefaultsV1, _canCloseShowDefaultsV1: canCloseShowDefaultsV1, _universLieuxV1: universLieuxV1, _comedieMusicaleLieuxV1: comedieMusicaleLieuxV1, _universArchetypesV2: universArchetypesV2, _universArchetypesV3: universArchetypesV3, _universLexiqueV1: universLexiqueV1 };
+  return { ...data, categories, showTypes, showConcepts, exercises, objectifs, thematiques, _cercleTagV1: cercleTagV1, _musiqueTagV1: musiqueTagV1, _materialMusiqueV1: materialMusiqueV1, _tagCaseAccentMergeV1: tagCaseAccentMergeV1, _stageWarmupMachineV1: stageWarmupMachineV1, _stageWarmupBatch2V1: stageWarmupBatch2V1, _devinettesEnergyV1: devinettesEnergyV1, _canOpenShowDefaultsV1: canOpenShowDefaultsV1, _canCloseShowDefaultsV1: canCloseShowDefaultsV1, _universLieuxV1: universLieuxV1, _comedieMusicaleLieuxV1: comedieMusicaleLieuxV1, _universArchetypesV2: universArchetypesV2, _universArchetypesV3: universArchetypesV3, _universLexiqueV1: universLexiqueV1, _removedAmourConceptV1: removedAmourConceptV1 };
 }
 
 /* ---------- Persistence ---------- */
