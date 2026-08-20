@@ -5761,7 +5761,8 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
     if (!plan || !picker) return;
     saveScroll();
     if (picker.mode === "add") {
-      setPlan({ ...plan, middle: [...plan.middle, ex] });
+      if (picker.slot === "warmup") setPlan({ ...plan, warmups: [...plan.warmups, ex] });
+      else setPlan({ ...plan, middle: [...plan.middle, ex] });
     } else if (picker.slot === "warmup") {
       // On garde le temps réservé pour ce créneau (resserré pour tenir dans la durée du cours),
       // plutôt que la durée brute de la fiche choisie, pour ne pas faire dériver le total affiché.
@@ -5908,6 +5909,42 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
     ...plan.middle.map((ex, i) => ({ kind: "exercise", label: `Exercice ${i + 1}`, ex, slot: "middle", idx: i })),
     ...plan.impro.map((cat, i) => ({ kind: "category", label: plan.impro.length > 1 ? `Catégorie d'impro ${i + 1}` : "Catégorie d'impro", cat, idx: i })),
   ] : [];
+  // Positions (dans le tableau "items" ci-dessus) juste après le dernier échauffement / dernier
+  // exercice, pour insérer les boutons "Ajouter…" au bon endroit même si la section est vide.
+  const warmupCount = plan ? plan.warmups.length : 0;
+  const middleCount = plan ? plan.middle.length : 0;
+  const addWarmupBlock = (
+    <React.Fragment key="add-warmup">
+      {picker?.mode === "add" && picker.slot === "warmup" && (
+        <ExercisePicker
+          exercises={pickerExercises}
+          excludeIds={[...usedIds()]}
+          onSelect={pickManually}
+          onCancel={() => setPicker(null)}
+          priorityFamilies={objectifs.length > 0 ? objectifs : []}
+        />
+      )}
+      <div className="flex gap-2 mb-2 pl-4">
+        <Btn variant="accent" onClick={() => setPicker({ mode: "add", slot: "warmup" })}><Plus size={14} /> Échauffement</Btn>
+      </div>
+    </React.Fragment>
+  );
+  const addExerciseBlock = (
+    <React.Fragment key="add-exercise">
+      {picker?.mode === "add" && picker.slot !== "warmup" && (
+        <ExercisePicker
+          exercises={pickerExercises}
+          excludeIds={[...usedIds()]}
+          onSelect={pickManually}
+          onCancel={() => setPicker(null)}
+          priorityFamilies={objectifs.length > 0 ? objectifs : []}
+        />
+      )}
+      <div className="flex gap-2 mb-2 pl-4">
+        <Btn variant="accent" onClick={() => setPicker({ mode: "add" })}><Plus size={14} /> Exercice</Btn>
+      </div>
+    </React.Fragment>
+  );
   const totalMin = items.reduce((s, it) => s + (it.kind === "category" ? (it.cat.actualDuration ?? it.cat.duration ?? 5) : (it.ex.actualDuration ?? it.ex.duration)), 0) + DEBRIEF_MIN;
   const totalWait = items.filter((it) => it.kind === "exercise").reduce((s, it) => s + computeWaitMinutes(it.ex, participants), 0);
   // Durées effectivement retenues (resserrées pour tenir dans le temps demandé) — transmises au PDF
@@ -5981,7 +6018,13 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
 
       {plan && (
         <>
-          {items.map((it) => {
+          {items.map((it, itemIndex) => {
+            const prefixButtons = (
+              <>
+                {itemIndex === warmupCount && addWarmupBlock}
+                {itemIndex === warmupCount + middleCount && addExerciseBlock}
+              </>
+            );
             if (it.kind === "category") {
               const c = it.cat;
               const isDraggedItem = dragged && dragged.listKey === "impro" && dragged.index === it.idx;
@@ -6076,6 +6119,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
               );
               return (
                 <React.Fragment key={it.label}>
+                  {prefixButtons}
                   <div
                     data-drop-card="true"
                     data-list="impro"
@@ -6206,9 +6250,10 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                 priorityFamilies={objectifs.length > 0 ? objectifs : (picker.groupe ? [picker.groupe] : [])}
               />
             );
-            if (!listKey) return <React.Fragment key={it.label}>{card}{inlinePicker}</React.Fragment>;
+            if (!listKey) return <React.Fragment key={it.label}>{prefixButtons}{card}{inlinePicker}</React.Fragment>;
             return (
               <React.Fragment key={it.label}>
+                {prefixButtons}
                 <div
                   data-drop-card="true"
                   data-list={listKey}
@@ -6222,18 +6267,8 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
               </React.Fragment>
             );
           })}
-          {picker?.mode === "add" && (
-            <ExercisePicker
-              exercises={pickerExercises}
-              excludeIds={[...usedIds()]}
-              onSelect={pickManually}
-              onCancel={() => setPicker(null)}
-              priorityFamilies={objectifs.length > 0 ? objectifs : []}
-            />
-          )}
-          <div className="flex gap-2 mb-2">
-            <Btn variant="accent" onClick={() => setPicker({ mode: "add" })}><Plus size={14} /> Ajouter un exercice</Btn>
-          </div>
+          {warmupCount >= items.length && addWarmupBlock}
+          {warmupCount + middleCount >= items.length && addExerciseBlock}
           {catPicker?.mode === "add" && (
             <CategoryPicker
               categories={pickerCategories}
@@ -6242,8 +6277,8 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
               onCancel={() => setCatPicker(null)}
             />
           )}
-          <div className="flex gap-2">
-            <Btn variant="accent" onClick={() => setCatPicker({ mode: "add" })}><Plus size={14} /> Ajouter une catégorie d'impro</Btn>
+          <div className="flex gap-2 pl-4">
+            <Btn variant="accent" onClick={() => setCatPicker({ mode: "add" })}><Plus size={14} /> Catégorie</Btn>
           </div>
           <IndexCard className="mt-2">
             <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">Débrief</span>
