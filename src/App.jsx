@@ -8,6 +8,12 @@ import {
 import { supabase } from "./supabaseClient.js";
 import { useAuthUser, signIn, signUp, signOut, resetPasswordForEmail, updatePassword } from "./auth.js";
 
+// Longueur minimale des mots de passe. Doit rester alignée sur le réglage "Minimum password length"
+// du dashboard Supabase (Authentication > Sign In / Providers) : la vérification ci-dessous n'est là
+// que pour afficher un message clair en français avant l'aller-retour réseau, c'est Supabase qui
+// tranche vraiment.
+const MDP_LONGUEUR_MIN = 8;
+
 /* ---------- Tokens ---------- */
 const COLORS = {
   ink: "#1E2A38",
@@ -2607,13 +2613,22 @@ function ResetPasswordScreen({ onDone }) {
   const [busy, setBusy] = useState(false);
 
   const submit = async () => {
-    if (password.length < 6) { setError("Le mot de passe doit faire au moins 6 caractères."); return; }
+    if (password.length < MDP_LONGUEUR_MIN) { setError(`Le mot de passe doit faire au moins ${MDP_LONGUEUR_MIN} caractères.`); return; }
     if (password !== confirm) { setError("Les deux mots de passe ne correspondent pas."); return; }
     setBusy(true);
     setError("");
     const { error: err } = await updatePassword(password);
     setBusy(false);
-    if (err) { setError("Impossible d'enregistrer ce mot de passe pour le moment. Réessaie plus tard."); return; }
+    if (err) {
+      // Même traduction que sur l'écran d'inscription : Supabase refuse les mots de passe issus de
+      // fuites connues, avec un message en anglais qu'il ne faut pas afficher tel quel.
+      setError(
+        err.message?.includes("known to be weak") || err.message?.includes("pwned")
+          ? "Ce mot de passe fait partie de mots de passe déjà divulgués sur internet. Choisis-en un autre."
+          : "Impossible d'enregistrer ce mot de passe pour le moment. Réessaie plus tard."
+      );
+      return;
+    }
     onDone();
   };
 
@@ -2798,12 +2813,20 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
       setSignupError("Cet identifiant est réservé.");
       return;
     }
+    if (signupPassword.length < MDP_LONGUEUR_MIN) {
+      setSignupError(`Le mot de passe doit faire au moins ${MDP_LONGUEUR_MIN} caractères.`);
+      return;
+    }
     setSignupBusy(true);
     const { error } = await signUp({ email, password: signupPassword, username: uname, troupe: signupTroupe.trim(), ville: signupVille.trim() });
     setSignupBusy(false);
     if (error) {
       setSignupError(
         error.message?.includes("already registered") ? "Cette adresse mail a déjà un compte."
+        // Supabase refuse les mots de passe présents dans les fuites connues (HaveIBeenPwned) :
+        // le message brut est en anglais, on le traduit ici.
+        : error.message?.includes("known to be weak") || error.message?.includes("pwned") ? "Ce mot de passe fait partie de mots de passe déjà divulgués sur internet. Choisis-en un autre."
+        : error.message?.includes("at least") ? `Le mot de passe doit faire au moins ${MDP_LONGUEUR_MIN} caractères.`
         : error.message?.includes("duplicate") || error.message?.includes("username") ? "Cet identifiant est déjà utilisé."
         : error.message?.includes("rate limit") ? "Trop d'inscriptions récentes, réessaie dans quelques minutes."
         : error.message || "Erreur lors de l'inscription."
