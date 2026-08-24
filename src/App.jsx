@@ -7005,8 +7005,8 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
             </div>
           )}
           {entracteOn && (
-            <IndexCard style={{ background: COLORS.brass, border: `2px solid ${COLORS.ink}`, textAlign: "center", padding: "14px" }}>
-              <span style={{ fontFamily: FONT_MONO, color: COLORS.card }} className="text-lg font-bold uppercase tracking-wide">
+            <IndexCard style={{ background: COLORS.accent, border: `2px solid ${COLORS.ink}`, textAlign: "center", padding: "8px" }}>
+              <span style={{ fontFamily: FONT_MONO, color: COLORS.card }} className="text-sm font-bold uppercase tracking-wide">
                 Entracte — {SPECTACLE_ENTRACTE_MIN} min{schedule ? ` — ${minutesToTime(schedule.entracteStart)}` : ""}
               </span>
             </IndexCard>
