@@ -1998,6 +1998,11 @@ export default function ImproApp() {
   const [coursPlan, setCoursPlan] = useState(null); // levé ici pour survivre à la navigation + permettre de "reprendre"
   const [spectaclePlan, setSpectaclePlan] = useState(null); // idem, pour "Reprendre le dernier spectacle généré"
   const [echauffementPlan, setEchauffementPlan] = useState(null); // idem, pour "Reprendre le dernier échauffement généré"
+  // L'ambassadeur qu'on est en train de monter : ses trois emplacements et les manches créées à la
+  // volée sans compte. Levé ici pour la même raison que les plans — mais surtout parce que sans
+  // compte, RIEN n'est enregistré en base : quitter la page perdait tout le travail. On garde donc
+  // { slots, manchesLocales } le temps de la visite.
+  const [ambassadeurBrouillon, setAmbassadeurBrouillon] = useState(null);
   const goToLibrarySection = (targetTab, query) => {
     setLibrarySearchSeed(query);
     setTab(targetTab);
@@ -2067,7 +2072,15 @@ export default function ImproApp() {
           <ResetPasswordScreen onDone={() => { auth.clearPasswordRecovery(); setTab("profil"); }} />
         ) : (
         <>
-        {tab === "accueil" && <Accueil setTab={setTab} hasCoursPlan={!!coursPlan} hasSpectaclePlan={!!spectaclePlan} hasEchauffementPlan={!!echauffementPlan} />}
+        {tab === "accueil" && (
+          <Accueil
+            setTab={setTab}
+            hasCoursPlan={!!coursPlan}
+            hasSpectaclePlan={!!spectaclePlan}
+            hasEchauffementPlan={!!echauffementPlan}
+            hasAmbassadeur={!!(ambassadeurBrouillon?.slots || []).some(Boolean)}
+          />
+        )}
         {tab === "gen-cours" && <GenerateurCoursTab data={publicData} allData={data} update={update} plan={coursPlan} setPlan={setCoursPlan} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} setTab={setTab} />}
         {tab === "gen-spectacle" && <GenerateurSpectacleTab data={publicData} allData={data} update={update} plan={spectaclePlan} setPlan={setSpectaclePlan} currentUser={currentUser} setTab={setTab} />}
         {tab === "gen-echauffement" && <GenerateurEchauffementTab data={publicData} update={update} plan={echauffementPlan} setPlan={setEchauffementPlan} currentUser={currentUser} />}
@@ -2079,9 +2092,9 @@ export default function ImproApp() {
         {tab === "categories-crees" && <CategoriesTab data={data} update={update} isAdmin={isAdmin} currentUser={currentUser} profile={auth.profile} onlyUserCreated setTab={setTab} />}
         {tab === "spectacles" && <SpectaclesTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} />}
         {tab === "spectacles-crees" && <SpectaclesTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} onlyUserCreated />}
-        {tab === "ambassadeurs" && <AmbassadeursTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} />}
-        {tab === "ambassadeurs-crees" && <AmbassadeursTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} onlyUserCreated />}
-        {tab === "ambassadeurs-liste" && <AmbassadeursTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} catalogue />}
+        {tab === "ambassadeurs" && <AmbassadeursTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} brouillon={ambassadeurBrouillon} setBrouillon={setAmbassadeurBrouillon} />}
+        {tab === "ambassadeurs-crees" && <AmbassadeursTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} brouillon={ambassadeurBrouillon} setBrouillon={setAmbassadeurBrouillon} onlyUserCreated />}
+        {tab === "ambassadeurs-liste" && <AmbassadeursTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} brouillon={ambassadeurBrouillon} setBrouillon={setAmbassadeurBrouillon} catalogue />}
         {tab === "entrainement" && <EntrainementTab data={publicData} />}
         {tab === "plans" && <PlansTab data={publicData} allData={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} />}
         {tab === "moderation" && <ModerationTab data={data} update={update} setTab={setTab} isAdmin={isAdmin} />}
@@ -2329,7 +2342,7 @@ function GenererIdeesTab({ setTab, data }) {
   );
 }
 
-function Accueil({ setTab, hasCoursPlan, hasSpectaclePlan, hasEchauffementPlan }) {
+function Accueil({ setTab, hasCoursPlan, hasSpectaclePlan, hasEchauffementPlan, hasAmbassadeur }) {
   const generators = [
     { label: "Créer un cours", tab: "gen-cours", icon: BookOpen },
     { label: "Créer un spectacle", tab: "gen-spectacle", icon: Theater },
@@ -2368,6 +2381,16 @@ function Accueil({ setTab, hasCoursPlan, hasSpectaclePlan, hasEchauffementPlan }
           style={{ background: COLORS.brass, color: COLORS.ink }}>
           <Sparkles size={18} color={COLORS.ink} />
           <span style={{ fontFamily: FONT_DISPLAY }} className="font-medium">Reprendre le dernier échauffement généré</span>
+          <ChevronRight size={16} className="ml-auto" />
+        </button>
+      )}
+      {/* Sans compte, un ambassadeur monté n'est enregistré nulle part : ce bouton est le seul moyen
+          de le retrouver après un passage par l'accueil. */}
+      {hasAmbassadeur && (
+        <button onClick={() => setTab("ambassadeurs")} className="flex items-center gap-3 px-4 py-3 rounded-sm mb-2"
+          style={{ background: COLORS.brass, color: COLORS.ink }}>
+          <Sparkles size={18} color={COLORS.ink} />
+          <span style={{ fontFamily: FONT_DISPLAY }} className="font-medium">Reprendre l'ambassadeur en cours</span>
           <ChevronRight size={16} className="ml-auto" />
         </button>
       )}
@@ -5246,11 +5269,12 @@ function AmbassadeurPlayer({ manches, onClose }) {
     const onKey = (e) => {
       if (e.key === "ArrowRight" || e.key === " ") { e.preventDefault(); next(); }
       else if (e.key === "ArrowLeft") { e.preventDefault(); prev(); }
-      else if (e.key === "Escape") onClose();
+      // Échap comme la croix : il ferme d'abord le sommaire, il ne quitte la partie qu'ensuite.
+      else if (e.key === "Escape") { if (sommaireOpen) setSommaireOpen(false); else onClose(); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [next, prev, onClose]);
+  }, [next, prev, onClose, sommaireOpen]);
 
   // Empêche le défilement de la page derrière l'écran de jeu (le swipe doit rester horizontal).
   useEffect(() => {
@@ -5381,7 +5405,13 @@ function AmbassadeurPlayer({ manches, onClose }) {
             {sommaireOpen ? "Masquer le détail" : "Voir le détail"}
           </button>
         </div>
-        <button onClick={onClose} className="p-1 -m-1" title="Quitter la partie">
+        {/* La croix ferme d'abord le sommaire : on l'ouvre en pleine partie pour retrouver un mot, et
+            en sortir ne doit pas coûter la partie entière. */}
+        <button
+          onClick={() => (sommaireOpen ? setSommaireOpen(false) : onClose())}
+          className="p-1 -m-1"
+          title={sommaireOpen ? "Fermer le détail" : "Quitter la partie"}
+        >
           <X size={22} color={COLORS.paper} />
         </button>
       </div>
@@ -5754,12 +5784,17 @@ function AmbassadeurManchePicker({ manches, excludeIds = [], onSelect, onCancel 
 
 /* Assemblage d'une partie : trois emplacements, chacun rempli par une manche existante ou par une
    manche créée à la volée (qui rejoint alors la bibliothèque commune). */
-function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onSave, onCancel, onPlay, canSave, onRattacher, slotsInitiaux, currentUser, isAdmin }) {
+function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onSave, onCancel, onPlay, canSave, onRattacher, slotsInitiaux, onSlotsChange, currentUser, isAdmin }) {
   const [slots, setSlots] = useState(() => {
     const base = [...(slotsInitiaux || [])];
     while (base.length < AMBASSADEUR_MANCHES_PAR_PARTIE) base.push(null);
     return base.slice(0, AMBASSADEUR_MANCHES_PAR_PARTIE);
   });
+  // Remonte l'assemblage à chaque changement : c'est ce qui permet de quitter la page et de
+  // retrouver son ambassadeur (voir "Reprendre l'ambassadeur en cours" sur l'accueil).
+  const signaler = useRef(onSlotsChange);
+  signaler.current = onSlotsChange;
+  useEffect(() => { signaler.current?.(slots); }, [slots]);
   const [picking, setPicking] = useState(null);
   const [creating, setCreating] = useState(null);
   const [nom, setNom] = useState("");
@@ -5804,7 +5839,7 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onSave, 
       <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium mb-1">Monter un ambassadeur</h3>
       <p className="text-xs mb-3" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
         Trois manches de {AMBASSADEUR_MOTS_PAR_MANCHE} mots. Pioche parmi les manches existantes ou crée les tiennes.
-        {!canSave && " Sans compte, tu peux tout monter et y jouer tout de suite, mais rien ne sera conservé en quittant la page."}
+        {!canSave && " Sans compte, tu peux tout monter et y jouer tout de suite : ton ambassadeur t'attend tant que tu ne fermes pas l'appli, et tu le retrouves depuis l'accueil. Il faut un compte pour le garder au-delà."}
       </p>
 
       {/* Le menu n'apparaît que si la banque a de quoi le remplir. */}
@@ -5904,8 +5939,10 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onSave, 
    - la page de jeu (Accueil → "Créer un ambassadeur") : les règles, monter une partie, jouer ;
    - le catalogue (Bibliothèque → "Ambassadeurs") : toutes les manches, filtrables et triables ;
    - "Mes manches créées" (profil) : seulement les siennes, quel que soit leur statut. */
-function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, onlyUserCreated, catalogue }) {
-  const [mode, setMode] = useState(null); // null | "manche" | "partie"
+function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, onlyUserCreated, catalogue, brouillon, setBrouillon }) {
+  // L'assembleur se rouvre tout seul quand on revient avec un ambassadeur commencé — c'est tout
+  // l'intérêt du bouton "Reprendre l'ambassadeur en cours" de l'accueil.
+  const [mode, setMode] = useState(() => ((brouillon?.slots || []).some(Boolean) ? "partie" : null)); // null | "manche" | "partie"
   const [editingId, setEditingId] = useState(null);
   const [playing, setPlaying] = useState(null); // tableau de manches en cours de jeu
   const [expandedId, setExpandedId] = useState(null);
@@ -5916,8 +5953,16 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
   const [filtreAge, setFiltreAge] = useState("");
   // Manches créées sans compte : elles ne partent pas dans la base commune (rien à modérer, aucun
   // auteur à qui les rattacher). Elles vivent le temps de la visite, pour monter et jouer une
-  // partie tout de suite. Voir le message affiché dans l'assembleur.
-  const [manchesLocales, setManchesLocales] = useState([]);
+  // partie tout de suite. Voir le message affiché dans l'assembleur. Elles sont rangées avec le
+  // brouillon d'ambassadeur, au-dessus de cet écran, pour survivre à un passage par l'accueil.
+  const manchesLocales = brouillon?.manchesLocales || [];
+  const setManchesLocales = (maj) => setBrouillon?.((b) => ({
+    slots: b?.slots || [],
+    manchesLocales: typeof maj === "function" ? maj(b?.manchesLocales || []) : maj,
+  }));
+  const setSlotsBrouillon = useCallback((slots) => {
+    setBrouillon?.((b) => ({ slots, manchesLocales: b?.manchesLocales || [] }));
+  }, [setBrouillon]);
   const [toastMsg, showToast] = useToast();
 
   const canCreate = isAdmin || !!currentUser;
@@ -6004,6 +6049,7 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
       return d;
     });
     setMode(null);
+    setBrouillon?.(null); // il est enregistré : plus rien à reprendre
     showToast("Ambassadeur enregistré ✓");
   };
 
@@ -6132,9 +6178,11 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
         <AmbassadeurPartieBuilder
           data={data}
           manchesDispo={dispoPourPartie}
+          slotsInitiaux={brouillon?.slots}
+          onSlotsChange={setSlotsBrouillon}
           onCreateManche={creerManche}
           onSave={enregistrerPartie}
-          onCancel={() => setMode(null)}
+          onCancel={() => { setMode(null); setBrouillon?.(null); }}
           onPlay={(manches) => setPlaying(manches)}
           canSave={canCreate}
           currentUser={currentUser}
