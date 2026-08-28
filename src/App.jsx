@@ -5274,21 +5274,36 @@ function AmbassadeurPlayer({ manches, onClose }) {
     };
   }, []);
 
-  // Le changement de mot se déclenche PENDANT le glissement, dès que le seuil est franchi, et non au
-  // relâchement : sur un vrai téléphone, le navigateur s'approprie souvent le geste en cours de
-  // route (sélection de texte, défilement, navigation arrière) et envoie alors un `touchcancel` — le
-  // `touchend` n'arrive jamais et le swipe était perdu. Voir aussi `touchAction: "pan-y"` plus bas.
-  const onTouchStart = (e) => { const t = e.touches[0]; touchRef.current = { x: t.clientX, y: t.clientY, fait: false }; };
-  const onTouchMove = (e) => {
+  // Navigation au doigt. Trois précautions, apprises d'un Samsung sur lequel le swipe ne passait
+  // pas du tout :
+  // 1. on écoute les ÉVÉNEMENTS POINTEUR et pas les événements tactiles — c'est le chemin le mieux
+  //    servi par Chrome Android, et il couvre aussi la souris ;
+  // 2. le changement de mot part PENDANT le glissement, dès le seuil franchi, jamais au
+  //    relâchement : le navigateur s'approprie volontiers un geste en cours de route (sélection,
+  //    défilement, navigation arrière) et le `pointerup`/`touchend` n'arrive alors jamais ;
+  // 3. un simple APPUI suffit aussi — moitié droite : suivant, moitié gauche : retour. Le glissement
+  //    reste agréable, mais il n'est plus le seul moyen d'avancer.
+  const onPointerDown = (e) => {
+    touchRef.current = { x: e.clientX, y: e.clientY, fait: false, surBouton: !!e.target.closest?.("button") };
+  };
+  const onPointerMove = (e) => {
     const start = touchRef.current;
     if (!start || start.fait) return;
-    const t = e.touches[0];
-    const dx = t.clientX - start.x;
-    const dy = t.clientY - start.y;
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
     // Seuil de 40 px et geste franchement horizontal, pour ne pas déclencher sur un simple appui.
     if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy)) return;
     start.fait = true; // un seul saut par glissement
     if (dx > 0) next(); else prev();
+  };
+  const onPointerUp = (e) => {
+    const start = touchRef.current;
+    touchRef.current = null;
+    // Appui simple : ni glissement déjà traité, ni bouton touché, ni sommaire ouvert (on y touche
+    // les mots pour s'y rendre, pas pour avancer).
+    if (!start || start.fait || start.surBouton || sommaireOpen) return;
+    if (Math.abs(e.clientX - start.x) > 12 || Math.abs(e.clientY - start.y) > 12) return;
+    if (e.clientX < window.innerWidth * 0.35) prev(); else next();
   };
   const finDuGeste = () => { touchRef.current = null; };
 
@@ -5317,10 +5332,10 @@ function AmbassadeurPlayer({ manches, onClose }) {
         WebkitUserSelect: "none",
         WebkitTouchCallout: "none",
       }}
-      onTouchStart={onTouchStart}
-      onTouchMove={onTouchMove}
-      onTouchEnd={finDuGeste}
-      onTouchCancel={finDuGeste}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={finDuGeste}
     >
       <div className="flex items-start justify-between px-4 py-3">
         <div>
@@ -5433,7 +5448,7 @@ function AmbassadeurPlayer({ manches, onClose }) {
           <ChevronLeft size={30} color={COLORS.paper} />
         </button>
         <span className="text-xs" style={{ fontFamily: FONT_MONO, color: COLORS.paper + "80" }}>
-          {i === 0 ? "Swipe vers la droite pour commencer" : "← retour · suivant →"}
+          {i === 0 ? "Touche l'écran ou glisse vers la droite pour commencer" : "← retour · suivant →"}
         </span>
         <button onClick={next} disabled={i === steps.length - 1} className="p-2" style={{ opacity: i === steps.length - 1 ? 0.25 : 1 }} title="Suivant">
           <ChevronRight size={30} color={COLORS.paper} />
