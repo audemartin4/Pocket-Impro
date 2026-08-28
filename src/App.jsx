@@ -5417,31 +5417,56 @@ function AmbassadeurPlayer({ manches, onClose }) {
           ))}
         </div>
       ) : (
-        <div className="flex-1 flex flex-col items-center justify-center px-6 text-center select-none">
-          {step.type === "manche" && (
-            <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(40px, 14vw, 88px)", color: COLORS.brass }} className="font-semibold">
-              Manche {numeroManche(step.manche)}
+        <div className="flex-1 flex flex-col items-center justify-center px-2 text-center select-none">
+          {/* Les deux flèches encadrent le mot, au milieu de l'écran : c'est là que les yeux sont, et
+              elles rappellent d'un coup d'œil que la gauche ramène et la droite avance — la même
+              règle que les deux moitiés de l'écran. */}
+          <div className="w-full flex items-center justify-between gap-1">
+            <button
+              onClick={prev}
+              disabled={i === 0}
+              className="p-2 shrink-0"
+              style={{ opacity: i === 0 ? 0.25 : 1 }}
+              title="Précédent"
+            >
+              <ChevronLeft size={34} color={COLORS.paper} />
+            </button>
+            <div className="flex-1 min-w-0">
+              {step.type === "manche" && (
+                <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(40px, 14vw, 88px)", color: COLORS.brass }} className="font-semibold">
+                  Manche {numeroManche(step.manche)}
+                </div>
+              )}
+              {step.type === "mot" && (
+                <div style={{ fontFamily: FONT_DISPLAY, fontSize: tailleDuMot(step.text), lineHeight: 1.1 }} className="font-semibold">
+                  {step.text}
+                </div>
+              )}
+              {step.type === "fin" && (
+                <>
+                  <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(32px, 10vw, 64px)", color: COLORS.brass }} className="font-semibold">
+                    Fin de la partie
+                  </div>
+                  <button
+                    onClick={() => setI(0)}
+                    className="mt-5 px-4 py-2 rounded-sm text-sm"
+                    style={{ fontFamily: FONT_BODY, background: COLORS.brass, color: COLORS.ink }}
+                  >
+                    Recommencer
+                  </button>
+                </>
+              )}
             </div>
-          )}
-          {step.type === "mot" && (
-            <div style={{ fontFamily: FONT_DISPLAY, fontSize: tailleDuMot(step.text), lineHeight: 1.1 }} className="font-semibold">
-              {step.text}
-            </div>
-          )}
-          {step.type === "fin" && (
-            <>
-              <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(32px, 10vw, 64px)", color: COLORS.brass }} className="font-semibold">
-                Fin de la partie
-              </div>
-              <button
-                onClick={() => setI(0)}
-                className="mt-5 px-4 py-2 rounded-sm text-sm"
-                style={{ fontFamily: FONT_BODY, background: COLORS.brass, color: COLORS.ink }}
-              >
-                Recommencer
-              </button>
-            </>
-          )}
+            <button
+              onClick={next}
+              disabled={i === steps.length - 1}
+              className="p-2 shrink-0"
+              style={{ opacity: i === steps.length - 1 ? 0.25 : 1 }}
+              title="Suivant"
+            >
+              <ChevronRight size={34} color={COLORS.paper} />
+            </button>
+          </div>
           {/* Révélation du thème de la manche qui vient de se terminer, à la demande du MJ. */}
           {mancheTerminee > 0 && (
             themeRevele === mancheTerminee ? (
@@ -5466,16 +5491,18 @@ function AmbassadeurPlayer({ manches, onClose }) {
         </div>
       )}
 
-      <div className="flex items-center justify-between px-4 py-5">
-        <button onClick={prev} disabled={i === 0} className="p-2" style={{ opacity: i === 0 ? 0.25 : 1 }} title="Précédent">
-          <ChevronLeft size={30} color={COLORS.paper} />
-        </button>
-        <span className="text-xs" style={{ fontFamily: FONT_MONO, color: COLORS.paper + "80" }}>
-          {i === 0 ? "Touche l'écran ou glisse vers la droite pour commencer" : "← retour · suivant →"}
-        </span>
-        <button onClick={next} disabled={i === steps.length - 1} className="p-2" style={{ opacity: i === steps.length - 1 ? 0.25 : 1 }} title="Suivant">
-          <ChevronRight size={30} color={COLORS.paper} />
-        </button>
+      {/* La navigation se fait à l'écran (les deux moitiés) et par les flèches qui encadrent le mot ;
+          il ne reste ici que le rappel de la règle. Le balayage n'est pas fiable sur tous les
+          téléphones, l'appui l'est. */}
+      <div className="px-5 pb-6 pt-1 flex items-center justify-between" style={{ fontFamily: FONT_MONO, color: COLORS.paper + "99" }}>
+        {i === 0 ? (
+          <span className="text-xs w-full text-center">Touche l'écran pour commencer</span>
+        ) : (
+          <>
+            <span className="text-xs whitespace-nowrap">← retour</span>
+            <span className="text-xs whitespace-nowrap">suivant →</span>
+          </>
+        )}
       </div>
     </div>
   );
