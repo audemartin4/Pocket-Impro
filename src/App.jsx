@@ -5284,7 +5284,12 @@ function AmbassadeurPlayer({ manches, onClose }) {
   // 3. un simple APPUI suffit aussi — moitié droite : suivant, moitié gauche : retour. Le glissement
   //    reste agréable, mais il n'est plus le seul moyen d'avancer.
   const onPointerDown = (e) => {
-    touchRef.current = { x: e.clientX, y: e.clientY, fait: false, surBouton: !!e.target.closest?.("button") };
+    const surBouton = !!e.target.closest?.("button");
+    // Capture du pointeur : le navigateur nous adresse alors TOUS les mouvements de ce doigt jusqu'au
+    // relâchement, au lieu de les retenir le temps de décider s'il se les approprie. Jamais sur un
+    // bouton, sinon le clic ne lui parviendrait plus.
+    if (!surBouton) { try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* non supporté */ } }
+    touchRef.current = { x: e.clientX, y: e.clientY, t: Date.now(), fait: false, surBouton };
   };
   // Un glissement franc : au moins 40 px, et plus horizontal que vertical.
   const glissement = (start, x, y) => {
@@ -5314,6 +5319,10 @@ function AmbassadeurPlayer({ manches, onClose }) {
     // "commencer", pour qu'un appui à gauche ne donne pas l'impression d'un écran mort. Ensuite,
     // moitié gauche = retour, moitié droite = suivant — revenir en arrière est aussi courant
     // qu'avancer (deux équipes ne sont jamais au même mot), la règle doit rester évidente.
+    // Un appui, c'est bref ET immobile. La durée compte autant que la distance : quand le navigateur
+    // ne nous rapporte aucun mouvement, un balayage arrive ici avec un déplacement nul et se ferait
+    // prendre pour un appui — du mauvais côté, puisqu'un balayage vers la droite part de la gauche.
+    if (Date.now() - start.t > 300) return;
     if (Math.abs(e.clientX - start.x) > 12 || Math.abs(e.clientY - start.y) > 12) return;
     if (i === 0) { next(); return; }
     if (e.clientX < window.innerWidth / 2) prev(); else next();
@@ -5336,11 +5345,12 @@ function AmbassadeurPlayer({ manches, onClose }) {
       style={{
         background: COLORS.ink,
         color: COLORS.paper,
-        // "pan-y" : on laisse le défilement vertical au navigateur (le sommaire se déroule), mais on
-        // lui retire l'horizontal, qu'il utilisait pour sa navigation arrière ou son élastique — il
-        // avalait le geste avant nous. `userSelect` évite qu'un glissement sur le mot en très gros
-        // démarre une sélection de texte, qui annule elle aussi le geste.
-        touchAction: "pan-y",
+        // Écran de jeu : "none", donc AUCUN arbitrage du navigateur — c'est lui qui, en se demandant
+        // s'il devait s'approprier le geste, retenait les mouvements et nous laissait croire à un
+        // simple appui. Le sommaire, lui, se déroule : il récupère le défilement vertical.
+        // `userSelect` évite qu'un glissement sur le mot en très gros démarre une sélection de
+        // texte, qui annule elle aussi le geste.
+        touchAction: sommaireOpen ? "pan-y" : "none",
         userSelect: "none",
         WebkitUserSelect: "none",
         WebkitTouchCallout: "none",
