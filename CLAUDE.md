@@ -96,6 +96,12 @@ Volontairement monolithique (héritage de l'artifact). Organisation interne :
   `SECTIONS_EXERCICE`, familles d'objectifs, puis les gros tableaux de seed.
 - **Composants UI réutilisables** (~l.1275-1830) : `IndexCard`, `Btn`, `Field`, `ExercisePicker`,
   `CategoryPicker`, etc.
+- **Cartes de programme** : `ProgrammeExerciseCard` / `ProgrammeCategoryCard` servent les trois
+  écrans qui affichent un programme (générateur de cours, générateur de spectacle, plans
+  enregistrés). Ce qui diffère d'un écran à l'autre passe par des emplacements (`star`, `badges`,
+  `actions`, `footerRight`…), jamais par une variante interne : toute retouche de présentation se
+  fait donc une seule fois. Le glisser-déposer (`useDragReorder` + `data-drop-card`) est branché
+  par l'écran appelant, pas par la carte.
 - **`ImproApp`** (l.1843) : racine. La navigation est un `useState` `tab` synchronisé avec
   `window.location.hash` et l'historique du navigateur ; le rendu est une longue liste de
   `{tab === "…" && <XxxTab … />}`.
@@ -103,7 +109,9 @@ Volontairement monolithique (héritage de l'artifact). Organisation interne :
   exports PDF (`exportCoursePlanPDF`, `exportSpectaclePlanPDF`) tout en bas.
 
 Google Fonts et **jsPDF sont chargés dynamiquement au runtime** via des balises injectées dans
-`ImproApp` — pas de dépendance npm pour le PDF.
+`ImproApp` — pas de dépendance npm pour le PDF. jsPDF n'utilise que les polices standard, limitées à
+Latin-1 : tout caractère en dehors (tiret cadratin, « œ », apostrophe courbe…) **disparaît
+silencieusement** du PDF. Tout texte écrit dans un PDF passe donc par `pdfTexte()`.
 
 ### Vocabulaire métier
 
@@ -121,6 +129,26 @@ Distinctions à respecter, elles pilotent les générateurs :
 - **`actualDuration`** : durée resserrée que le générateur a réservée pour ce créneau, prioritaire sur
   la `duration` brute de la fiche. La conserver lors d'un remplacement de carte, sinon le total
   affiché dérive.
+- **Ambassadeur** (jeu de mime) : une **manche** (`ambassadeurManches`) est la brique réutilisable —
+  un thème général, un titre, un niveau, des tranches d'âge, 5 mots ; c'est elle qui passe par la
+  modération. Classement sur deux niveaux : `themeGeneral` vient de la liste **fermée**
+  `AMBASSADEUR_THEMES_GENERAUX` (les utilisateurs n'en créent pas), tandis que le **titre** est le
+  champ `theme` (nom historique) — libre, créé à la volée, et c'est LUI le secret de jeu.
+  Les deux sont **facultatifs** : afficher une manche par son nom passe par `titreManche()`. Un
+  **ambassadeur** (`ambassadeurs`) n'est qu'un assemblage de 3 ids de manches, donc pas de modération.
+  Le **titre est un secret de jeu** : les équipes doivent le deviner en fin de manche, il ne doit
+  jamais s'afficher sur un écran visible des joueurs (écran de jeu, listes publiques) — seulement
+  dans le sommaire du maître du jeu, derrière un bouton de révélation, ou au moment de préparer.
+  Le thème général, lui, n'est qu'une étagère de rangement, mais il reste un indice : ne pas
+  l'afficher non plus pendant une partie.
+  À la création, on choisit de **partager la manche ou non** (« Non » par défaut) : une manche
+  `prive` n'est jamais `pending` (rien à modérer), n'entre pas dans le vocabulaire de thèmes commun,
+  et n'est visible que de son auteur — **pas même de l'Admin**. Une manche partagée par un membre
+  reste ensuite sous **embargo de 14 jours à compter de sa `createdAt`** (pas de sa validation) :
+  l'auteur doit pouvoir la faire jouer à ses élèves avant qu'ils puissent lire les mots dans l'appli.
+  Toute liste de manches passe par `mancheVisiblePar()` / `manchesJouables()` : les lire directement
+  dans `data.ambassadeurManches` laisse fuiter les manches privées ou sous embargo des autres (mots,
+  thèmes, suggestions de doublon).
 
 ## Conventions
 

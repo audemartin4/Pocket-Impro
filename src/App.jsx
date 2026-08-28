@@ -3,7 +3,7 @@ import {
   Sparkles, Shuffle, Clock, BookOpen, Users, Flame, ClipboardList,
   Plus, Trash2, Tag, ChevronRight, ChevronUp, ChevronDown, ChevronLeft, Download,
   Save, X, Check, Home, Theater, Pencil, Library, UserCircle, Pointer, Star, LogIn, LogOut, AlertTriangle, Mail, Eye, EyeOff, Contact,
-  Facebook, Instagram
+  Facebook, Instagram, Play, Hand
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
 import { useAuthUser, signIn, signUp, signOut, resetPasswordForEmail, updatePassword } from "./auth.js";
@@ -45,6 +45,7 @@ const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(
 function itemTitleFor(item, kind) {
   if (kind === "exercice") return item.title;
   if (kind === "catégorie") return item.name;
+  if (kind === "manche d'ambassadeur") return titreManche(item);
   return `${item.theme} · ${item.type}`; // concept de spectacle
 }
 
@@ -54,13 +55,16 @@ function notifyCreatorApproved(d, item, kind) {
   const title = itemTitleFor(item, kind);
   const extra = kind === "concept de spectacle"
     ? "il est maintenant visible dans la liste publique des concepts de spectacle."
-    : "il est maintenant visible dans la bibliothèque publique et pourra être proposé par les générateurs de cours, de spectacle et d'échauffement.";
+    : kind === "manche d'ambassadeur"
+      ? "elle est maintenant visible par tout le monde et peut être piochée pour monter une partie d'ambassadeur."
+      : "il est maintenant visible dans la bibliothèque publique et pourra être proposé par les générateurs de cours, de spectacle et d'échauffement.";
+  const feminin = kind === "catégorie" || kind === "manche d'ambassadeur";
   d.messages.push({
     id: uid(),
     type: "notif",
     to: item.creatorUsername,
     troupe: item.creatorTroupe || "",
-    text: `🎉 Ton ${kind} « ${title} » a été validé${kind === "catégorie" ? "e" : ""} par l'Admin : ${extra}`,
+    text: `🎉 ${feminin ? "Ta" : "Ton"} ${kind} « ${title} » a été validé${feminin ? "e" : ""} par l'Admin : ${extra}`,
     createdAt: Date.now(),
     seen: false,
   });
@@ -73,6 +77,8 @@ function notifyCreatorRejected(d, item, kind, reason) {
   let text;
   if (kind === "concept de spectacle") {
     text = `Ton concept de spectacle « ${title} » n'a pas été validé pour la liste publique : il n'apparaîtra pas dans la liste publique des concepts de spectacle. Tu peux quand même le retrouver et le réutiliser depuis la page « Concepts de spectacle ».`;
+  } else if (kind === "manche d'ambassadeur") {
+    text = `Ta manche d'ambassadeur « ${title} » n'a pas été validée : elle ne sera pas proposée aux autres utilisateurs. Tu peux quand même la retrouver et la jouer depuis la page « Ambassadeurs » de la Bibliothèque.`;
   } else {
     const pickerLabel = kind === "exercice" ? "Ajouter un exercice" : "Ajouter une catégorie";
     const mesFiches = kind === "exercice" ? "tes exercices créés" : "tes catégories créées";
@@ -89,6 +95,13 @@ function notifyCreatorRejected(d, item, kind, reason) {
     seen: false,
   });
 }
+
+/* Une fiche a sa place dans le corps du cours (cartes "Exercice") si sa PHASE n'est pas
+   "Échauffement". Le drapeau `warmup` ne dit pas la même chose : il signifie seulement "utilisable
+   en échauffement rapide", et 81 fiches d'échauffement ne le portent pas — s'y fier laissait donc
+   passer des échauffements dans les cartes d'exercices. Seules les fiches `dualUse` (doublons
+   échauffement/exercice fusionnés volontairement) restent éligibles aux deux sections. */
+const estCorpsDeCours = (e) => ((e.phase || "Impro") !== "Échauffement" || e.dualUse) && !e.application;
 
 /* Estime le temps (en min) où un élève reste spectateur pendant un exercice "chacun son tour" */
 function computeWaitMinutes(exercise, participants) {
@@ -262,6 +275,36 @@ const TEST_USER_NAME = "Utilisateur test";
 const TEMPS_TOTAL_OPTIONS = [30, 60, 90, 120];
 const DEBRIEF_MIN = 15;
 
+/* ---------- Ambassadeur (jeu de mime) ----------
+   Une PARTIE d'ambassadeur = 3 manches de 5 mots ou phrases à faire deviner en mimant.
+   La brique réutilisable est la MANCHE (un thème, un niveau, une ou plusieurs tranches d'âge,
+   5 mots) : c'est elle qui est créée, modérée et piochée. Une partie n'est qu'un assemblage de
+   trois manches déjà validées, donc elle n'a pas besoin de repasser par la modération. */
+const TRANCHES_AGE = ["Enfants", "Ados", "Adultes", "Senior"];
+// Classement de la bibliothèque de manches, sur deux niveaux. Le **thème général**
+// (`themeGeneral`) vient de cette liste fermée : les utilisateurs n'en créent pas. Le **sous-thème**
+// (champ `theme` d'une manche, historique) est libre et se crée à la volée : « Films cultes
+// français » se range dans « Cinéma ». C'est le sous-thème que les équipes doivent deviner en fin
+// de manche — le thème général, lui, n'est qu'une étagère.
+const AMBASSADEUR_THEMES_GENERAUX = [
+  "Cinéma", "Cuisine", "Expressions", "Fêtes et traditions", "Géographie", "Histoire",
+  "Littérature", "Métier", "Musique", "Nature", "Objets du quotidien", "Sport",
+];
+const AMBASSADEUR_MOTS_PAR_MANCHE = 5;
+const AMBASSADEUR_MANCHES_PAR_PARTIE = 3;
+// Un mot ou une phrase doit rester lisible en très gros sur un téléphone tenu à bout de bras :
+// au-delà, le texte passe sur trois lignes et rétrécit. Même limite pour les thèmes.
+const AMBASSADEUR_LONGUEUR_MAX = 35;
+// Temps réservé au jeu dans un plan de cours : trois manches de mime prennent au moins 10 minutes,
+// et rarement plus d'un quart d'heure.
+const AMBASSADEUR_MIN_MIN = 10;
+const AMBASSADEUR_MAX_MIN = 15;
+// Manches de départ, versées une seule fois par la migration _ambassadeursV1. Vidée le 2026-08-28 :
+// Aude a demandé la suppression des 8 manches d'essai et fournira une liste plus complète. Comme
+// _ambassadeursV1 a déjà joué sur la base partagée, la future liste devra être versée par une
+// NOUVELLE migration (_ambassadeursV2), pas en remplissant ce tableau.
+const AMBASSADEUR_MANCHES_SEED = [];
+
 /* ---------- Seed data (à remplacer par ton contenu) ---------- */
 const SEED = {
   thematiques: ["Amour", "Peur", "Aventure", "Mystère", "Cinéma", "Vacances", "Humour", "Émotion", "Familial", "Participatif", "Expérimental"],
@@ -273,6 +316,11 @@ const SEED = {
   showConcepts: [],
   coursePlans: [],
   spectaclePlans: [],
+  // Ambassadeur : vocabulaire de thèmes propre au jeu (distinct de `thematiques`, qui sert aux
+  // catégories et aux générateurs), manches de 5 mots, et parties assemblées (3 manches).
+  ambassadeurThemes: [],
+  ambassadeurManches: [],
+  ambassadeurs: [],
 };
 
 /* Catégories (genres de scène) tirées des documents fournis par l'utilisateur (exercices +
@@ -549,6 +597,11 @@ const EXERCICES_ECHAUFFEMENT = [
   { title: "Démarches de personnages", groupe: "Marche", summary: "Le prof donne des personnages archétypaux que les participants incarnent progressivement, en ajoutant un point moteur, une respiration, un rire puis un objet.", level: "Confirmé", objectives: ["Déambulation", "Imagination", "Personnages", "Mime"], players: 0, duration: 5, energy: "Modérée", material: "Aucun", format: "Déambulation", warmup: false },
   { title: "Démarches d'univers", groupe: "Marche", summary: "Au fil de musiques inspirées d'univers différents, les comédiens adoptent l'attitude adaptée à l'univers sonore proposé, en changeant d'univers toutes les 40 secondes.", level: "Confirmé", objectives: ["Déambulation", "Imagination", "Personnages", "Mime", "Univers", "Musique"], players: 0, duration: 6, energy: "Modérée", material: "Musique", format: "Déambulation", warmup: false },
   { title: "Bouge / bouge pas", groupe: "Marche", summary: "Le groupe est séparé en sous-groupes ; il doit toujours y avoir une seule personne en mouvement, les autres immobiles, en essayant de piéger les autres.", level: "Confirmé", objectives: ["Déambulation", "Jeu", "Écoute", "Cohésion", "Musique"], players: 0, duration: 6, energy: "Modérée", material: "Musique", format: "Déambulation", warmup: false },
+  // Fiche du jeu de mime. Elle manquait en base alors que le générateur de cours la cherchait par
+  // son titre exact ("Ambassadeur") pour la placer en dernier échauffement : sans elle, la case
+  // "Inclure un ambassadeur" ne produisait rien. Les mots à faire deviner, eux, vivent dans
+  // `ambassadeurManches` et se choisissent depuis la carte du plan de cours.
+  { title: "Ambassadeur", groupe: "Déconnexion", summary: "Les joueurs se répartissent en équipes de 2 minimum. Un joueur vient voir le maître du jeu, qui lui montre un mot ou une phrase à mimer ; il retourne le faire deviner à son équipe. Dès qu'elle a trouvé, un autre joueur vient donner la réponse et repart avec le mot suivant. 3 manches de 5 mots, et à la fin de chaque manche les équipes doivent aussi deviner le thème.", level: "Débutant", objectives: ["Mime", "Jeu", "Cohésion", "Corps", "Énergie"], players: 0, duration: 15, energy: "Forte", material: "Un téléphone (maître du jeu)", format: "En groupe simultané" },
 ].map((e) => ({ id: uid(), warmup: true, application: false, showTypes: [], groupSize: 2, phase: "Échauffement", ...e }));
 
 /* Exercices pré-impro fournis par l'utilisateur. */
@@ -1181,6 +1234,45 @@ function mergeMissingCategories(data) {
     removedAmourConceptV1 = true;
   }
 
+  // Ambassadeur : crée les trois tableaux et verse une seule fois les manches de départ. Le flag
+  // évite de les remettre si l'Admin en supprime ensuite. Les tableaux eux-mêmes sont toujours
+  // normalisés à un tableau vide en dessous, pour les blobs enregistrés avant cette version.
+  let ambassadeurThemes = data.ambassadeurThemes;
+  let ambassadeurManches = data.ambassadeurManches;
+  let ambassadeurs = data.ambassadeurs;
+  let ambassadeursV1 = data._ambassadeursV1;
+  if (!ambassadeursV1) {
+    ambassadeurManches = [
+      ...(ambassadeurManches || []),
+      ...AMBASSADEUR_MANCHES_SEED.map((m) => ({
+        ...m, id: uid(), creatorUsername: "", creatorTroupe: "", pending: false, rejected: false, approvalSeen: true,
+      })),
+    ];
+    ambassadeurThemes = [...new Set([...(ambassadeurThemes || []), ...AMBASSADEUR_MANCHES_SEED.map((m) => m.theme)])];
+    ambassadeursV1 = true;
+  }
+  if (!ambassadeurThemes) ambassadeurThemes = [];
+  if (!ambassadeurManches) ambassadeurManches = [];
+  if (!ambassadeurs) ambassadeurs = [];
+  // Renommage demandé après coup de la manche de départ "Bar / Bistrot" (les mots sont montpelliérains).
+  let ambassadeurBarsMontpellierV1 = data._ambassadeurBarsMontpellierV1;
+  if (!ambassadeurBarsMontpellierV1) {
+    ambassadeurManches = ambassadeurManches.map((m) => (m.theme === "Bar / Bistrot" ? { ...m, theme: "Bars montpelliérains" } : m));
+    ambassadeurThemes = [...new Set(ambassadeurThemes.map((t) => (t === "Bar / Bistrot" ? "Bars montpelliérains" : t)))];
+    ambassadeurBarsMontpellierV1 = true;
+  }
+  // Table rase demandée par Aude le 2026-08-28 : les manches d'essai sont supprimées en attendant sa
+  // liste définitive. On efface aussi les assemblages, qui ne pointeraient plus sur rien, et le
+  // vocabulaire de thèmes. Les plans de cours qui prévoyaient un ambassadeur gardent leurs ids et
+  // affichent « ces manches ne sont plus disponibles » (voir AmbassadeurPlanCard).
+  let ambassadeursResetV1 = data._ambassadeursResetV1;
+  if (!ambassadeursResetV1) {
+    ambassadeurManches = [];
+    ambassadeurs = [];
+    ambassadeurThemes = [];
+    ambassadeursResetV1 = true;
+  }
+
   // Le niveau "Expert" est retiré de l'appli : on convertit les fiches déjà enregistrées vers "Avancé".
   if (exercises?.some((e) => e.level === "Expert")) {
     exercises = exercises.map((e) => (e.level === "Expert" ? { ...e, level: "Avancé" } : e));
@@ -1210,9 +1302,15 @@ function mergeMissingCategories(data) {
     universArchetypesV2 === data._universArchetypesV2 &&
     universArchetypesV3 === data._universArchetypesV3 &&
     universLexiqueV1 === data._universLexiqueV1 &&
-    removedAmourConceptV1 === data._removedAmourConceptV1
+    removedAmourConceptV1 === data._removedAmourConceptV1 &&
+    ambassadeurThemes === data.ambassadeurThemes &&
+    ambassadeurManches === data.ambassadeurManches &&
+    ambassadeurs === data.ambassadeurs &&
+    ambassadeursV1 === data._ambassadeursV1 &&
+    ambassadeurBarsMontpellierV1 === data._ambassadeurBarsMontpellierV1 &&
+    ambassadeursResetV1 === data._ambassadeursResetV1
   ) return data;
-  return { ...data, categories, showTypes, showConcepts, exercises, objectifs, thematiques, _cercleTagV1: cercleTagV1, _musiqueTagV1: musiqueTagV1, _materialMusiqueV1: materialMusiqueV1, _tagCaseAccentMergeV1: tagCaseAccentMergeV1, _stageWarmupMachineV1: stageWarmupMachineV1, _stageWarmupBatch2V1: stageWarmupBatch2V1, _devinettesEnergyV1: devinettesEnergyV1, _canOpenShowDefaultsV1: canOpenShowDefaultsV1, _canCloseShowDefaultsV1: canCloseShowDefaultsV1, _universLieuxV1: universLieuxV1, _comedieMusicaleLieuxV1: comedieMusicaleLieuxV1, _universArchetypesV2: universArchetypesV2, _universArchetypesV3: universArchetypesV3, _universLexiqueV1: universLexiqueV1, _removedAmourConceptV1: removedAmourConceptV1 };
+  return { ...data, ambassadeurThemes, ambassadeurManches, ambassadeurs, _ambassadeursV1: ambassadeursV1, _ambassadeurBarsMontpellierV1: ambassadeurBarsMontpellierV1, _ambassadeursResetV1: ambassadeursResetV1, categories, showTypes, showConcepts, exercises, objectifs, thematiques, _cercleTagV1: cercleTagV1, _musiqueTagV1: musiqueTagV1, _materialMusiqueV1: materialMusiqueV1, _tagCaseAccentMergeV1: tagCaseAccentMergeV1, _stageWarmupMachineV1: stageWarmupMachineV1, _stageWarmupBatch2V1: stageWarmupBatch2V1, _devinettesEnergyV1: devinettesEnergyV1, _canOpenShowDefaultsV1: canOpenShowDefaultsV1, _canCloseShowDefaultsV1: canCloseShowDefaultsV1, _universLieuxV1: universLieuxV1, _comedieMusicaleLieuxV1: comedieMusicaleLieuxV1, _universArchetypesV2: universArchetypesV2, _universArchetypesV3: universArchetypesV3, _universLexiqueV1: universLexiqueV1, _removedAmourConceptV1: removedAmourConceptV1 };
 }
 
 /* ---------- Persistence ---------- */
@@ -1560,7 +1658,7 @@ function SearchableMultiSelect({ allOptions, selected, onChange, placeholder = "
 }
 
 /* Menu déroulant avec recherche, sélection UNIQUE (pas de tags) — ex. filtre thématique. */
-function SearchableSingleSelect({ allOptions, value, onChange, placeholder = "Chercher…", allowCreate = false, onCreate, createLabel }) {
+function SearchableSingleSelect({ allOptions, value, onChange, placeholder = "Chercher…", allowCreate = false, onCreate, createLabel, maxLength }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const filtered = [...allOptions].sort((a, b) => a.localeCompare(b, "fr")).filter((o) => matchesKeywords(query, o));
@@ -1574,6 +1672,7 @@ function SearchableSingleSelect({ allOptions, value, onChange, placeholder = "Ch
       <input
         className={inputClass}
         style={inputStyle}
+        maxLength={maxLength}
         value={open ? query : (value || "")}
         onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
         onFocus={() => { setQuery(""); setOpen(true); }}
@@ -1752,7 +1851,7 @@ const TABS = [
 ];
 // Onglets qui relèvent de la Bibliothèque (hub + toutes ses sous-pages) — sert à n'afficher
 // le bouton "Remonter en haut" que sur ces pages-là.
-const LIBRARY_TABS = ["bibliotheque", "exercices", "exercices-crees", "categories", "categories-crees", "spectacles", "spectacles-crees", "plans", "favoris", "moderation", "messages", "mes-messages", "messages-envoyes", "comptes", "valides", "parametres"];
+const LIBRARY_TABS = ["bibliotheque", "exercices", "exercices-crees", "categories", "categories-crees", "spectacles", "spectacles-crees", "ambassadeurs", "ambassadeurs-crees", "ambassadeurs-liste", "plans", "favoris", "moderation", "messages", "mes-messages", "messages-envoyes", "comptes", "valides", "parametres"];
 
 /* Bouton "← Bibliothèque" (ou autre cible), en haut à gauche des sous-pages de la Bibliothèque —
    même style visuel que les BackBtn internes utilisés pour la navigation par famille/tag. */
@@ -1918,6 +2017,7 @@ export default function ImproApp() {
       exercises: data.exercises.filter((e) => !e.pending && !e.rejected),
       categories: data.categories.filter((c) => !c.pending && !c.rejected),
       showConcepts: data.showConcepts.filter((sc) => !sc.pending && !sc.rejected),
+      ambassadeurManches: (data.ambassadeurManches || []).filter((m) => !m.pending && !m.rejected),
     };
   }, [data]);
 
@@ -1968,7 +2068,7 @@ export default function ImproApp() {
         ) : (
         <>
         {tab === "accueil" && <Accueil setTab={setTab} hasCoursPlan={!!coursPlan} hasSpectaclePlan={!!spectaclePlan} hasEchauffementPlan={!!echauffementPlan} />}
-        {tab === "gen-cours" && <GenerateurCoursTab data={publicData} allData={data} update={update} plan={coursPlan} setPlan={setCoursPlan} currentUser={currentUser} setTab={setTab} />}
+        {tab === "gen-cours" && <GenerateurCoursTab data={publicData} allData={data} update={update} plan={coursPlan} setPlan={setCoursPlan} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} setTab={setTab} />}
         {tab === "gen-spectacle" && <GenerateurSpectacleTab data={publicData} allData={data} update={update} plan={spectaclePlan} setPlan={setSpectaclePlan} currentUser={currentUser} setTab={setTab} />}
         {tab === "gen-echauffement" && <GenerateurEchauffementTab data={publicData} update={update} plan={echauffementPlan} setPlan={setEchauffementPlan} currentUser={currentUser} />}
         {tab === "gen-idees" && <GenererIdeesTab setTab={setTab} data={publicData} />}
@@ -1979,8 +2079,11 @@ export default function ImproApp() {
         {tab === "categories-crees" && <CategoriesTab data={data} update={update} isAdmin={isAdmin} currentUser={currentUser} profile={auth.profile} onlyUserCreated setTab={setTab} />}
         {tab === "spectacles" && <SpectaclesTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} />}
         {tab === "spectacles-crees" && <SpectaclesTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} onlyUserCreated />}
+        {tab === "ambassadeurs" && <AmbassadeursTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} />}
+        {tab === "ambassadeurs-crees" && <AmbassadeursTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} onlyUserCreated />}
+        {tab === "ambassadeurs-liste" && <AmbassadeursTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} catalogue />}
         {tab === "entrainement" && <EntrainementTab data={publicData} />}
-        {tab === "plans" && <PlansTab data={publicData} update={update} setTab={setTab} />}
+        {tab === "plans" && <PlansTab data={publicData} allData={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} />}
         {tab === "moderation" && <ModerationTab data={data} update={update} setTab={setTab} isAdmin={isAdmin} />}
         {tab === "messages" && <MessagesTab data={data} update={update} setTab={setTab} isAdmin={isAdmin} />}
         {tab === "comptes" && <ComptesTab data={data} update={update} isAdmin={isAdmin} setTab={setTab} />}
@@ -2231,6 +2334,7 @@ function Accueil({ setTab, hasCoursPlan, hasSpectaclePlan, hasEchauffementPlan }
     { label: "Créer un cours", tab: "gen-cours", icon: BookOpen },
     { label: "Créer un spectacle", tab: "gen-spectacle", icon: Theater },
     { label: "Créer un échauffement", tab: "gen-echauffement", icon: Flame },
+    { label: "Créer un ambassadeur", tab: "ambassadeurs", icon: Hand },
     { label: "Générer des idées", tab: "gen-idees", icon: Sparkles },
     { label: "Catégorie aléatoire", tab: "entrainement", icon: Shuffle },
     { label: "Explorer", tab: "bibliotheque", icon: Library },
@@ -2278,7 +2382,7 @@ function Accueil({ setTab, hasCoursPlan, hasSpectaclePlan, hasEchauffementPlan }
         ))}
       </div>
       <p className="text-xs text-center mt-6" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-        Prochainement : Créer un ambassadeur --- Choix par tranche d'âge
+        Prochainement : Choix par tranche d'âge · Faire un don
       </p>
     </div>
   );
@@ -2320,6 +2424,7 @@ function BibliothequeTab({ data, update, setTab, isAdmin, currentUser, goToLibra
     { label: "Exercices", desc: `${data.exercises.length} fiche(s)`, tab: "exercices", icon: Users },
     { label: "Catégories", desc: `${data.categories.length} fiche(s) — types de scène, thématiques, archétypes`, tab: "categories", icon: Tag },
     { label: "Concepts de spectacle", desc: `${data.showConcepts.length} fiche(s)`, tab: "spectacles", icon: Theater },
+    { label: "Ambassadeurs", desc: `${(data.ambassadeurManches || []).length} manche(s) de 5 mots à faire deviner en mimant`, tab: "ambassadeurs-liste", icon: Hand },
   ];
 
   return (
@@ -2715,10 +2820,11 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
     { label: "Catégories créées", n: data.categories.filter((c) => c.creatorUsername === currentUser).length, icon: Tag, tab: "categories-crees" },
     { label: "Exercices créés", n: data.exercises.filter((e) => e.creatorUsername === currentUser).length, icon: Users, tab: "exercices-crees" },
     { label: "Concepts de spectacle créés", n: data.showConcepts.filter((sc) => sc.creatorUsername === currentUser).length, icon: Theater, tab: "spectacles-crees" },
+    { label: "Manches d'ambassadeur créées", n: (data.ambassadeurManches || []).filter((m) => m.creatorUsername === currentUser).length, icon: Hand, tab: "ambassadeurs-crees" },
     { label: "Favoris", n: nbFavoris, icon: Star, tab: "favoris" },
   ];
 
-  const nbPending = data.exercises.filter((e) => e.pending).length + data.categories.filter((c) => c.pending).length;
+  const nbPending = data.exercises.filter((e) => e.pending).length + data.categories.filter((c) => c.pending).length + (data.ambassadeurManches || []).filter((m) => m.pending).length;
   const nbUnreadMessages = (data.messages || []).filter((m) => m.type !== "notif" && !m.read).length;
   const nbUnreadReplies = (data.messages || []).filter((m) =>
     (m.from === currentUser && m.reply && m.replySeen === false) ||
@@ -2755,12 +2861,14 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
         ...data.exercises.filter((e) => e.creatorUsername === currentUser && !e.pending && !e.rejected && e.approvalSeen === false).map((e) => ({ kind: "exercice", article: "Ton", title: e.title, id: e.id })),
         ...data.categories.filter((c) => c.creatorUsername === currentUser && !c.pending && !c.rejected && c.approvalSeen === false).map((c) => ({ kind: "catégorie", article: "Ta", title: c.name, id: c.id })),
         ...data.showConcepts.filter((sc) => sc.creatorUsername === currentUser && !sc.pending && !sc.rejected && sc.approvalSeen === false).map((sc) => ({ kind: "concept de spectacle", article: "Ton", title: `${sc.theme} · ${sc.type}`, id: sc.id })),
+        ...(data.ambassadeurManches || []).filter((m) => m.creatorUsername === currentUser && !m.pending && !m.rejected && m.approvalSeen === false).map((m) => ({ kind: "manche d'ambassadeur", article: "Ta", title: titreManche(m), id: m.id })),
       ]
     : [];
   const dismissApproved = () => update((d) => {
     d.exercises.forEach((e) => { if (e.creatorUsername === currentUser && !e.pending && !e.rejected && e.approvalSeen === false) e.approvalSeen = true; });
     d.categories.forEach((c) => { if (c.creatorUsername === currentUser && !c.pending && !c.rejected && c.approvalSeen === false) c.approvalSeen = true; });
     d.showConcepts.forEach((sc) => { if (sc.creatorUsername === currentUser && !sc.pending && !sc.rejected && sc.approvalSeen === false) sc.approvalSeen = true; });
+    (d.ambassadeurManches || []).forEach((m) => { if (m.creatorUsername === currentUser && !m.pending && !m.rejected && m.approvalSeen === false) m.approvalSeen = true; });
     return d;
   });
 
@@ -2771,12 +2879,14 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
         ...data.exercises.filter((e) => e.creatorUsername === currentUser && e.rejected && e.approvalSeen === false).map((e) => ({ kind: "exercice", title: e.title, id: e.id })),
         ...data.categories.filter((c) => c.creatorUsername === currentUser && c.rejected && c.approvalSeen === false).map((c) => ({ kind: "catégorie", title: c.name, id: c.id })),
         ...data.showConcepts.filter((sc) => sc.creatorUsername === currentUser && sc.rejected && sc.approvalSeen === false).map((sc) => ({ kind: "concept de spectacle", title: `${sc.theme} · ${sc.type}`, id: sc.id })),
+        ...(data.ambassadeurManches || []).filter((m) => m.creatorUsername === currentUser && m.rejected && m.approvalSeen === false).map((m) => ({ kind: "manche d'ambassadeur", title: titreManche(m), id: m.id })),
       ]
     : [];
   const dismissRejected = () => update((d) => {
     d.exercises.forEach((e) => { if (e.creatorUsername === currentUser && e.rejected && e.approvalSeen === false) e.approvalSeen = true; });
     d.categories.forEach((c) => { if (c.creatorUsername === currentUser && c.rejected && c.approvalSeen === false) c.approvalSeen = true; });
     d.showConcepts.forEach((sc) => { if (sc.creatorUsername === currentUser && sc.rejected && sc.approvalSeen === false) sc.approvalSeen = true; });
+    (d.ambassadeurManches || []).forEach((m) => { if (m.creatorUsername === currentUser && m.rejected && m.approvalSeen === false) m.approvalSeen = true; });
     return d;
   });
 
@@ -5016,6 +5126,1225 @@ function SpectaclesTab({ data, update, setTab, currentUser, isAdmin, onlyUserCre
   );
 }
 
+/* ---------- Ambassadeur (jeu de mime) ---------- */
+
+/* Embargo sur une manche proposée par un membre : même validée en 24 h, elle n'apparaît aux autres
+   que deux semaines après sa CRÉATION, pour laisser à son auteur le temps de la faire jouer à ses
+   élèves sans qu'ils puissent aller lire les mots dans l'appli. Le compte à rebours part donc de la
+   création et non de la validation. Les manches publiées par l'Admin (créateur vide) forment le
+   fonds commun de l'appli : elles ne sont pas concernées. */
+const AMBASSADEUR_EMBARGO_JOURS = 14;
+const mancheOuverteALaCommunauteLe = (m) =>
+  m.creatorUsername && m.createdAt ? m.createdAt + AMBASSADEUR_EMBARGO_JOURS * 24 * 3600 * 1000 : 0;
+const mancheSousEmbargo = (m) => Date.now() < mancheOuverteALaCommunauteLe(m);
+// Le titre (champ `theme`) est facultatif : partout où une manche s'affiche par son nom, il faut un
+// repli, sinon la carte, le sélecteur ou le PDF montrent une ligne vide.
+const titreManche = (m) => (m && m.theme) || "Manche sans titre";
+// "11 septembre" ; l'année n'apparaît que si elle diffère de l'année en cours (fin décembre).
+const formatJour = (ts) => {
+  const d = new Date(ts);
+  const memeAnnee = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleDateString("fr-FR", memeAnnee ? { day: "numeric", month: "long" } : { day: "numeric", month: "long", year: "numeric" });
+};
+
+/* Qui voit quelle manche. Sa créatrice ou son créateur voit toujours les siennes ; les autres ne
+   voient que les manches partagées, validées et sorties d'embargo. Une manche marquée `prive`
+   (« je ne la partage pas avec la communauté ») n'est visible de personne d'autre — pas même de
+   l'Admin, qui n'a rien à y modérer. Les manches en attente ou refusées restent visibles de leur
+   auteur, et de l'Admin pour qu'il puisse les traiter. */
+const mancheVisiblePar = (m, currentUser, isAdmin) => {
+  if (m.creatorUsername === currentUser) return true;
+  if (m.prive) return false;
+  if (m.pending || m.rejected) return !!isAdmin;
+  return !!isAdmin || !mancheSousEmbargo(m);
+};
+
+/* Manches réellement jouables par la personne connectée : les manches validées, plus les siennes
+   encore en attente (même principe que pour un exercice proposé — on peut s'en servir avant que la
+   modération soit passée) et celles qu'elle garde pour elle. */
+const manchesJouables = (data, currentUser, isAdmin) =>
+  (data.ambassadeurManches || []).filter((m) => mancheVisiblePar(m, currentUser, isAdmin));
+
+// Nom par défaut d'une partie : ses niveaux et tranches d'âge, jamais ses thèmes — un thème est à
+// deviner par les équipes en fin de manche, il ne doit apparaître nulle part où un joueur pourrait
+// le lire par-dessus l'épaule du maître du jeu.
+/* Fabrique une manche prête à être enregistrée. Partagé par la page Ambassadeurs et par la carte
+   du plan de cours, qui permet d'en créer une sans quitter l'écran de création de cours. */
+const construireManche = (f, { isAdmin, currentUser, profile }) => {
+  const { partage = true, ...reste } = f;
+  return {
+    ...reste,
+    id: uid(),
+    // Date de création : c'est elle, et non la date de validation, qui ouvre l'embargo de deux
+    // semaines (voir mancheOuverteALaCommunauteLe).
+    createdAt: Date.now(),
+    // Gardée pour soi : rien à modérer, donc jamais "pending" — sinon elle attendrait pour toujours
+    // dans une file où l'Admin ne doit même pas la voir.
+    prive: !partage,
+    pending: partage && !isAdmin,
+    rejected: false,
+    // Une manche publiée par l'Admin porte un créateur vide (contenu « officiel » de l'appli). Une
+    // manche gardée pour soi doit au contraire garder un propriétaire réel : c'est le seul lien qui
+    // permet encore de la retrouver.
+    creatorUsername: isAdmin && partage ? "" : (currentUser || ""),
+    creatorTroupe: profile?.troupe || "",
+    approvalSeen: !!isAdmin || !partage,
+  };
+};
+
+const partieLabel = (manches) => {
+  const niveaux = [...new Set(manches.map((m) => m.level).filter(Boolean))];
+  const ages = [...new Set(manches.flatMap((m) => m.tranchesAge || []))];
+  // Une seule valeur : on la nomme. Plusieurs : "tous niveaux" / "tous publics", sinon le nom
+  // devient une énumération illisible dès que les trois manches ne se ressemblent pas.
+  const niveau = niveaux.length === 1 ? niveaux[0] : niveaux.length > 1 ? "tous niveaux" : "";
+  const age = ages.length === 1 ? ages[0] : ages.length > 1 ? "tous publics" : "";
+  return `Ambassadeur${niveau ? ` ${niveau}` : ""}${age ? ` · ${age}` : ""}`;
+};
+const numeroManche = (n) => String(n).padStart(2, "0");
+
+/* Déroulé linéaire d'une partie : un écran de titre par manche, puis ses 5 mots, puis la fin.
+   Le maître du jeu navigue librement dans les deux sens : les équipes avancent dans la même liste
+   mais pas au même rythme, c'est à lui de revenir au bon mot pour chaque équipe. */
+function buildAmbassadeurSteps(manches) {
+  const steps = [];
+  manches.forEach((m, i) => {
+    steps.push({ type: "manche", manche: i + 1, theme: m.theme });
+    (m.mots || []).forEach((mot, j) => {
+      steps.push({ type: "mot", manche: i + 1, index: j + 1, total: (m.mots || []).length, text: mot, theme: m.theme });
+    });
+  });
+  steps.push({ type: "fin" });
+  return steps;
+}
+
+/* Écran de jeu plein écran, tenu par le maître du jeu et montré au mimeur. */
+function AmbassadeurPlayer({ manches, onClose }) {
+  const steps = useMemo(() => buildAmbassadeurSteps(manches), [manches]);
+  const [i, setI] = useState(0);
+  const [sommaireOpen, setSommaireOpen] = useState(false);
+  // Le thème d'une manche est lui-même à deviner : à la fin de la manche, les équipes doivent le
+  // dire au maître du jeu le plus vite possible. Il n'apparaît donc jamais sur les écrans montrés
+  // aux joueurs — seulement dans le sommaire (l'antisèche du MJ) et sur ce bouton de révélation,
+  // qu'il actionne une fois que les équipes ont répondu.
+  const [themeRevele, setThemeRevele] = useState(null);
+  const touchRef = useRef(null);
+
+  const next = useCallback(() => setI((v) => Math.min(v + 1, steps.length - 1)), [steps.length]);
+  const prev = useCallback(() => setI((v) => Math.max(v - 1, 0)), []);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "ArrowRight" || e.key === " ") { e.preventDefault(); next(); }
+      else if (e.key === "ArrowLeft") { e.preventDefault(); prev(); }
+      else if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [next, prev, onClose]);
+
+  // Empêche le défilement de la page derrière l'écran de jeu (le swipe doit rester horizontal).
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previous; };
+  }, []);
+
+  // Garde l'écran allumé pendant la partie : le téléphone reste en main sans qu'on le touche
+  // pendant qu'une équipe mime, et un écran qui s'éteint coupe le jeu. Non supporté partout, d'où
+  // le try/catch silencieux.
+  useEffect(() => {
+    let lock = null;
+    const acquire = async () => { try { lock = await navigator.wakeLock?.request("screen"); } catch { /* non supporté */ } };
+    acquire();
+    const onVisible = () => { if (document.visibilityState === "visible") acquire(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      try { lock?.release(); } catch { /* déjà relâché */ }
+    };
+  }, []);
+
+  const onTouchStart = (e) => { const t = e.touches[0]; touchRef.current = { x: t.clientX, y: t.clientY }; };
+  const onTouchEnd = (e) => {
+    const start = touchRef.current;
+    touchRef.current = null;
+    if (!start) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    // Seuil de 40 px et geste franchement horizontal, pour ne pas déclencher sur un simple appui.
+    if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy)) return;
+    if (dx > 0) next(); else prev();
+  };
+
+  const step = steps[i];
+  // Numéro de la manche qui vient de se terminer : sur un écran de titre "Manche 02", c'est la 01 ;
+  // sur l'écran de fin, c'est la dernière. 0 avant la toute première manche.
+  const mancheTerminee = step.type === "manche" ? step.manche - 1 : step.type === "fin" ? manches.length : 0;
+  const jumpTo = (mancheIndex, motIndex) => {
+    const target = steps.findIndex((s) => s.type === "mot" && s.manche === mancheIndex && s.index === motIndex);
+    if (target >= 0) setI(target);
+    setSommaireOpen(false);
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex flex-col"
+      style={{ background: COLORS.ink, color: COLORS.paper }}
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+    >
+      <div className="flex items-start justify-between px-4 py-3">
+        <div>
+          <div
+            className="text-xs px-2 py-1 rounded-full inline-block"
+            style={{ fontFamily: FONT_MONO, color: COLORS.brass, border: `1px solid ${COLORS.brass}66` }}
+          >
+            {step.type === "mot"
+              ? `MANCHE ${numeroManche(step.manche)} · MOT ${step.index}/${step.total}`
+              : step.type === "manche" ? `MANCHE ${numeroManche(step.manche)}` : "FIN"}
+          </div>
+          {/* Le sommaire du maître du jeu : sans ce bouton explicite, personne ne devinait que le
+              compteur était cliquable. C'est pourtant l'outil clé pour retrouver le bon mot quand
+              deux équipes n'en sont pas au même endroit. */}
+          <button
+            onClick={() => setSommaireOpen((v) => !v)}
+            className="block text-xs mt-1 underline"
+            style={{ fontFamily: FONT_MONO, color: COLORS.paper + "aa" }}
+          >
+            {sommaireOpen ? "Masquer le détail" : "Voir le détail"}
+          </button>
+        </div>
+        <button onClick={onClose} className="p-1 -m-1" title="Quitter la partie">
+          <X size={22} color={COLORS.paper} />
+        </button>
+      </div>
+
+      {sommaireOpen ? (
+        <div className="flex-1 overflow-y-auto px-4 pb-6">
+          <p className="text-xs mb-3" style={{ fontFamily: FONT_MONO, color: COLORS.brass }}>
+            Sommaire — touche un mot pour y aller directement
+          </p>
+          {manches.map((m, mi) => (
+            <div key={m.id || mi} className="mb-4">
+              <div className="text-xs mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.paper + "99" }}>
+                MANCHE {numeroManche(mi + 1)} · {titreManche(m)}
+              </div>
+              {(m.mots || []).map((mot, wi) => {
+                const isCurrent = step.type === "mot" && step.manche === mi + 1 && step.index === wi + 1;
+                return (
+                  <button
+                    key={wi}
+                    onClick={() => jumpTo(mi + 1, wi + 1)}
+                    className="block w-full text-left px-3 py-2 rounded-sm mb-1 text-sm"
+                    style={{
+                      fontFamily: FONT_BODY,
+                      background: isCurrent ? COLORS.brass : "#ffffff14",
+                      color: isCurrent ? COLORS.ink : COLORS.paper,
+                    }}
+                  >
+                    <span style={{ fontFamily: FONT_MONO, opacity: 0.7 }}>{wi + 1}.</span> {mot}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="flex-1 flex flex-col items-center justify-center px-6 text-center select-none">
+          {step.type === "manche" && (
+            <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(40px, 14vw, 88px)", color: COLORS.brass }} className="font-semibold">
+              Manche {numeroManche(step.manche)}
+            </div>
+          )}
+          {step.type === "mot" && (
+            <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(28px, 8vw, 60px)", lineHeight: 1.15 }} className="font-semibold">
+              {step.text}
+            </div>
+          )}
+          {step.type === "fin" && (
+            <>
+              <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(32px, 10vw, 64px)", color: COLORS.brass }} className="font-semibold">
+                Fin de la partie
+              </div>
+              <button
+                onClick={() => setI(0)}
+                className="mt-5 px-4 py-2 rounded-sm text-sm"
+                style={{ fontFamily: FONT_BODY, background: COLORS.brass, color: COLORS.ink }}
+              >
+                Recommencer
+              </button>
+            </>
+          )}
+          {/* Révélation du thème de la manche qui vient de se terminer, à la demande du MJ. */}
+          {mancheTerminee > 0 && (
+            themeRevele === mancheTerminee ? (
+              <div className="mt-6 text-center">
+                <div className="text-xs" style={{ fontFamily: FONT_MONO, color: COLORS.paper + "80" }}>
+                  Thème de la manche {numeroManche(mancheTerminee)}
+                </div>
+                <div className="text-lg mt-1" style={{ fontFamily: FONT_DISPLAY, color: COLORS.paper }}>
+                  {titreManche(manches[mancheTerminee - 1])}
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setThemeRevele(mancheTerminee)}
+                className="mt-6 text-xs px-3 py-1.5 rounded-full"
+                style={{ fontFamily: FONT_MONO, color: COLORS.paper + "aa", border: `1px solid ${COLORS.paper}33` }}
+              >
+                Révéler le thème de la manche {numeroManche(mancheTerminee)}
+              </button>
+            )
+          )}
+        </div>
+      )}
+
+      <div className="flex items-center justify-between px-4 py-5">
+        <button onClick={prev} disabled={i === 0} className="p-2" style={{ opacity: i === 0 ? 0.25 : 1 }} title="Précédent">
+          <ChevronLeft size={30} color={COLORS.paper} />
+        </button>
+        <span className="text-xs" style={{ fontFamily: FONT_MONO, color: COLORS.paper + "80" }}>
+          {i === 0 ? "Swipe vers la droite pour commencer" : "← retour · swipe droite : suivant"}
+        </span>
+        <button onClick={next} disabled={i === steps.length - 1} className="p-2" style={{ opacity: i === steps.length - 1 ? 0.25 : 1 }} title="Suivant">
+          <ChevronRight size={30} color={COLORS.paper} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* Champ "mot ou phrase" avec menu déroulant des mots déjà utilisés ailleurs : sert à repérer un
+   doublon avant de le créer, et à réutiliser une trouvaille d'un autre thème. */
+function AmbassadeurMotInput({ value, onChange, suggestions, index }) {
+  const [open, setOpen] = useState(false);
+  const q = value.trim();
+  const found = q.length >= 2
+    ? suggestions.filter((s) => matchesKeywords(q, s.mot)).sort((a, b) => a.mot.localeCompare(b.mot, "fr")).slice(0, 6)
+    : [];
+  return (
+    <div className="relative mb-1.5">
+      <div className="flex items-center gap-2">
+        <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs w-4 shrink-0">{index}.</span>
+        <input
+          className={inputClass}
+          style={inputStyle}
+          value={value}
+          maxLength={AMBASSADEUR_LONGUEUR_MAX}
+          onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          placeholder="Mot ou phrase à faire deviner…"
+        />
+      </div>
+      {open && found.length > 0 && (
+        <div
+          className="absolute z-20 left-6 right-0 mt-1 rounded-sm max-h-48 overflow-y-auto"
+          style={{ background: "#fff", border: `1px solid ${COLORS.cardEdge}`, boxShadow: "0 6px 14px rgba(0,0,0,0.12)" }}
+        >
+          {found.map((s) => {
+            const identique = normalize(s.mot) === normalize(q);
+            return (
+              <button
+                key={s.key}
+                type="button"
+                onMouseDown={() => { onChange(s.mot); setOpen(false); }}
+                className="block w-full text-left px-3 py-1.5 text-sm"
+                style={{ fontFamily: FONT_BODY, color: COLORS.text }}
+              >
+                {s.mot}
+                <span style={{ fontFamily: FONT_MONO, color: identique ? COLORS.accent : COLORS.textSoft }} className="text-xs">
+                  {" "}— {identique ? `déjà utilisé dans « ${s.theme} »` : s.theme}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* Formulaire d'une manche : un thème général, un sous-thème, un niveau, une ou plusieurs tranches
+   d'âge, 5 mots. */
+function AmbassadeurMancheForm({ initial, data, onSave, onCancel, saveLabel = "Enregistrer", currentUser, isAdmin, peutPartager = true }) {
+  const [themeGeneral, setThemeGeneral] = useState(initial?.themeGeneral || "");
+  const [theme, setTheme] = useState(initial?.theme || "");
+  const [level, setLevel] = useState(initial?.level || "");
+  const [tranchesAge, setTranchesAge] = useState(initial?.tranchesAge || []);
+  // Non partagée par défaut : on ne publie rien à la communauté sans que ce soit un geste voulu.
+  // À la modification, on repart de ce que la manche est déjà (les manches créées avant ce choix
+  // n'ont pas de drapeau `prive` : elles étaient partagées, elles le restent).
+  const [partage, setPartage] = useState(initial ? !initial.prive : false);
+  const [mots, setMots] = useState(() => {
+    const base = [...(initial?.mots || [])];
+    while (base.length < AMBASSADEUR_MOTS_PAR_MANCHE) base.push("");
+    return base.slice(0, AMBASSADEUR_MOTS_PAR_MANCHE);
+  });
+  // Les mots et thèmes déjà enregistrés servent à repérer un doublon — mais seulement parmi les
+  // manches qu'on a le droit de voir : les mots d'une manche gardée pour soi par quelqu'un d'autre
+  // n'ont rien à faire dans une liste de suggestions.
+  const manchesConnues = useMemo(
+    () => (data.ambassadeurManches || []).filter((m) => !m.rejected && mancheVisiblePar(m, currentUser, isAdmin)),
+    [data.ambassadeurManches, currentUser, isAdmin]
+  );
+  const suggestions = useMemo(
+    () => manchesConnues
+      .filter((m) => m.id !== initial?.id)
+      .flatMap((m) => (m.mots || []).map((mot, i) => ({ mot, theme: titreManche(m), key: `${m.id}-${i}` }))),
+    [manchesConnues, initial?.id]
+  );
+  // La liste des sous-thèmes se DÉDUIT des manches existantes, elle ne se lit pas dans
+  // `data.ambassadeurThemes` : sinon un sous-thème proposé puis abandonné (manche supprimée ou
+  // refusée) resterait proposé pour toujours dans le menu déroulant. On ne propose que les
+  // sous-thèmes du thème général choisi : "Films cultes français" n'a rien à faire sous "Cuisine".
+  const themesExistants = useMemo(
+    () => [...new Set(manchesConnues.filter((m) => !themeGeneral || m.themeGeneral === themeGeneral).map((m) => m.theme))].filter(Boolean),
+    [manchesConnues, themeGeneral]
+  );
+
+  // Date d'ouverture à la communauté : deux semaines après la création. À la modification, on garde
+  // la date de création d'origine — partager une vieille manche ne relance pas le compte à rebours.
+  const ouvertureCommunaute = (initial?.createdAt || Date.now()) + AMBASSADEUR_EMBARGO_JOURS * 24 * 3600 * 1000;
+
+  const setMot = (i, v) => setMots((prev) => prev.map((m, j) => (j === i ? v : m)));
+  const toggleAge = (a) => setTranchesAge((prev) => (prev.includes(a) ? prev.filter((x) => x !== a) : [...prev, a]));
+  // Ni le thème général ni le titre ne sont obligatoires : on peut n'avoir qu'une liste de cinq mots
+  // en tête, et la ranger (ou la nommer) plus tard.
+  const complet = level && tranchesAge.length > 0 && mots.every((m) => m.trim());
+
+  return (
+    <IndexCard>
+      {/* "Annuler" en haut, comme dans le sélecteur de manche : le formulaire est long, on ne veut
+          pas avoir à le parcourir jusqu'en bas pour en sortir. */}
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <span className="text-xs uppercase tracking-wide" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
+          Thème
+        </span>
+        <Btn small variant="ghost" onClick={onCancel}><X size={13} /> Annuler</Btn>
+      </div>
+      {/* Le thème général range la manche dans la bibliothèque : liste fermée, on n'en crée pas. */}
+      <div className="mb-3">
+        <select className={inputClass} style={inputStyle} value={themeGeneral} onChange={(e) => setThemeGeneral(e.target.value)}>
+          <option value="">Choisir…</option>
+          {AMBASSADEUR_THEMES_GENERAUX.map((t) => <option key={t}>{t}</option>)}
+        </select>
+      </div>
+      {/* Le titre, lui, s'écrit librement — c'est ce que les équipes doivent deviner en fin de
+          manche. Le sélecteur sert surtout à voir ce qui existe déjà et à ne pas refaire deux fois
+          la même manche. */}
+      <Field label="Titre de la manche">
+        <SearchableSingleSelect
+          allOptions={themesExistants}
+          value={theme}
+          onChange={setTheme}
+          allowCreate
+          onCreate={() => {}}
+          createLabel={(q) => `+ Créer le titre "${q}"`}
+          placeholder="Chercher un titre existant ou en écrire un…"
+          maxLength={AMBASSADEUR_LONGUEUR_MAX}
+        />
+      </Field>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Niveau">
+          <select className={inputClass} style={inputStyle} value={level} onChange={(e) => setLevel(e.target.value)}>
+            <option value="">Choisir…</option>
+            {NIVEAUX.map((n) => <option key={n}>{n}</option>)}
+          </select>
+        </Field>
+        <Field label="Tranches d'âge">
+          {/* Plusieurs choix possibles : le menu déroulant ajoute, les pastilles retirent. */}
+          <select
+            className={inputClass}
+            style={inputStyle}
+            value=""
+            onChange={(e) => { if (e.target.value) toggleAge(e.target.value); }}
+          >
+            <option value="">{tranchesAge.length > 0 ? "Ajouter…" : "Choisir…"}</option>
+            {TRANCHES_AGE.filter((a) => !tranchesAge.includes(a)).map((a) => <option key={a}>{a}</option>)}
+          </select>
+          {tranchesAge.length > 0 && (
+            <div className="flex flex-wrap mt-1">
+              {tranchesAge.map((a) => <TagPill key={a} label={a} color={COLORS.brass} onRemove={() => toggleAge(a)} />)}
+            </div>
+          )}
+        </Field>
+      </div>
+      <Field label={`Les ${AMBASSADEUR_MOTS_PAR_MANCHE} mots ou phrases à mimer`}>
+        <div>
+          {mots.map((m, i) => (
+            <AmbassadeurMotInput key={i} index={i + 1} value={m} onChange={(v) => setMot(i, v)} suggestions={suggestions} />
+          ))}
+        </div>
+      </Field>
+      {/* Sans compte, la manche ne quitte pas le navigateur : la question du partage ne se pose pas. */}
+      {peutPartager && (
+        <>
+          <OuiNonField label="Partager cette manche avec la communauté ?" value={partage} onChange={setPartage} />
+          <p className="text-xs mb-2 italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+            {partage
+              ? `Si ta manche est validée, elle ne sera visible par la communauté qu'à partir du ${formatJour(ouvertureCommunaute)}, afin d'éviter les risques de triches, parce que les improvisateurs sont des filous !`
+              : `Elle restera visible de toi seul(e), et ne passera pas par la modération, mais si tu la partages et qu'elle est validée par la modération, elle ne sera visible par la communauté qu'à partir du ${formatJour(ouvertureCommunaute)}, afin d'éviter les risques de triches, parce que les improvisateurs sont des filous !`}
+          </p>
+        </>
+      )}
+      <div className="flex gap-2 mt-2">
+        <Btn variant="accent" disabled={!complet} onClick={() => onSave({ themeGeneral, theme: theme.trim(), level, tranchesAge, mots: mots.map((m) => m.trim()), partage })}>
+          <Check size={14} /> {saveLabel}
+        </Btn>
+      </div>
+    </IndexCard>
+  );
+}
+
+/* Recherche + sélection d'une manche existante (assemblage d'une partie, carte du plan de cours). */
+function AmbassadeurManchePicker({ manches, excludeIds = [], onSelect, onCancel }) {
+  const [query, setQuery] = useState("");
+  const [niveau, setNiveau] = useState("");
+  const [age, setAge] = useState("");
+  const found = manches
+    .filter((m) => !excludeIds.includes(m.id))
+    .filter((m) => !niveau || m.level === niveau)
+    .filter((m) => !age || (m.tranchesAge || []).includes(age))
+    .filter((m) => matchesKeywords(query, m.theme, m.themeGeneral, (m.mots || []).join(" ")))
+    .sort((a, b) => a.theme.localeCompare(b.theme, "fr"))
+    .slice(0, 40);
+  return (
+    <IndexCard style={{ borderColor: COLORS.accent }}>
+      {/* "Annuler" en haut, sur la ligne du titre : la liste de résultats peut être longue, et
+          renvoyer la sortie tout en bas obligeait à la faire défiler entièrement. */}
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <span className="text-xs uppercase tracking-wide" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
+          Chercher une manche
+        </span>
+        <Btn small variant="ghost" onClick={onCancel}><X size={13} /> Annuler</Btn>
+      </div>
+      <div className="mb-3">
+        <input className={inputClass} style={inputStyle} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Thème ou mot…" autoFocus />
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Niveau">
+          <select className={inputClass} style={inputStyle} value={niveau} onChange={(e) => setNiveau(e.target.value)}>
+            <option value="">Tous</option>
+            {NIVEAUX.map((n) => <option key={n}>{n}</option>)}
+          </select>
+        </Field>
+        <Field label="Tranche d'âge">
+          <select className={inputClass} style={inputStyle} value={age} onChange={(e) => setAge(e.target.value)}>
+            <option value="">Toutes</option>
+            {TRANCHES_AGE.map((a) => <option key={a}>{a}</option>)}
+          </select>
+        </Field>
+      </div>
+      <div className="max-h-64 overflow-y-auto">
+        {found.length === 0 && <Empty text="Aucune manche ne correspond." />}
+        {found.map((m) => (
+          <button
+            key={m.id}
+            type="button"
+            onClick={() => onSelect(m)}
+            className="block w-full text-left py-1.5 border-b"
+            style={{ borderColor: COLORS.cardEdge }}
+          >
+            <span style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-sm font-medium">{titreManche(m)}</span>
+            <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
+              {" "}· {m.themeGeneral ? `${m.themeGeneral} · ` : ""}{m.level}{(m.tranchesAge || []).length > 0 ? ` · ${m.tranchesAge.join(", ")}` : ""}
+              {m.prive ? " · gardée pour toi" : m.pending ? " · en attente" : ""}
+            </span>
+          </button>
+        ))}
+      </div>
+    </IndexCard>
+  );
+}
+
+/* Assemblage d'une partie : trois emplacements, chacun rempli par une manche existante ou par une
+   manche créée à la volée (qui rejoint alors la bibliothèque commune). */
+function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onSave, onCancel, onPlay, canSave, onRattacher, slotsInitiaux, currentUser, isAdmin }) {
+  const [slots, setSlots] = useState(() => {
+    const base = [...(slotsInitiaux || [])];
+    while (base.length < AMBASSADEUR_MANCHES_PAR_PARTIE) base.push(null);
+    return base.slice(0, AMBASSADEUR_MANCHES_PAR_PARTIE);
+  });
+  const [picking, setPicking] = useState(null);
+  const [creating, setCreating] = useState(null);
+  const [nom, setNom] = useState("");
+  const [nomModifie, setNomModifie] = useState(false);
+  // Filtre facultatif : monter un ambassadeur entier dans un même thème général ("un ambassadeur
+  // Cinéma"). Il ne s'applique qu'aux tirages et au sélecteur — rien n'oblige les trois manches
+  // d'un même ambassadeur à partager leur thème.
+  const [themeFiltre, setThemeFiltre] = useState("");
+
+  const manchesChoisies = slots.map((id) => manchesDispo.find((m) => m.id === id)).filter(Boolean);
+  const nomAuto = manchesChoisies.length > 0 ? partieLabel(manchesChoisies) : "";
+  const nomEffectif = nomModifie ? nom : nomAuto;
+  const complet = slots.every(Boolean);
+  const manchesFiltrees = themeFiltre ? manchesDispo.filter((m) => m.themeGeneral === themeFiltre) : manchesDispo;
+  const resteAPiocher = manchesFiltrees.some((m) => !slots.includes(m.id));
+  const themesDisponibles = AMBASSADEUR_THEMES_GENERAUX.filter((t) => manchesDispo.some((m) => m.themeGeneral === t));
+
+  const setSlot = (i, id) => setSlots((prev) => prev.map((v, j) => (j === i ? id : v)));
+
+  const completerAuHasard = () => {
+    setSlots((prev) => {
+      const next = [...prev];
+      const dejaPris = new Set(next.filter(Boolean));
+      // Si une manche est déjà choisie, on reste sur son niveau pour garder une partie cohérente.
+      const niveauCible = manchesChoisies[0]?.level;
+      let pool = manchesFiltrees.filter((m) => !dejaPris.has(m.id) && (!niveauCible || m.level === niveauCible));
+      if (pool.length < next.filter((v) => !v).length) pool = manchesFiltrees.filter((m) => !dejaPris.has(m.id));
+      const melange = shuffleArray(pool);
+      for (let i = 0; i < next.length; i++) {
+        if (next[i]) continue;
+        const pick = melange.pop();
+        if (!pick) break;
+        next[i] = pick.id;
+        dejaPris.add(pick.id);
+      }
+      return next;
+    });
+  };
+
+  return (
+    <IndexCard style={{ borderColor: COLORS.brass }}>
+      <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium mb-1">Monter un ambassadeur</h3>
+      <p className="text-xs mb-3" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+        Trois manches de {AMBASSADEUR_MOTS_PAR_MANCHE} mots. Pioche parmi les manches existantes ou crée les tiennes.
+        {!canSave && " Sans compte, tu peux tout monter et y jouer tout de suite, mais rien ne sera conservé en quittant la page."}
+      </p>
+
+      {/* Le menu n'apparaît que si la banque a de quoi le remplir. */}
+      {themesDisponibles.length > 0 && (
+        <Field label="Thème général (facultatif)">
+          <select className={inputClass} style={inputStyle} value={themeFiltre} onChange={(e) => setThemeFiltre(e.target.value)}>
+            <option value="">Tous les thèmes</option>
+            {themesDisponibles.map((t) => <option key={t}>{t}</option>)}
+          </select>
+        </Field>
+      )}
+
+      {slots.map((id, i) => {
+        const m = manchesDispo.find((x) => x.id === id);
+        return (
+          <div key={i} className="mb-2">
+            <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">Manche {numeroManche(i + 1)}</span>
+            {m ? (
+              <div className="flex items-center justify-between gap-2 mt-0.5">
+                <div className="min-w-0">
+                  <div style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium truncate">{titreManche(m)}</div>
+                  <div style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
+                    {m.themeGeneral ? `${m.themeGeneral} · ` : ""}{m.level}{(m.tranchesAge || []).length > 0 ? ` · ${m.tranchesAge.join(", ")}` : ""}
+                  </div>
+                </div>
+                <Btn small variant="ghost" onClick={() => setSlot(i, null)}><X size={13} /> Retirer</Btn>
+              </div>
+            ) : (
+              <div className="flex gap-2 mt-0.5">
+                {/* "Piocher" disparaît quand il ne reste plus rien à piocher (banque vide, ou toutes
+                    les manches déjà placées dans les autres emplacements). */}
+                {resteAPiocher && <Btn small variant="ghost" onClick={() => { setPicking(i); setCreating(null); }}>Piocher</Btn>}
+                <Btn small variant="ghost" onClick={() => { setCreating(i); setPicking(null); }}><Plus size={13} /> Créer</Btn>
+              </div>
+            )}
+            {picking === i && (
+              <AmbassadeurManchePicker
+                manches={manchesFiltrees}
+                excludeIds={slots.filter(Boolean)}
+                onSelect={(m2) => { setSlot(i, m2.id); setPicking(null); }}
+                onCancel={() => setPicking(null)}
+              />
+            )}
+            {creating === i && (
+              <AmbassadeurMancheForm
+                data={data}
+                saveLabel="Créer"
+                currentUser={currentUser}
+                isAdmin={isAdmin}
+                peutPartager={canSave}
+                onSave={(f) => { const newId = onCreateManche(f); setSlot(i, newId); setCreating(null); }}
+                onCancel={() => setCreating(null)}
+              />
+            )}
+          </div>
+        );
+      })}
+
+      {!complet && resteAPiocher && (
+        <Btn small variant="ghost" onClick={completerAuHasard}><Shuffle size={13} /> Compléter au hasard</Btn>
+      )}
+
+      {/* Monté depuis un plan de cours (onRattacher), l'ambassadeur n'a pas besoin d'être nommé ni
+          enregistré à part : il est rattaché au cours, qui porte déjà son propre nom. */}
+      {complet && canSave && !onRattacher && (
+        <div className="mt-3">
+          <Field label="Nom de l'ambassadeur">
+            <input
+              className={inputClass}
+              style={inputStyle}
+              value={nomEffectif}
+              onChange={(e) => { setNomModifie(true); setNom(e.target.value); }}
+            />
+          </Field>
+        </div>
+      )}
+      <div className="flex flex-wrap gap-2 mt-2">
+        {onRattacher && (
+          <Btn variant="accent" disabled={!complet} onClick={() => onRattacher(slots)}><Check size={14} /> Utiliser dans ce cours</Btn>
+        )}
+        <Btn variant={onRattacher ? "ghost" : "accent"} disabled={!complet} onClick={() => onPlay(manchesChoisies)}><Play size={14} /> Jouer maintenant</Btn>
+        {canSave && !onRattacher && (
+          <Btn disabled={!complet || !nomEffectif.trim()} onClick={() => onSave({ nom: nomEffectif.trim(), mancheIds: slots })}><Save size={14} /> Enregistrer</Btn>
+        )}
+        <Btn variant="ghost" onClick={onCancel}><X size={14} /> Annuler</Btn>
+      </div>
+      {!canSave && !onRattacher && complet && (
+        <p className="text-xs mt-2 italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+          Connecte-toi ou crée un compte (onglet Mon profil) pour enregistrer cet ambassadeur et le retrouver plus tard.
+        </p>
+      )}
+    </IndexCard>
+  );
+}
+
+/* Trois pages avec le même composant :
+   - la page de jeu (Accueil → "Créer un ambassadeur") : les règles, monter une partie, jouer ;
+   - le catalogue (Bibliothèque → "Ambassadeurs") : toutes les manches, filtrables et triables ;
+   - "Mes manches créées" (profil) : seulement les siennes, quel que soit leur statut. */
+function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, onlyUserCreated, catalogue }) {
+  const [mode, setMode] = useState(null); // null | "manche" | "partie"
+  const [editingId, setEditingId] = useState(null);
+  const [playing, setPlaying] = useState(null); // tableau de manches en cours de jeu
+  const [expandedId, setExpandedId] = useState(null);
+  const [reglesOuvertes, setReglesOuvertes] = useState(false);
+  const [tri, setTri] = useState("theme");
+  const [filtreTheme, setFiltreTheme] = useState("");
+  const [filtreNiveau, setFiltreNiveau] = useState("");
+  const [filtreAge, setFiltreAge] = useState("");
+  // Manches créées sans compte : elles ne partent pas dans la base commune (rien à modérer, aucun
+  // auteur à qui les rattacher). Elles vivent le temps de la visite, pour monter et jouer une
+  // partie tout de suite. Voir le message affiché dans l'assembleur.
+  const [manchesLocales, setManchesLocales] = useState([]);
+  const [toastMsg, showToast] = useToast();
+
+  const canCreate = isAdmin || !!currentUser;
+  const allManches = data.ambassadeurManches || [];
+  // La bibliothèque des manches ne s'affiche PAS sur la page publique : thèmes et mots sont à
+  // deviner, et la page se consulte devant les joueurs. On ne liste que "mes manches créées"
+  // (page dédiée, depuis le profil). Ailleurs, les manches ne se voient qu'à travers le picker
+  // d'assemblage, au moment où le maître du jeu prépare sa partie.
+  // Le catalogue montre toutes les manches visibles ; "Mes manches créées" seulement les siennes.
+  // Une manche sans créateur vient de l'Admin : sur le catalogue, c'est lui qui peut la corriger.
+  const manchesVisibles = catalogue
+    ? allManches.filter((m) => mancheVisiblePar(m, currentUser, isAdmin))
+    : allManches.filter((m) => m.creatorUsername === currentUser);
+  const peutModifier = (m) => isAdmin || (!!m.creatorUsername && m.creatorUsername === currentUser);
+  const parTitre = (a, b) => (a.theme || "").localeCompare(b.theme || "", "fr");
+  const comparateurs = {
+    theme: (a, b) => (a.themeGeneral || "").localeCompare(b.themeGeneral || "", "fr") || parTitre(a, b),
+    titre: parTitre,
+    niveau: (a, b) => NIVEAUX.indexOf(a.level) - NIVEAUX.indexOf(b.level) || parTitre(a, b),
+    age: (a, b) => TRANCHES_AGE.indexOf((a.tranchesAge || [])[0]) - TRANCHES_AGE.indexOf((b.tranchesAge || [])[0]) || parTitre(a, b),
+  };
+  const mesManches = manchesVisibles
+    .filter((m) => !filtreTheme || m.themeGeneral === filtreTheme)
+    .filter((m) => !filtreNiveau || m.level === filtreNiveau)
+    .filter((m) => !filtreAge || (m.tranchesAge || []).includes(filtreAge))
+    .sort(comparateurs[tri] || comparateurs.theme);
+  // Seulement les thèmes réellement représentés : un menu qui propose des rayons vides fait croire
+  // à un filtre cassé.
+  const themesDuCatalogue = AMBASSADEUR_THEMES_GENERAUX.filter((t) => manchesVisibles.some((m) => m.themeGeneral === t));
+  const dispoPourPartie = [...manchesJouables(data, currentUser, isAdmin), ...manchesLocales];
+  const parties = onlyUserCreated
+    ? (data.ambassadeurs || []).filter((a) => a.creatorUsername === currentUser)
+    : (data.ambassadeurs || []);
+
+  // Crée une manche et renvoie son id, pour que l'assemblage puisse la placer aussitôt dans son
+  // emplacement. Comme pour les exercices, une manche créée par un compte non-admin reste "pending"
+  // jusqu'à validation — sans empêcher son auteur de s'en servir tout de suite.
+  const creerManche = (f) => {
+    const manche = construireManche(f, { isAdmin, currentUser, profile });
+    if (!canCreate) {
+      setManchesLocales((prev) => [...prev, { ...manche, pending: false, locale: true }]);
+      return manche.id;
+    }
+    update((d) => {
+      if (!d.ambassadeurManches) d.ambassadeurManches = [];
+      if (!d.ambassadeurThemes) d.ambassadeurThemes = [];
+      // Le thème d'une manche gardée pour soi ne rejoint pas le vocabulaire commun.
+      if (f.partage !== false && f.theme && !d.ambassadeurThemes.includes(f.theme)) d.ambassadeurThemes.push(f.theme);
+      d.ambassadeurManches.push(manche);
+      return d;
+    });
+    return manche.id;
+  };
+
+  const modifierManche = (id, f) => update((d) => {
+    const { partage = true, ...reste } = f;
+    if (partage && f.theme && !(d.ambassadeurThemes || []).includes(f.theme)) (d.ambassadeurThemes = d.ambassadeurThemes || []).push(f.theme);
+    const i = (d.ambassadeurManches || []).findIndex((m) => m.id === id);
+    if (i >= 0) {
+      const avant = d.ambassadeurManches[i];
+      d.ambassadeurManches[i] = {
+        ...avant,
+        ...reste,
+        prive: !partage,
+        // La partager après coup, c'est la proposer : elle entre alors dans la file de modération.
+        // La reprendre pour soi l'en retire.
+        pending: partage ? (avant.prive ? !isAdmin : avant.pending) : false,
+      };
+    }
+    return d;
+  });
+
+  const supprimerManche = (id) => update((d) => {
+    d.ambassadeurManches = (d.ambassadeurManches || []).filter((m) => m.id !== id);
+    // Une partie qui référence une manche supprimée ne serait plus jouable : on la retire aussi.
+    d.ambassadeurs = (d.ambassadeurs || []).filter((a) => !(a.mancheIds || []).includes(id));
+    return d;
+  });
+
+  const enregistrerPartie = (p) => {
+    update((d) => {
+      if (!d.ambassadeurs) d.ambassadeurs = [];
+      d.ambassadeurs.push({ ...p, id: uid(), creatorUsername: currentUser || "", createdAt: Date.now() });
+      return d;
+    });
+    setMode(null);
+    showToast("Ambassadeur enregistré ✓");
+  };
+
+  // Volontairement les manches VISIBLES et non toutes : un ambassadeur enregistré par quelqu'un
+  // d'autre ne doit pas donner accès à une manche qu'il garde pour lui.
+  const manchesDeLaPartie = (p) => (p.mancheIds || []).map((id) => dispoPourPartie.find((m) => m.id === id)).filter(Boolean);
+
+  return (
+    <div>
+      <Toast toast={toastMsg} />
+      {playing && <AmbassadeurPlayer manches={playing} onClose={() => setPlaying(null)} />}
+      {setTab && <LibraryBackBtn label={onlyUserCreated ? "Mon profil" : "Bibliothèque"} onClick={() => setTab(onlyUserCreated ? "profil" : "bibliotheque")} />}
+      <SectionHeader
+        icon={Hand}
+        title={onlyUserCreated ? "Manches d'ambassadeur créées" : catalogue ? "Toutes les manches" : "Ambassadeurs"}
+        subtitle={onlyUserCreated
+          ? "Tes manches proposées, quel que soit leur statut de validation."
+          : catalogue
+            ? "Toutes les manches de 5 mots disponibles pour monter un ambassadeur. Les mots restent masqués tant que tu ne les ouvres pas."
+            : "Le jeu de mime : 3 manches de 5 mots ou phrases à faire deviner. Monte ton ambassadeur, puis fais défiler les mots sur ton téléphone."}
+      />
+
+      {!onlyUserCreated && !catalogue && (
+        <IndexCard
+          style={{ background: COLORS.ink, borderColor: COLORS.ink, marginBottom: 12, cursor: "pointer" }}
+          onClick={() => setReglesOuvertes((v) => !v)}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <p style={{ fontFamily: FONT_BODY, color: COLORS.paper }} className="text-sm font-medium">
+              Comment jouer ?
+            </p>
+            {reglesOuvertes
+              ? <ChevronUp size={16} color={COLORS.brass} className="shrink-0" />
+              : <ChevronDown size={16} color={COLORS.brass} className="shrink-0" />}
+          </div>
+          {reglesOuvertes && (
+            <>
+              <p style={{ fontFamily: FONT_BODY, color: COLORS.paper }} className="text-sm mt-2">
+                En équipes, un joueur mime, les autres devinent. 3 manches de {AMBASSADEUR_MOTS_PAR_MANCHE} mots.
+                Les joueurs forment des équipes de 2 minimum. Un joueur vient voir le maître du jeu, qui lui montre
+                le mot à mimer. Il retourne le faire deviner à son équipe ; quand elle a trouvé, un <i>autre</i> joueur
+                vient donner la réponse et repart avec le mot suivant. À la fin d'une manche, les équipes doivent
+                aussi deviner le <b>thème</b> et le dire au maître du jeu le plus vite possible.
+              </p>
+              <p style={{ fontFamily: FONT_MONO, color: COLORS.brass }} className="text-xs mt-2">
+                Toutes les équipes parcourent la même liste, mais pas au même rythme : le maître du jeu navigue
+                librement dans les deux sens, et l'en-tête rappelle en permanence à quel mot il en est.
+              </p>
+            </>
+          )}
+        </IndexCard>
+      )}
+
+      {/* Les trois actions centrées, une par ligne et espacées : elles n'ont pas la même largeur,
+          un empilement centré se lit mieux qu'une rangée qui passe à la ligne. Monter un
+          ambassadeur ne demande pas de compte : seul l'enregistrement en demande un. */}
+      {!onlyUserCreated && !catalogue && (
+        <div className="mb-4 flex flex-col items-center gap-3">
+          <Btn variant="accent" onClick={() => { setMode(mode === "partie" ? null : "partie"); setEditingId(null); }}>
+            <Plus size={14} /> Créer un ambassadeur
+          </Btn>
+          {canCreate && (
+            <Btn variant="ghost" onClick={() => { setMode(mode === "manche" ? null : "manche"); setEditingId(null); }}>
+              <Plus size={14} /> Créer une manche
+            </Btn>
+          )}
+          {/* Jouer sans rien préparer : trois manches au hasard. Le bouton n'apparaît qu'une fois la
+              banque assez fournie pour monter une partie entière — un bouton grisé n'apprend rien à
+              qui découvre la page, autant ne pas l'afficher tant qu'il ne sert à rien. */}
+          {dispoPourPartie.length >= AMBASSADEUR_MANCHES_PAR_PARTIE && (
+            <Btn
+              variant="ghost"
+              onClick={() => setPlaying(shuffleArray(dispoPourPartie).slice(0, AMBASSADEUR_MANCHES_PAR_PARTIE))}
+            >
+              <Shuffle size={14} /> Jouer au hasard
+            </Btn>
+          )}
+        </div>
+      )}
+      {!canCreate && !catalogue && (
+        <p className="text-xs mb-3 italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+          Sans compte, tu peux monter un ambassadeur et y jouer tout de suite. Connecte-toi (onglet Mon profil)
+          pour l'enregistrer et proposer tes manches aux autres.
+        </p>
+      )}
+
+      {/* Tri et filtres seulement s'il y a quelque chose à trier : sur un catalogue vide, quatre
+          menus déroulants n'offrent que des choix sans effet. */}
+      {catalogue && manchesVisibles.length > 0 && (
+        <>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Trier par">
+              <select className={inputClass} style={inputStyle} value={tri} onChange={(e) => setTri(e.target.value)}>
+                <option value="theme">Thème</option>
+                <option value="titre">Titre</option>
+                <option value="niveau">Niveau</option>
+                <option value="age">Tranche d'âge</option>
+              </select>
+            </Field>
+            <Field label="Thème">
+              <select className={inputClass} style={inputStyle} value={filtreTheme} onChange={(e) => setFiltreTheme(e.target.value)}>
+                <option value="">Tous</option>
+                {themesDuCatalogue.map((t) => <option key={t}>{t}</option>)}
+              </select>
+            </Field>
+            <Field label="Niveau">
+              <select className={inputClass} style={inputStyle} value={filtreNiveau} onChange={(e) => setFiltreNiveau(e.target.value)}>
+                <option value="">Tous</option>
+                {NIVEAUX.map((n) => <option key={n}>{n}</option>)}
+              </select>
+            </Field>
+            <Field label="Tranche d'âge">
+              <select className={inputClass} style={inputStyle} value={filtreAge} onChange={(e) => setFiltreAge(e.target.value)}>
+                <option value="">Toutes</option>
+                {TRANCHES_AGE.map((a) => <option key={a}>{a}</option>)}
+              </select>
+            </Field>
+          </div>
+          <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs uppercase block mb-1">
+            {mesManches.length} manche(s)
+          </span>
+        </>
+      )}
+
+      {mode === "partie" && (
+        <AmbassadeurPartieBuilder
+          data={data}
+          manchesDispo={dispoPourPartie}
+          onCreateManche={creerManche}
+          onSave={enregistrerPartie}
+          onCancel={() => setMode(null)}
+          onPlay={(manches) => setPlaying(manches)}
+          canSave={canCreate}
+          currentUser={currentUser}
+          isAdmin={isAdmin}
+        />
+      )}
+      {mode === "manche" && (
+        <AmbassadeurMancheForm
+          data={data}
+          currentUser={currentUser}
+          isAdmin={isAdmin}
+          peutPartager={canCreate}
+          onSave={(f) => {
+            creerManche(f);
+            setMode(null);
+            showToast(f.partage === false ? "Manche enregistrée, gardée pour toi ✓"
+              : isAdmin ? "Manche ajoutée ✓"
+                : "Manche envoyée à la modération — tu peux déjà t'en servir ✓");
+          }}
+          onCancel={() => setMode(null)}
+        />
+      )}
+
+      {parties.length > 0 && (
+        <>
+          <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs uppercase">Ambassadeurs prêts à jouer</span>
+          {parties.map((p) => {
+            const manches = manchesDeLaPartie(p);
+            const manquantes = (p.mancheIds || []).length - manches.length;
+            return (
+              <IndexCard key={p.id}>
+                <div className="flex justify-between items-start gap-2">
+                  <div className="min-w-0">
+                    <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{p.nom}</h3>
+                    {/* Pas de rappel des thèmes ici : ils sont à deviner, et cette page peut être
+                        consultée devant les joueurs. Le nom de la partie suffit à s'y retrouver. */}
+                    <div style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
+                      {manches.length} manche(s)
+                      {manquantes > 0 ? ` · ${manquantes} n'${manquantes === 1 ? "est" : "sont"} plus disponible${manquantes === 1 ? "" : "s"} dans la bibliothèque` : ""}
+                      {p.creatorUsername ? ` · par ${p.creatorUsername}` : ""}
+                    </div>
+                  </div>
+                  <div className="shrink-0">
+                    <Btn small variant="accent" disabled={manches.length === 0} onClick={() => setPlaying(manches)}><Play size={13} /> Jouer</Btn>
+                  </div>
+                </div>
+                {(isAdmin || !p.creatorUsername || p.creatorUsername === currentUser) && (
+                  <div className="flex justify-end mt-2">
+                    <button
+                      title="Supprimer cet ambassadeur"
+                      className="p-1 -m-1"
+                      onClick={() => {
+                        update((d) => { d.ambassadeurs = (d.ambassadeurs || []).filter((x) => x.id !== p.id); return d; });
+                        showToast("Ambassadeur supprimé");
+                      }}
+                    >
+                      <Trash2 size={22} color={COLORS.accent} />
+                    </button>
+                  </div>
+                )}
+              </IndexCard>
+            );
+          })}
+        </>
+      )}
+
+      {(onlyUserCreated || catalogue) && mesManches.length === 0 && (
+        <Empty text={
+          onlyUserCreated ? "Tu n'as pas encore créé de manche d'ambassadeur."
+            // Distinguer les deux vides : un catalogue encore vide n'est pas un filtre trop étroit.
+            : manchesVisibles.length === 0 ? "Aucune manche pour l'instant."
+              : "Aucune manche ne correspond."
+        } />
+      )}
+
+      {(onlyUserCreated || catalogue) && mesManches.map((m) => (
+        editingId === m.id ? (
+          <AmbassadeurMancheForm
+            key={m.id}
+            data={data}
+            initial={m}
+            currentUser={currentUser}
+            isAdmin={isAdmin}
+            peutPartager={canCreate}
+            onSave={(f) => { modifierManche(m.id, f); setEditingId(null); }}
+            onCancel={() => setEditingId(null)}
+          />
+        ) : (
+          <IndexCard key={m.id}>
+            <div className="flex justify-between items-start gap-2">
+              <div className="min-w-0">
+                <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{titreManche(m)}</h3>
+                <div style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
+                  {m.themeGeneral ? `${m.themeGeneral} · ` : ""}{m.level}{(m.tranchesAge || []).length > 0 ? ` · ${m.tranchesAge.join(", ")}` : ""}
+                  {m.creatorUsername ? ` · ${m.creatorUsername}${m.creatorTroupe ? ` — Troupe ${m.creatorTroupe}` : ""}` : ""}
+                </div>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <Btn small variant="ghost" onClick={() => setPlaying([m])}><Play size={13} /> Jouer</Btn>
+                {peutModifier(m) && (
+                  <>
+                    <button onClick={() => setEditingId(m.id)} title="Modifier"><Pencil size={15} color={COLORS.ink} /></button>
+                    <button onClick={() => supprimerManche(m.id)} title="Supprimer"><Trash2 size={15} color={COLORS.accent} /></button>
+                  </>
+                )}
+              </div>
+            </div>
+            {m.prive && (
+              <p className="text-xs mt-1" style={{ fontFamily: FONT_MONO, color: COLORS.brass }}>
+                Gardée pour toi — non partagée avec la communauté.
+              </p>
+            )}
+            {m.pending && (
+              <p className="text-xs mt-1" style={{ fontFamily: FONT_MONO, color: COLORS.accent }}>
+                En attente de validation — visible seulement par toi et l'Admin, mais déjà jouable.
+              </p>
+            )}
+            {/* L'auteur doit pouvoir vérifier d'un coup d'œil jusqu'à quand ses élèves ne peuvent
+                pas tomber dessus. "Au plus tôt" : la modération peut encore la refuser. */}
+            {!m.prive && !m.rejected && mancheSousEmbargo(m) && (
+              <p className="text-xs mt-1" style={{ fontFamily: FONT_MONO, color: COLORS.brass }}>
+                Visible de la communauté le {formatJour(mancheOuverteALaCommunauteLe(m))} au plus tôt.
+              </p>
+            )}
+            {m.rejected && (
+              <p className="text-xs mt-1" style={{ fontFamily: FONT_MONO, color: COLORS.accent }}>
+                Non validée par la modération — visible uniquement par toi.
+              </p>
+            )}
+            {/* Les mots restent masqués par défaut : la page se consulte aussi devant les joueurs. */}
+            <button
+              onClick={() => setExpandedId(expandedId === m.id ? null : m.id)}
+              className="text-xs mt-1"
+              style={{ fontFamily: FONT_MONO, color: COLORS.brass }}
+            >
+              {expandedId === m.id ? "Masquer les mots" : `Voir les ${(m.mots || []).length} mots`}
+            </button>
+            {expandedId === m.id && (
+              <ol className="text-sm mt-1 list-decimal list-inside" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+                {(m.mots || []).map((mot, i) => <li key={i}>{mot}</li>)}
+              </ol>
+            )}
+          </IndexCard>
+        )
+      ))}
+    </div>
+  );
+}
+
+/* Carte affichée sous l'exercice "Ambassadeur" dans un plan de cours : rattache une partie au cours
+   et permet de la lancer sans quitter l'écran. */
+function AmbassadeurPlanCard({ data, mancheIds, onChange, currentUser, isAdmin, profile, update, niveau, lecture }) {
+  const [playing, setPlaying] = useState(false);
+  const [themesVisibles, setThemesVisibles] = useState(false);
+  const [creation, setCreation] = useState(false);
+  // Manches créées ici sans compte : elles ne partent pas dans la base commune (voir AmbassadeursTab).
+  const [manchesLocales, setManchesLocales] = useState([]);
+  const peutEnregistrer = isAdmin || !!currentUser;
+  const dispo = [...manchesJouables(data, currentUser, isAdmin), ...manchesLocales];
+  const assezPourPiocher = dispo.length >= AMBASSADEUR_MANCHES_PAR_PARTIE;
+  const manches = mancheIds.map((id) => dispo.find((m) => m.id === id)).filter(Boolean);
+  const complet = manches.length === AMBASSADEUR_MANCHES_PAR_PARTIE;
+  // Une manche enregistrée dans un plan peut disparaître ensuite (supprimée, refusée en modération,
+  // ou proposée par quelqu'un d'autre et pas encore validée). On le dit explicitement plutôt que de
+  // laisser croire que l'ambassadeur n'a jamais eu que deux manches.
+  const manquantes = mancheIds.length - manches.length;
+  const phraseManquantes = manquantes === 1
+    ? "Une manche de cet ambassadeur n'est plus disponible dans la bibliothèque."
+    : `${manquantes} manches de cet ambassadeur ne sont plus disponibles dans la bibliothèque.`;
+  // Plan verrouillé sans ambassadeur : rien à montrer, la carte disparaît complètement. Elle reste
+  // en revanche si le plan en prévoyait un et que ses manches ont disparu — il faut le signaler.
+  if (lecture && mancheIds.length === 0) return null;
+
+  // Créer une manche sans quitter l'écran de création de cours.
+  const creerManche = (f) => {
+    const manche = construireManche(f, { isAdmin, currentUser, profile });
+    if (!peutEnregistrer || !update) {
+      setManchesLocales((prev) => [...prev, { ...manche, pending: false, locale: true }]);
+      return manche.id;
+    }
+    update((d) => {
+      if (!d.ambassadeurManches) d.ambassadeurManches = [];
+      if (!d.ambassadeurThemes) d.ambassadeurThemes = [];
+      // Le thème d'une manche gardée pour soi ne rejoint pas le vocabulaire commun.
+      if (f.partage !== false && f.theme && !d.ambassadeurThemes.includes(f.theme)) d.ambassadeurThemes.push(f.theme);
+      d.ambassadeurManches.push(manche);
+      return d;
+    });
+    return manche.id;
+  };
+
+  // Tirage au niveau du cours quand il en a un ; on élargit à toute la bibliothèque s'il n'y a pas
+  // assez de manches de ce niveau pour monter les trois manches.
+  const piocher = () => {
+    const memeNiveau = niveau ? dispo.filter((m) => m.level === niveau) : [];
+    const pool = memeNiveau.length >= AMBASSADEUR_MANCHES_PAR_PARTIE ? memeNiveau : dispo;
+    onChange(shuffleArray(pool).slice(0, AMBASSADEUR_MANCHES_PAR_PARTIE).map((m) => m.id));
+  };
+
+  return (
+    <div className="pl-4 mb-2">
+      {playing && manches.length > 0 && <AmbassadeurPlayer manches={manches} onClose={() => setPlaying(false)} />}
+      <IndexCard style={{ borderColor: COLORS.brass, background: COLORS.brass + "12" }}>
+        {/* Pas de durée ici : elle est déjà portée par la fiche "Ambassadeur" juste au-dessus,
+            qui affiche les minutes réellement réservées dans ce cours. */}
+        <span style={{ fontFamily: FONT_MONO, color: COLORS.brass }} className="text-xs uppercase">Ambassadeur</span>
+        {manches.length === 0 ? (
+          <>
+            {manquantes > 0 ? (
+              <p className="text-sm mt-1 mb-2" style={{ fontFamily: FONT_BODY, color: COLORS.accent }}>
+                {phraseManquantes} {lecture ? "Clique sur « Modifier » pour en choisir d'autres." : "Choisis-en d'autres ci-dessous."}
+              </p>
+            ) : (
+              <p className="text-sm mt-1 mb-2" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+                Choisis les {AMBASSADEUR_MANCHES_PAR_PARTIE} manches de mots à faire deviner, ou monte les tiennes.
+              </p>
+            )}
+            {!lecture && (
+              <>
+                <div className="flex flex-wrap gap-2">
+                  {/* Pas de bouton "Piocher" tant que la banque ne peut pas fournir une partie entière. */}
+                  {assezPourPiocher && <Btn small variant="accent" onClick={piocher}><Shuffle size={13} /> Piocher un ambassadeur</Btn>}
+                  <Btn small variant="ghost" onClick={() => setCreation(true)}><Plus size={13} /> Créer le mien</Btn>
+                </div>
+                {dispo.length === 0 && (
+                  <p className="text-xs mt-1 italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+                    Aucune manche disponible pour l'instant : crée la tienne.
+                  </p>
+                )}
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            {/* Même grammaire que les autres cartes du plan : "Aléatoire" et "Changer" empilés en
+                haut à droite, l'action principale et la corbeille en pied de carte. */}
+            <div className="flex justify-between items-start">
+              <div className="flex-1">
+                {/* Les thèmes restent masqués par défaut : le plan de cours s'affiche souvent à
+                    l'écran devant le groupe, et le thème d'une manche est à deviner. */}
+                <div className="text-sm mt-1" style={{ fontFamily: FONT_BODY, color: COLORS.text }}>
+                  {manches.length} manche(s) · {[...new Set(manches.map((m) => m.level).filter(Boolean))].join(", ")}
+                </div>
+                <button
+                  onClick={() => setThemesVisibles((v) => !v)}
+                  className="text-xs mt-0.5"
+                  style={{ fontFamily: FONT_MONO, color: COLORS.brass }}
+                >
+                  {themesVisibles ? "Masquer les thèmes" : "Voir les thèmes"}
+                </button>
+                {themesVisibles && (
+                  <ol className="text-sm mt-1 list-decimal list-inside" style={{ fontFamily: FONT_BODY, color: COLORS.text }}>
+                    {manches.map((m) => <li key={m.id}>{titreManche(m)}</li>)}
+                  </ol>
+                )}
+                {!complet && (
+                  <p className="text-xs mt-1" style={{ fontFamily: FONT_MONO, color: COLORS.accent }}>
+                    {manquantes > 0 && `${phraseManquantes} `}
+                    Il en reste {manches.length} sur {AMBASSADEUR_MANCHES_PAR_PARTIE}.
+                  </p>
+                )}
+              </div>
+              {!lecture && (
+                <div className="flex flex-col gap-1 items-end">
+                  {assezPourPiocher && <Btn small variant="ghost" onClick={piocher}>Aléatoire</Btn>}
+                  {/* "Changer" ouvre l'assembleur pré-rempli : on voit les trois manches en place et
+                      on choisit laquelle remplacer. Avant, le sélecteur ajoutait la nouvelle manche
+                      à la fin et faisait sauter la première, sans qu'on l'ait demandé. */}
+                  <Btn small variant="ghost" onClick={() => setCreation(true)}>Changer</Btn>
+                </div>
+              )}
+            </div>
+            {/* En lecture seule, on garde "Lancer la partie" : jouer n'est pas modifier le plan. */}
+            <div className="flex justify-between items-center mt-2">
+              <Btn small variant="accent" onClick={() => setPlaying(true)}><Play size={13} /> Lancer la partie</Btn>
+              {!lecture && (
+                <button onClick={() => onChange([])} title="Retirer l'ambassadeur de ce cours" className="p-1 -m-1">
+                  <Trash2 size={22} color={COLORS.accent} />
+                </button>
+              )}
+            </div>
+          </>
+        )}
+        {creation && (
+          <AmbassadeurPartieBuilder
+            data={data}
+            manchesDispo={dispo}
+            slotsInitiaux={mancheIds}
+            onCreateManche={creerManche}
+            onCancel={() => setCreation(false)}
+            onPlay={(choisies) => { onChange(choisies.map((m) => m.id)); setCreation(false); setPlaying(true); }}
+            onRattacher={(ids) => { onChange(ids); setCreation(false); }}
+            canSave={peutEnregistrer}
+            currentUser={currentUser}
+            isAdmin={isAdmin}
+          />
+        )}
+      </IndexCard>
+    </div>
+  );
+}
+
 /* ---------- Générateur : cours ---------- */
 function pickRandom(arr) { return arr.length ? arr[Math.floor(Math.random() * arr.length)] : null; }
 // Mélange Fisher-Yates : contrairement à `arr.sort(() => Math.random() - 0.5)` (biais bien connu —
@@ -5226,6 +6555,152 @@ function useDragReorder(onReorder) {
   return { dragged, dragPos, startPress };
 }
 
+/* ---------- Cartes de programme (générateurs + plans enregistrés) ----------
+   Une seule présentation pour les trois écrans qui affichent un programme : "Créer un cours",
+   "Créer un spectacle" et les plans enregistrés. Ce qui change d'un écran à l'autre passe par des
+   emplacements (`star`, `badges`, `actions`, `footerRight`…) plutôt que par des variantes internes :
+   le générateur y glisse l'étoile de favori, les badges de correspondance et le bouton "Aléatoire",
+   la page des plans enregistrés n'en met qu'une partie. Toute retouche de style se fait donc ici,
+   une seule fois. */
+
+/* Résumé tronqué à deux lignes tant que la carte n'est pas dépliée, avec la hauteur de deux lignes
+   toujours réservée : sans ça, une carte qui se replie décale les suivantes et le clic suivant
+   atterrit sur le mauvais bouton. */
+const RESUME_DEUX_LIGNES = { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", minHeight: "2.6em" };
+
+function ProgrammeExerciseCard({ ex, label, duree, participants, expanded, onToggle, star, badges, actions, footerRight }) {
+  const wait = computeWaitMinutes(ex, participants);
+  const format = ex.format || "Solo simultané";
+  return (
+    <IndexCard>
+      <div className="flex justify-between items-start">
+        <div className="flex-1" onClick={onToggle} style={{ cursor: "pointer" }}>
+          <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">{label}</span>
+          <div className="flex items-center gap-1.5">
+            <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{ex.title}</h3>
+            {star}
+          </div>
+          {/* Hauteur toujours réservée, même sans badge (voir RESUME_DEUX_LIGNES). */}
+          <div className="flex flex-wrap items-center mt-1 mb-1" style={{ minHeight: 22 }}>
+            {ex.groupe && (
+              <span
+                className="inline-block text-xs px-2 py-0.5 rounded-full"
+                style={{ fontFamily: FONT_MONO, background: COLORS.accent, color: "#fff" }}
+              >
+                {ex.groupe}
+              </span>
+            )}
+            {badges}
+          </div>
+          <p
+            style={{ fontFamily: FONT_BODY, color: COLORS.textSoft, ...(expanded ? {} : RESUME_DEUX_LIGNES) }}
+            className="text-sm"
+          >
+            {ex.summary}
+          </p>
+          {expanded && (
+            <div className="mt-1 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+              <div>{ex.level || "Niveau non précisé"}</div>
+              {ex.objectives?.length > 0 && <div>Objectifs : {ex.objectives.join(", ")}</div>}
+              {ex.energy && <div>Énergie : {ex.energy}</div>}
+              {ex.material && ex.material !== "Aucun" && <div>Matériel : {ex.material}</div>}
+            </div>
+          )}
+        </div>
+        {actions}
+      </div>
+      <div className="flex justify-between items-center mt-2">
+        <div className="flex items-center gap-2">
+          <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
+            {duree} min · Nombre de joueurs : {ex.players > 0 ? ex.players : "Illimité"}
+          </span>
+          {format === "Tour à tour avec spectateur" ? (
+            <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ fontFamily: FONT_MONO, background: COLORS.brass + "33", color: COLORS.brass }}>
+              🟠 chacun son tour{wait > 0 ? ` · ~${wait} min d'attente/élève` : ""}
+            </span>
+          ) : format === "En groupe simultané" ? (
+            <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ fontFamily: FONT_MONO, background: COLORS.accent + "33", color: COLORS.accent }}>
+              🔴 groupe simultané (bruyant)
+            </span>
+          ) : (
+            <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ fontFamily: FONT_MONO, background: "#3B6E5E33", color: "#3B6E5E" }}>
+              🟢 tout le monde actif
+            </span>
+          )}
+        </div>
+        {footerRight}
+      </div>
+    </IndexCard>
+  );
+}
+
+/* Même principe pour une catégorie. `metaInline` place la ligne durée/énergie/joueurs au-dessus du
+   résumé (déroulé de spectacle) plutôt qu'en pied de carte (cours) : c'est la seule différence de
+   structure entre les deux écrans. */
+function ProgrammeCategoryCard({ cat, label, duree, expanded, onToggle, star, headerRight, badges, badgesFallback, metaInline, actions, footerLeft, footerRight }) {
+  const meta = (
+    <div className="flex flex-wrap items-center gap-2 text-xs mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
+      <span>{duree} min</span>
+      {cat.energy && <span>· {ENERGY_DOT[cat.energy] || ""} énergie {cat.energy}</span>}
+      <span>· Nombre de joueurs : {playersCountText(cat)}</span>
+    </div>
+  );
+  return (
+    <IndexCard>
+      <div className="flex justify-between items-start">
+        <div className="flex-1" onClick={onToggle} style={{ cursor: "pointer" }}>
+          {label && <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">{label}</span>}
+          {/* Le bandeau de titre ne s'enveloppe que s'il a quelque chose à aligner à droite
+              (le sélecteur Mixte/Comparé du déroulé de spectacle). */}
+          {headerRight ? (
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{cat.name}</h3>
+                {star}
+              </div>
+              {headerRight}
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{cat.name}</h3>
+              {star}
+            </div>
+          )}
+          <div className="flex flex-wrap items-center mt-1 mb-1" style={{ minHeight: 22 }}>
+            {(cat.tags || []).length > 0 ? (
+              <span
+                className="inline-block text-xs px-2 py-0.5 rounded-full"
+                style={{ fontFamily: FONT_MONO, background: "#B3382C", color: "#fff" }}
+              >
+                {cat.tags.join(" · ")}
+              </span>
+            ) : badgesFallback}
+            {badges}
+          </div>
+          {metaInline && meta}
+          <p
+            style={{ fontFamily: FONT_BODY, color: COLORS.textSoft, ...(expanded ? {} : RESUME_DEUX_LIGNES) }}
+            className="text-sm"
+          >
+            {cat.summary}
+          </p>
+          {expanded && (
+            <div className="mt-1 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+              <div>{cat.level || "Niveau non précisé"}</div>
+              {cat.archetypes?.length > 0 && <div>Archétypes : {cat.archetypes.map((a) => a.name).join(", ")}</div>}
+            </div>
+          )}
+        </div>
+        {actions}
+      </div>
+      <div className="flex justify-between items-center mt-2">
+        {footerLeft || <span />}
+        {footerRight}
+      </div>
+    </IndexCard>
+  );
+}
+
 /* Carte flottante générique qui suit le doigt pendant un glissement (voir useDragReorder). */
 function DragGhost({ x, y, title, subtitle }) {
   return (
@@ -5307,8 +6782,12 @@ function buildCours(exercises, categories, { niveau, tempsTotal, nbEchauffements
   // éléments du pool si besoin pour atteindre le minimum), puis répartit le budget de la section
   // à parts égales entre eux — la durée affichée sur chaque carte remplace alors sa durée suggérée.
   const enforceCountAndRedistribute = (arr, pool, usedSet, minCount, maxCount, totalBudget) => {
-    const trimmed = arr.length > maxCount ? arr.slice(maxCount) : [];
+    // L'Ambassadeur échappe au plafond : quand la case est cochée mais que 0 échauffement est
+    // demandé, il doit rester seul dans sa section plutôt que d'être coupé silencieusement.
     let items = arr.slice(0, maxCount);
+    const idxAmbassadeur = arr.findIndex((it) => it.title === "Ambassadeur");
+    if (idxAmbassadeur >= maxCount) items = [...items, arr[idxAmbassadeur]];
+    const trimmed = arr.filter((it) => !items.includes(it));
     trimmed.forEach((it) => usedSet.delete(it.id));
     const remainingPool = prioritizeFresh(pool.filter((e) => !usedSet.has(e.id) && !items.find((it) => it.id === e.id)));
     let i = 0;
@@ -5318,6 +6797,28 @@ function buildCours(exercises, categories, { niveau, tempsTotal, nbEchauffements
       i++;
     }
     if (items.length === 0) return items;
+    // L'Ambassadeur fait exception au partage à parts égales : une partie de mime ne tient pas en
+    // 7 minutes. On lui réserve d'abord sa durée (entre 10 et 15 min), puis on répartit ce qui
+    // reste entre les autres cartes.
+    const ambIdx = items.findIndex((it) => it.title === "Ambassadeur");
+    if (ambIdx >= 0) {
+      const partEgale = Math.floor(totalBudget / items.length);
+      const dureeAmb = Math.max(AMBASSADEUR_MIN_MIN, Math.min(AMBASSADEUR_MAX_MIN, partEgale));
+      const autres = items.length - 1;
+      // Seul dans sa section : il garde sa fourchette, quitte à ne pas consommer tout le temps
+      // prévu pour les échauffements — un ambassadeur de 30 minutes n'aurait aucun sens.
+      if (autres === 0) return [{ ...items[0], actualDuration: dureeAmb }];
+      const reste = Math.max(0, totalBudget - dureeAmb);
+      const perAutre = Math.floor(reste / autres);
+      const remainderAutre = reste - perAutre * autres;
+      let rang = 0;
+      return items.map((it, idx) => {
+        if (idx === ambIdx) return { ...it, actualDuration: dureeAmb };
+        const bonus = rang < remainderAutre ? 1 : 0;
+        rang += 1;
+        return { ...it, actualDuration: Math.max(MIN_CARD_DURATION, perAutre + bonus) };
+      });
+    }
     const per = Math.floor(totalBudget / items.length);
     const remainder = totalBudget - per * items.length;
     return items.map((it, idx) => ({ ...it, actualDuration: Math.max(MIN_CARD_DURATION, per + (idx < remainder ? 1 : 0)) }));
@@ -5342,8 +6843,9 @@ function buildCours(exercises, categories, { niveau, tempsTotal, nbEchauffements
   const warmupAll = exercises.filter((e) => e.warmup && e.title !== "Ambassadeur" && fitsGroup(e) && allowedLevel(e) && (participants >= 5 || e.groupe !== "Cercle"));
   // Les fiches marquées "dualUse" (fusion d'un doublon échauffement/exercice — même contenu
   // utile dans les deux sections) restent éligibles ici même si elles sont aussi cochées comme
-  // échauffement ; les ~40 autres échauffements actifs, eux, restent réservés à l'échauffement.
-  const middlePool = exercises.filter((e) => (!e.warmup || e.dualUse) && !e.application && fitsGroup(e) && allowedLevel(e));
+  // échauffement ; toutes les autres fiches de phase "Échauffement" restent réservées à
+  // l'échauffement (voir estCorpsDeCours).
+  const middlePool = exercises.filter((e) => estCorpsDeCours(e) && fitsGroup(e) && allowedLevel(e));
   // Attache la durée réellement utilisée (éventuellement compressée de ±2 min pour tenir dans le
   // budget) à une copie de l'exercice/catégorie, pour que les cartes affichent la bonne durée.
   const withActual = (item, remainingBefore) => ({ ...item, actualDuration: Math.min(item.duration ?? (item.duration || 5), remainingBefore) });
@@ -5457,15 +6959,18 @@ function buildCours(exercises, categories, { niveau, tempsTotal, nbEchauffements
   // Si demandé, l'exercice "Ambassadeur" est toujours placé en dernier échauffement — peu importe
   // la famille/l'objectif choisi, cette règle passe par-dessus la sélection habituelle. S'il n'y a
   // plus de place (nombre d'échauffements déjà atteint), on retire le dernier choisi pour lui faire
-  // de la place plutôt que de dépasser le nombre demandé. Si 0 échauffement est demandé, on
-  // n'ajoute pas non plus l'Ambassadeur : la section reste bien vide comme voulu.
-  if (faireAmbassadeur && maxEchauffements > 0) {
+  // de la place plutôt que de dépasser le nombre demandé. Avec 0 échauffement demandé, la case
+  // cochée l'emporte : l'ambassadeur est ajouté quand même, seul dans sa section.
+  if (faireAmbassadeur) {
     const ambassadeur = exercises.find((e) => e.title === "Ambassadeur" && !used.has(e.id) && fitsGroup(e));
     if (ambassadeur) {
-      if (warmups.length >= maxEchauffements && warmups.length > 0) {
+      if (maxEchauffements > 0 && warmups.length >= maxEchauffements && warmups.length > 0) {
         const removed = warmups.pop();
         used.delete(removed.id);
       }
+      // La durée définitive n'est pas fixée ici : c'est enforceCountAndRedistribute, plus bas, qui
+      // répartit le budget de la section entre les cartes — et qui applique son plancher de
+      // AMBASSADEUR_MIN_MIN et son plafond de AMBASSADEUR_MAX_MIN.
       warmups.push(withActual(ambassadeur, remainingWarmupBudget));
       used.add(ambassadeur.id);
     }
@@ -5486,9 +6991,9 @@ function buildCours(exercises, categories, { niveau, tempsTotal, nbEchauffements
   const familyCandidates = [...familyPool.filter(byLevel), ...familyPool];
   const tagCandidates = [...tagPool.filter(byLevel), ...tagPool];
   const otherCandidates = [...otherPool.filter(byLevel), ...otherPool];
-  // Dernier recours si la bibliothèque "corps de cours" (Pré-impro/Impro) est vide ou insuffisante :
-  // on réutilise d'autres échauffements plutôt que de laisser le cours trop court.
-  const lastResortCandidates = warmupAll;
+  // Plus de repli sur les échauffements ici : une carte "Exercice" ne doit jamais proposer un
+  // échauffement, quitte à ce que la section compte moins de cartes que demandé si la
+  // bibliothèque Pré-impro/Impro est épuisée par les filtres (niveau, nombre de participants).
 
   const pickFromPool = (pool) => {
     let choicePool = pool.filter((e) => !used.has(e.id));
@@ -5517,7 +7022,7 @@ function buildCours(exercises, categories, { niveau, tempsTotal, nbEchauffements
     // On épuise d'abord les exercices classés dans la famille cochée, puis ceux qui portent un
     // tag précis associé à cette famille, puis le reste de la bibliothèque, puis en dernier
     // recours d'autres échauffements, pour ne jamais laisser de temps non couvert.
-    const pick = pickFromPool(familyCandidates) || pickFromPool(tagCandidates) || pickFromPool(otherCandidates) || pickFromPool(lastResortCandidates);
+    const pick = pickFromPool(familyCandidates) || pickFromPool(tagCandidates) || pickFromPool(otherCandidates);
     if (!pick) break; // plus aucun exercice, quel qu'il soit, ne tient dans le temps restant
 
     middle.push(withActual(pick, budget));
@@ -5683,18 +7188,25 @@ function buildCours(exercises, categories, { niveau, tempsTotal, nbEchauffements
 
 
 
-function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, currentUser, setTab }) {
+function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, currentUser, isAdmin, profile, setTab }) {
   // Fiches en attente/refusées du créateur courant : jamais proposées par le tirage automatique,
   // mais ajoutées au pool de recherche manuelle des pickers pour qu'il puisse quand même les ajouter
   // lui-même à son cours (voir notifyCreatorRejected).
   const myPendingExercises = currentUser ? (allData?.exercises || []).filter((e) => e.creatorUsername === currentUser && (e.pending || e.rejected)) : [];
   const myPendingCategories = currentUser ? (allData?.categories || []).filter((c) => c.creatorUsername === currentUser && (c.pending || c.rejected)) : [];
   const pickerExercises = myPendingExercises.length > 0 ? [...data.exercises, ...myPendingExercises] : data.exercises;
+  // Le sélecteur d'une carte "Exercice" ne montre que des fiches du corps de cours : même dans une
+  // recherche manuelle, l'appli ne doit pas proposer d'échauffement à cet endroit. Le sélecteur
+  // d'une carte "Échauffement", lui, garde toute la bibliothèque.
+  const pickerExercisesCorps = pickerExercises.filter(estCorpsDeCours);
   const pickerCategories = myPendingCategories.length > 0 ? [...data.categories, ...myPendingCategories] : data.categories;
   const [niveau, setNiveau] = useState("");
   const [participants, setParticipants] = useState(8);
   const [joueursSeConnaissent, setJoueursSeConnaissent] = useState(true);
   const [faireAmbassadeur, setFaireAmbassadeur] = useState(true);
+  // Manches d'ambassadeur rattachées à ce cours (voir AmbassadeurPlanCard, sous la carte de
+  // l'exercice "Ambassadeur"). Enregistrées avec le plan pour qu'on les retrouve le jour du cours.
+  const [ambassadeurMancheIds, setAmbassadeurMancheIds] = useState([]);
   const [integrerFavoris, setIntegrerFavoris] = useState(false);
   const [tempsTotal, setTempsTotal] = useState(120);
   const [nbEchauffements, setNbEchauffements] = useState(4);
@@ -5770,6 +7282,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
   const generate = () => {
     const newPlan = buildCours(data.exercises, data.categories, { niveau, tempsTotal, nbEchauffements, nbExercices, nbImpro, objectifs, thematiques, participants, joueursSeConnaissent, faireAmbassadeur, recentIds, integrerFavoris });
     setPlan(newPlan);
+    setAmbassadeurMancheIds([]);
     setRecentIds(new Set([...newPlan.warmups, ...newPlan.middle, ...newPlan.impro].map((x) => x.id)));
     // Un nouveau cours repart avec un historique "déjà affichées" vierge, mais y intègre tout de
     // suite ses propres fiches : elles comptent comme déjà vues pour les prochains clics Aléatoire.
@@ -5841,7 +7354,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
     };
     const poolBase = slot === "warmup"
       ? data.exercises.filter((e) => e.warmup && !used.has(e.id))
-      : data.exercises.filter((e) => (!e.warmup || e.dualUse) && !e.application && !used.has(e.id));
+      : data.exercises.filter((e) => estCorpsDeCours(e) && !used.has(e.id));
     const byFamily = poolBase.filter(familyMatches);
     const byTag = poolBase.filter((e) => !familyMatches(e) && tagMatches(e));
     const byTheme = poolBase.filter((e) => !familyMatches(e) && !tagMatches(e) && themeMatches(e));
@@ -5936,6 +7449,14 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
   // exercice, pour insérer les boutons "Ajouter…" au bon endroit même si la section est vide.
   const warmupCount = plan ? plan.warmups.length : 0;
   const middleCount = plan ? plan.middle.length : 0;
+  // Où insérer la carte "Ambassadeur" : sous la fiche du même nom si le générateur l'a placée,
+  // sinon à la fin des échauffements (comme le veut la règle de buildCours). -1 = pas d'ambassadeur.
+  const ambassadeurItemIndex = (() => {
+    if (!plan) return -1;
+    const i = items.findIndex((it) => it.kind === "exercise" && it.ex.title === "Ambassadeur");
+    if (i >= 0) return i;
+    return faireAmbassadeur && warmupCount > 0 ? warmupCount - 1 : -1;
+  })();
   const addWarmupBlock = (
     <React.Fragment key="add-warmup">
       {picker?.mode === "add" && picker.slot === "warmup" && (
@@ -5956,7 +7477,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
     <React.Fragment key="add-exercise">
       {picker?.mode === "add" && picker.slot !== "warmup" && (
         <ExercisePicker
-          exercises={pickerExercises}
+          exercises={pickerExercisesCorps}
           excludeIds={[...usedIds()]}
           onSelect={pickManually}
           onCancel={() => setPicker(null)}
@@ -6053,92 +7574,71 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
               const isDraggedItem = dragged && dragged.listKey === "impro" && dragged.index === it.idx;
               const isExpanded = expandedId === c.id;
               const card = (
-                <IndexCard>
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1" onClick={() => handleCardTap(c.id)} style={{ cursor: "pointer" }}>
-                      <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">{it.label}</span>
-                      <div className="flex items-center gap-1.5">
-                        <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{c.name}</h3>
-                        <button onClick={(e) => { e.stopPropagation(); toggleFavCat(c.id); }} title="Favori">
-                          <Star size={18} color={c.favorite ? COLORS.brass : COLORS.textSoft} fill={c.favorite ? COLORS.brass : "none"} />
-                        </button>
-                      </div>
-                      {/* Hauteur toujours réservée (même sans tag, comme pour "Libre") pour éviter que la
-                          carte suivante ne se décale et que le clic sur "Aléatoire" d'une carte voisine
-                          n'atterrisse par erreur sur un autre bouton après le remplacement. */}
-                      <div className="flex flex-wrap items-center mt-1 mb-1" style={{ minHeight: 22 }}>
-                        {(c.tags || []).length > 0 && (
-                          <span
-                            className="inline-block text-xs px-2 py-0.5 rounded-full"
-                            style={{ fontFamily: FONT_MONO, background: "#B3382C", color: "#fff" }}
-                          >
-                            {c.tags.join(" · ")}
-                          </span>
-                        )}
-                        {c.matchInfo?.type === "family" && (
-                          <span
-                            className="inline-block text-xs px-2 py-0.5 rounded-full ml-1"
-                            style={{ fontFamily: FONT_MONO, background: COLORS.accent, color: "#fff" }}
-                          >
-                            famille d'objectif
-                          </span>
-                        )}
-                        {c.matchInfo?.type === "tag" && (
-                          <span
-                            className="inline-block text-xs px-2 py-0.5 rounded-full ml-1"
-                            style={{ fontFamily: FONT_MONO, color: COLORS.accent, border: `1px solid ${COLORS.accent}` }}
-                          >
-                            via tag : {c.matchInfo.tag}
-                          </span>
-                        )}
-                        {c.matchInfo?.type === "priority" && (
-                          <span
-                            className="inline-block text-xs px-2 py-0.5 rounded-full ml-1"
-                            style={{ fontFamily: FONT_MONO, background: COLORS.brass, color: "#fff" }}
-                          >
-                            recommandée
-                          </span>
-                        )}
-                        {c.matchInfo?.type === "exhausted" && (
-                          <span
-                            className="inline-block text-xs px-2 py-0.5 rounded-full ml-1"
-                            style={{ fontFamily: FONT_MONO, color: "#B3382C", border: "1px solid #B3382C" }}
-                          >
-                            tags correspondants épuisés
-                          </span>
-                        )}
-                      </div>
-                      <p
-                        style={{
-                          fontFamily: FONT_BODY, color: COLORS.textSoft,
-                          ...(isExpanded ? {} : { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", minHeight: "2.6em" }),
-                        }}
-                        className="text-sm"
-                      >
-                        {c.summary}
-                      </p>
-                      {isExpanded && (
-                        <div className="mt-1 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-                          <div>{c.level || "Niveau non précisé"}</div>
-                          {c.archetypes?.length > 0 && <div>Archétypes : {c.archetypes.map((a) => a.name).join(", ")}</div>}
-                        </div>
+                <ProgrammeCategoryCard
+                  cat={c}
+                  label={it.label}
+                  duree={c.actualDuration ?? c.duration ?? 5}
+                  expanded={isExpanded}
+                  onToggle={() => handleCardTap(c.id)}
+                  star={
+                    <button onClick={(e) => { e.stopPropagation(); toggleFavCat(c.id); }} title="Favori">
+                      <Star size={18} color={c.favorite ? COLORS.brass : COLORS.textSoft} fill={c.favorite ? COLORS.brass : "none"} />
+                    </button>
+                  }
+                  badges={
+                    <>
+                      {c.matchInfo?.type === "family" && (
+                        <span
+                          className="inline-block text-xs px-2 py-0.5 rounded-full ml-1"
+                          style={{ fontFamily: FONT_MONO, background: COLORS.accent, color: "#fff" }}
+                        >
+                          famille d'objectif
+                        </span>
                       )}
-                    </div>
+                      {c.matchInfo?.type === "tag" && (
+                        <span
+                          className="inline-block text-xs px-2 py-0.5 rounded-full ml-1"
+                          style={{ fontFamily: FONT_MONO, color: COLORS.accent, border: `1px solid ${COLORS.accent}` }}
+                        >
+                          via tag : {c.matchInfo.tag}
+                        </span>
+                      )}
+                      {c.matchInfo?.type === "priority" && (
+                        <span
+                          className="inline-block text-xs px-2 py-0.5 rounded-full ml-1"
+                          style={{ fontFamily: FONT_MONO, background: COLORS.brass, color: "#fff" }}
+                        >
+                          recommandée
+                        </span>
+                      )}
+                      {c.matchInfo?.type === "exhausted" && (
+                        <span
+                          className="inline-block text-xs px-2 py-0.5 rounded-full ml-1"
+                          style={{ fontFamily: FONT_MONO, color: "#B3382C", border: "1px solid #B3382C" }}
+                        >
+                          tags correspondants épuisés
+                        </span>
+                      )}
+                    </>
+                  }
+                  actions={
                     <div className="flex flex-col gap-1 items-end">
                       <Btn small variant="ghost" onClick={() => replaceCat(it.idx)}>Aléatoire</Btn>
                       <Btn small variant="ghost" onClick={() => setCatPicker({ mode: "replace", idx: it.idx })}>Changer</Btn>
                     </div>
-                  </div>
-                  <div className="flex justify-between items-center mt-2">
+                  }
+                  footerLeft={
                     <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
                       {c.actualDuration ?? c.duration ?? 5} min · Nombre de joueurs : {playersCountText(c)}
                     </span>
+                  }
+                  footerRight={
                     <div className="flex items-center gap-3">
                       <DragHandleLabel />
                       <button onClick={() => removeCat(it.idx)} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
                     </div>
-                  </div>
-                </IndexCard>
+                  }
+                />
               );
               return (
                 <React.Fragment key={it.label}>
@@ -6168,112 +7668,85 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
             const isDraggedItem = dragged && listKey && dragged.listKey === listKey && dragged.index === it.idx;
             const isExpanded = expandedId === it.ex.id;
             const card = (
-              <IndexCard>
-                <div className="flex justify-between items-start">
-                  <div className="flex-1" onClick={() => handleCardTap(it.ex.id)} style={{ cursor: "pointer" }}>
-                    <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">{it.label}</span>
-                    <div className="flex items-center gap-1.5">
-                      <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{it.ex.title}</h3>
-                      <button onClick={(e) => { e.stopPropagation(); toggleFavEx(it.ex.id); }} title="Favori">
-                        <Star size={18} color={it.ex.favorite ? COLORS.brass : COLORS.textSoft} fill={it.ex.favorite ? COLORS.brass : "none"} />
-                      </button>
-                    </div>
-                    {/* Hauteur toujours réservée (même sans badge) pour éviter que la carte suivante ne
-                        se décale et que le clic sur "Aléatoire" d'une carte voisine n'atterrisse par
-                        erreur sur un autre bouton après le remplacement. */}
-                    <div className="flex flex-wrap items-center mt-1 mb-1" style={{ minHeight: 22 }}>
-                      {it.ex.groupe && (
-                        <span
-                          className="inline-block text-xs px-2 py-0.5 rounded-full"
-                          style={{ fontFamily: FONT_MONO, background: COLORS.accent, color: "#fff" }}
-                        >
-                          {it.ex.groupe}
-                        </span>
-                      )}
-                      {it.slot !== "warmup" && it.ex.matchInfo?.type === "tag" && (
-                        <span
-                          className="inline-block text-xs px-2 py-0.5 rounded-full ml-1"
-                          style={{ fontFamily: FONT_MONO, color: COLORS.accent, border: `1px solid ${COLORS.accent}` }}
-                        >
-                          via tag : {it.ex.matchInfo.tag}
-                        </span>
-                      )}
-                      {it.slot !== "warmup" && it.ex.matchInfo?.type === "exhausted" && (
-                        <span
-                          className="inline-block text-xs px-2 py-0.5 rounded-full ml-1"
-                          style={{ fontFamily: FONT_MONO, color: "#B3382C", border: "1px solid #B3382C" }}
-                        >
-                          tags correspondants épuisés
-                        </span>
-                      )}
-                      {it.slot !== "warmup" && it.ex.phase === "Pré-impro" && (
-                        <span
-                          className="inline-block text-xs px-2 py-0.5 rounded-full ml-1"
-                          style={{ fontFamily: FONT_MONO, background: "#B3382C", color: "#fff" }}
-                        >
-                          Exercice pré-impro
-                        </span>
-                      )}
-                    </div>
-                    <p
-                      style={{
-                        fontFamily: FONT_BODY, color: COLORS.textSoft,
-                        ...(isExpanded ? {} : { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", minHeight: "2.6em" }),
-                      }}
-                      className="text-sm"
-                    >
-                      {it.ex.summary}
-                    </p>
-                    {isExpanded && (
-                      <div className="mt-1 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-                        <div>{it.ex.level || "Niveau non précisé"}</div>
-                        {it.ex.objectives?.length > 0 && <div>Objectifs : {it.ex.objectives.join(", ")}</div>}
-                        {it.ex.energy && <div>Énergie : {it.ex.energy}</div>}
-                        {it.ex.material && it.ex.material !== "Aucun" && <div>Matériel : {it.ex.material}</div>}
-                      </div>
+              <ProgrammeExerciseCard
+                ex={it.ex}
+                label={it.label}
+                duree={it.ex.actualDuration ?? it.ex.duration}
+                participants={participants}
+                expanded={isExpanded}
+                onToggle={() => handleCardTap(it.ex.id)}
+                star={
+                  <button onClick={(e) => { e.stopPropagation(); toggleFavEx(it.ex.id); }} title="Favori">
+                    <Star size={18} color={it.ex.favorite ? COLORS.brass : COLORS.textSoft} fill={it.ex.favorite ? COLORS.brass : "none"} />
+                  </button>
+                }
+                badges={
+                  <>
+                    {it.slot !== "warmup" && it.ex.matchInfo?.type === "tag" && (
+                      <span
+                        className="inline-block text-xs px-2 py-0.5 rounded-full ml-1"
+                        style={{ fontFamily: FONT_MONO, color: COLORS.accent, border: `1px solid ${COLORS.accent}` }}
+                      >
+                        via tag : {it.ex.matchInfo.tag}
+                      </span>
                     )}
-                  </div>
+                    {it.slot !== "warmup" && it.ex.matchInfo?.type === "exhausted" && (
+                      <span
+                        className="inline-block text-xs px-2 py-0.5 rounded-full ml-1"
+                        style={{ fontFamily: FONT_MONO, color: "#B3382C", border: "1px solid #B3382C" }}
+                      >
+                        tags correspondants épuisés
+                      </span>
+                    )}
+                    {it.slot !== "warmup" && it.ex.phase === "Pré-impro" && (
+                      <span
+                        className="inline-block text-xs px-2 py-0.5 rounded-full ml-1"
+                        style={{ fontFamily: FONT_MONO, background: "#B3382C", color: "#fff" }}
+                      >
+                        Exercice pré-impro
+                      </span>
+                    )}
+                  </>
+                }
+                actions={
                   <div className="flex flex-col gap-1 items-end">
                     <Btn small variant="ghost" onClick={() => replace(it.slot, it.idx)}>Aléatoire</Btn>
                     <Btn small variant="ghost" onClick={() => setPicker({ mode: "replace", slot: it.slot, idx: it.idx, groupe: it.ex.groupe })}>Changer</Btn>
                   </div>
-                </div>
-                <div className="flex justify-between items-center mt-2">
-                  <div className="flex items-center gap-2">
-                    <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
-                      {it.ex.actualDuration ?? it.ex.duration} min · Nombre de joueurs : {it.ex.players > 0 ? it.ex.players : "Illimité"}
-                    </span>
-                    {(it.ex.format || "Solo simultané") === "Tour à tour avec spectateur" ? (
-                      <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ fontFamily: FONT_MONO, background: COLORS.brass + "33", color: COLORS.brass }}>
-                        🟠 chacun son tour{wait > 0 ? ` · ~${wait} min d'attente/élève` : ""}
-                      </span>
-                    ) : it.ex.format === "En groupe simultané" ? (
-                      <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ fontFamily: FONT_MONO, background: COLORS.accent + "33", color: COLORS.accent }}>
-                        🔴 groupe simultané (bruyant)
-                      </span>
-                    ) : (
-                      <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ fontFamily: FONT_MONO, background: "#3B6E5E33", color: "#3B6E5E" }}>
-                        🟢 tout le monde actif
-                      </span>
-                    )}
-                  </div>
+                }
+                footerRight={
                   <div className="flex items-center gap-3">
                     <DragHandleLabel />
                     <button onClick={() => remove(it.slot, it.idx)} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
                   </div>
-                </div>
-              </IndexCard>
+                }
+              />
             );
             const inlinePicker = picker?.mode === "replace" && picker.slot === it.slot && picker.idx === it.idx && (
               <ExercisePicker
-                exercises={pickerExercises}
+                exercises={it.slot === "warmup" ? pickerExercises : pickerExercisesCorps}
                 excludeIds={[...usedIds()]}
                 onSelect={pickManually}
                 onCancel={() => setPicker(null)}
                 priorityFamilies={objectifs.length > 0 ? objectifs : (picker.groupe ? [picker.groupe] : [])}
               />
             );
-            if (!listKey) return <React.Fragment key={it.label}>{prefixButtons}{card}{inlinePicker}</React.Fragment>;
+            // Choix des mots à faire deviner. Placé sous la fiche "Ambassadeur" si elle est au
+            // programme, sinon en fin d'échauffements — la fiche n'existe pas forcément en base,
+            // alors que la case "Inclure un ambassadeur" du formulaire, elle, est cochée.
+            const ambassadeurCard = itemIndex === ambassadeurItemIndex ? (
+              <AmbassadeurPlanCard
+                data={allData || data}
+                mancheIds={ambassadeurMancheIds}
+                onChange={setAmbassadeurMancheIds}
+                currentUser={currentUser}
+                isAdmin={isAdmin}
+                profile={profile}
+                update={update}
+                niveau={niveau}
+              />
+            ) : null;
+            if (!listKey) return <React.Fragment key={it.label}>{prefixButtons}{card}{ambassadeurCard}{inlinePicker}</React.Fragment>;
             return (
               <React.Fragment key={it.label}>
                 {prefixButtons}
@@ -6286,6 +7759,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                 >
                   {card}
                 </div>
+                {ambassadeurCard}
                 {inlinePicker}
               </React.Fragment>
             );
@@ -6319,9 +7793,10 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                   name: name || "Plan de cours",
                   exerciseIds: items.filter((it) => it.kind === "exercise").map((it) => it.ex.id),
                   categoryIds: items.filter((it) => it.kind === "category").map((it) => it.cat.id),
+                  ambassadeurMancheIds,
                   durationsById,
                 },
-                data
+                allData || data
               )}
             >
               <Download size={14} /> Télécharger en PDF
@@ -6336,6 +7811,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                     id: uid(), name,
                     exerciseIds: items.filter((it) => it.kind === "exercise").map((it) => it.ex.id),
                     categoryIds: items.filter((it) => it.kind === "category").map((it) => it.cat.id),
+                    ambassadeurMancheIds,
                     durationsById,
                   });
                   return d;
@@ -6761,6 +8237,97 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
       )
     : null;
 
+  // Une carte de catégorie du déroulé, identique dans les deux parties (avant/après l'entracte) :
+  // seule change la règle d'affichage de l'heure. Voir ProgrammeCategoryCard pour la présentation,
+  // partagée avec le générateur de cours et les plans enregistrés.
+  const carteCategorieSpectacle = (c, part, i) => {
+    const liste = part === "first" ? result.first : result.second;
+    // On n'affiche l'heure que sur quelques cartes repères, pas sur toutes : avant l'entracte, la
+    // dernière ; après, la première et la dernière. Sinon l'écran devient illisible.
+    const afficherHeure = schedule && (part === "first"
+      ? i === liste.length - 1
+      : (i === 0 || i === liste.length - 1));
+    const times = part === "first" ? schedule?.firstTimes : schedule?.secondTimes;
+    return (
+      <React.Fragment key={`${c.id}-${i}`}>
+        <div
+          data-drop-card="true"
+          data-list={part}
+          data-index={i}
+          onPointerDown={(e) => { if (e.pointerType === "mouse" && !e.target.closest("[data-drag-handle]")) return; startPress(part, i, e); }}
+          style={{
+            position: "relative",
+            // `listKey` et non `part` : la carte en cours de déplacement s'estompe. L'ancien code
+            // lisait `dragged.part`, qui n'existe pas — le retour visuel ne marchait donc jamais ici.
+            opacity: dragged?.listKey === part && dragged.index === i ? 0.4 : 1,
+            userSelect: "none", WebkitUserSelect: "none", touchAction: "none",
+          }}
+        >
+          {afficherHeure && (
+            <div className="text-xs font-semibold mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.brass, marginTop: -6, lineHeight: 1 }}>
+              🕐 {minutesToTime(times[i])}
+            </div>
+          )}
+          <ProgrammeCategoryCard
+            cat={c}
+            duree={c.actualDuration ?? c.duration ?? 5}
+            metaInline
+            expanded={expandedId === c.id}
+            onToggle={() => handleCardTap(c.id)}
+            star={
+              <button onClick={(e) => { e.stopPropagation(); toggleFavCat(c.id); }} title="Favori">
+                <Star size={18} color={c.favorite ? COLORS.brass : COLORS.textSoft} fill={c.favorite ? COLORS.brass : "none"} />
+              </button>
+            }
+            headerRight={format === "Match" ? (
+              <div className="flex rounded-sm overflow-hidden shrink-0" style={{ border: `1px solid ${COLORS.accent}` }} onClick={(e) => e.stopPropagation()}>
+                {["Mixte", "Comparé"].map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => setMatchMode(part, i, mode)}
+                    className="text-xs px-2 py-1"
+                    style={{ fontFamily: FONT_MONO, background: (c.matchMode || "Mixte") === mode ? COLORS.accent : "transparent", color: (c.matchMode || "Mixte") === mode ? "#fff" : COLORS.accent }}
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            badgesFallback={c.name === "Libre" ? (
+              <span
+                className="inline-block text-xs px-2 py-0.5 rounded-full"
+                style={{ fontFamily: FONT_MONO, background: COLORS.brass, color: "#fff" }}
+              >
+                Libre
+              </span>
+            ) : null}
+            actions={
+              <div className="flex flex-col gap-1 items-end">
+                <Btn small variant="ghost" onClick={() => replaceCat(part, i)}>Aléatoire</Btn>
+                <Btn small variant="ghost" onClick={() => setCatPicker({ part, idx: i })}>Modifier</Btn>
+              </div>
+            }
+            footerRight={
+              <div className="flex items-center gap-3">
+                <DragHandleLabel />
+                <button onClick={() => removeCat(part, i)} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
+              </div>
+            }
+          />
+        </div>
+        {catPicker?.part === part && catPicker.idx === i && catPicker.mode !== "add" && (
+          <CategoryPicker
+            categories={pickerCategories}
+            excludeIds={allCats.map((x) => x.id)}
+            onSelect={pickCatManually}
+            onCancel={() => setCatPicker(null)}
+          />
+        )}
+        <DropZone />
+      </React.Fragment>
+    );
+  };
+
   return (
     <div>
       {dragged && dragPos && draggedCat && (
@@ -6884,119 +8451,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
               <DropZone />
             </>
           )}
-          {result.first.map((c, i) => (
-            <React.Fragment key={`${c.id}-${i}`}>
-              <div
-                data-drop-card="true"
-                data-list="first"
-                data-index={i}
-                onPointerDown={(e) => { if (e.pointerType === "mouse" && !e.target.closest("[data-drag-handle]")) return; startPress("first", i, e); }}
-                style={{
-                  position: "relative",
-                  opacity: dragged?.part === "first" && dragged.index === i ? 0.4 : 1,
-                  userSelect: "none", WebkitUserSelect: "none", touchAction: "none",
-                }}
-              >
-                {/* Seule la dernière catégorie avant l'entracte (ou la dernière du spectacle si pas
-                    d'entracte) affiche son heure — pas chaque carte, pour ne pas surcharger l'écran. */}
-                {schedule && i === result.first.length - 1 && (
-                  <div className="text-xs font-semibold mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.brass, marginTop: -6, lineHeight: 1 }}>
-                    🕐 {minutesToTime(schedule.firstTimes[i])}
-                  </div>
-                )}
-                <IndexCard>
-                  <div className="flex justify-between items-start gap-2">
-                    <div className="flex-1" onClick={() => handleCardTap(c.id)} style={{ cursor: "pointer" }}>
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5">
-                          <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{c.name}</h3>
-                          <button onClick={(e) => { e.stopPropagation(); toggleFavCat(c.id); }} title="Favori">
-                            <Star size={18} color={c.favorite ? COLORS.brass : COLORS.textSoft} fill={c.favorite ? COLORS.brass : "none"} />
-                          </button>
-                        </div>
-                        {format === "Match" && (
-                          <div className="flex rounded-sm overflow-hidden shrink-0" style={{ border: `1px solid ${COLORS.accent}` }} onClick={(e) => e.stopPropagation()}>
-                            {["Mixte", "Comparé"].map((mode) => (
-                              <button
-                                key={mode}
-                                onClick={() => setMatchMode("first", i, mode)}
-                                className="text-xs px-2 py-1"
-                                style={{ fontFamily: FONT_MONO, background: (c.matchMode || "Mixte") === mode ? COLORS.accent : "transparent", color: (c.matchMode || "Mixte") === mode ? "#fff" : COLORS.accent }}
-                              >
-                                {mode}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      {/* Hauteur toujours réservée (même sans tag, comme pour "Libre") pour éviter que la
-                          carte suivante ne se décale et que le clic sur "Aléatoire" d'une carte voisine
-                          n'atterrisse par erreur sur un autre bouton après le remplacement. */}
-                      <div className="mt-1 mb-1" style={{ minHeight: 22 }}>
-                        {(c.tags || []).length > 0 ? (
-                          <span
-                            className="inline-block text-xs px-2 py-0.5 rounded-full"
-                            style={{ fontFamily: FONT_MONO, background: "#B3382C", color: "#fff" }}
-                          >
-                            {c.tags.join(" · ")}
-                          </span>
-                        ) : c.name === "Libre" && (
-                          <span
-                            className="inline-block text-xs px-2 py-0.5 rounded-full"
-                            style={{ fontFamily: FONT_MONO, background: COLORS.brass, color: "#fff" }}
-                          >
-                            Libre
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2 text-xs mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
-                        <span>{c.actualDuration ?? c.duration ?? 5} min</span>
-                        {c.energy && <span>· {ENERGY_DOT[c.energy] || ""} énergie {c.energy}</span>}
-                        <span>· Nombre de joueurs : {playersCountText(c)}</span>
-                      </div>
-                      <p
-                        style={{
-                          fontFamily: FONT_BODY, color: COLORS.textSoft,
-                          // Hauteur minimale de 2 lignes réservée même pour les résumés courts (ex. "Libre"),
-                          // pour éviter un décalage des cartes suivantes qui ferait rater le bon bouton en cas
-                          // de clics rapprochés sur "Aléatoire".
-                          ...(expandedId === c.id ? {} : { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", minHeight: "2.6em" }),
-                        }}
-                        className="text-sm"
-                      >
-                        {c.summary}
-                      </p>
-                      {expandedId === c.id && (
-                        <div className="mt-1 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-                          <div>{c.level || "Niveau non précisé"}</div>
-                          {c.archetypes?.length > 0 && <div>Archétypes : {c.archetypes.map((a) => a.name).join(", ")}</div>}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex flex-col gap-1 items-end">
-                      <Btn small variant="ghost" onClick={() => replaceCat("first", i)}>Aléatoire</Btn>
-                      <Btn small variant="ghost" onClick={() => setCatPicker({ part: "first", idx: i })}>Modifier</Btn>
-                    </div>
-                  </div>
-                  <div className="flex justify-end items-center mt-2">
-                    <div className="flex items-center gap-3">
-                      <DragHandleLabel />
-                      <button onClick={() => removeCat("first", i)} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
-                    </div>
-                  </div>
-                </IndexCard>
-              </div>
-              {catPicker?.part === "first" && catPicker.idx === i && catPicker.mode !== "add" && (
-                <CategoryPicker
-                  categories={pickerCategories}
-                  excludeIds={allCats.map((c) => c.id)}
-                  onSelect={pickCatManually}
-                  onCancel={() => setCatPicker(null)}
-                />
-              )}
-              <DropZone />
-            </React.Fragment>
-          ))}
+          {result.first.map((c, i) => carteCategorieSpectacle(c, "first", i))}
           {/* Ce bouton n'a d'utilité que lorsqu'il y a un entracte : sans entracte, le second bouton
               "Ajouter une catégorie" (part="first" aussi dans ce cas) suffit déjà en bas de page. */}
           {entracteOn && (
@@ -7012,119 +8467,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
             </IndexCard>
           )}
           <DropZone />
-          {result.second.map((c, i) => (
-            <React.Fragment key={`${c.id}-${i}`}>
-              <div
-                data-drop-card="true"
-                data-list="second"
-                data-index={i}
-                onPointerDown={(e) => { if (e.pointerType === "mouse" && !e.target.closest("[data-drag-handle]")) return; startPress("second", i, e); }}
-                style={{
-                  position: "relative",
-                  opacity: dragged?.part === "second" && dragged.index === i ? 0.4 : 1,
-                  userSelect: "none", WebkitUserSelect: "none", touchAction: "none",
-                }}
-              >
-                {/* Seules la première catégorie après l'entracte et la dernière du spectacle affichent
-                    leur heure — pas chaque carte. */}
-                {schedule && (i === 0 || i === result.second.length - 1) && (
-                  <div className="text-xs font-semibold mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.brass, marginTop: -6, lineHeight: 1 }}>
-                    🕐 {minutesToTime(schedule.secondTimes[i])}
-                  </div>
-                )}
-                <IndexCard>
-                  <div className="flex justify-between items-start gap-2">
-                    <div className="flex-1" onClick={() => handleCardTap(c.id)} style={{ cursor: "pointer" }}>
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5">
-                          <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{c.name}</h3>
-                          <button onClick={(e) => { e.stopPropagation(); toggleFavCat(c.id); }} title="Favori">
-                            <Star size={18} color={c.favorite ? COLORS.brass : COLORS.textSoft} fill={c.favorite ? COLORS.brass : "none"} />
-                          </button>
-                        </div>
-                        {format === "Match" && (
-                          <div className="flex rounded-sm overflow-hidden shrink-0" style={{ border: `1px solid ${COLORS.accent}` }} onClick={(e) => e.stopPropagation()}>
-                            {["Mixte", "Comparé"].map((mode) => (
-                              <button
-                                key={mode}
-                                onClick={() => setMatchMode("second", i, mode)}
-                                className="text-xs px-2 py-1"
-                                style={{ fontFamily: FONT_MONO, background: (c.matchMode || "Mixte") === mode ? COLORS.accent : "transparent", color: (c.matchMode || "Mixte") === mode ? "#fff" : COLORS.accent }}
-                              >
-                                {mode}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      {/* Hauteur toujours réservée (même sans tag, comme pour "Libre") pour éviter que la
-                          carte suivante ne se décale et que le clic sur "Aléatoire" d'une carte voisine
-                          n'atterrisse par erreur sur un autre bouton après le remplacement. */}
-                      <div className="mt-1 mb-1" style={{ minHeight: 22 }}>
-                        {(c.tags || []).length > 0 ? (
-                          <span
-                            className="inline-block text-xs px-2 py-0.5 rounded-full"
-                            style={{ fontFamily: FONT_MONO, background: "#B3382C", color: "#fff" }}
-                          >
-                            {c.tags.join(" · ")}
-                          </span>
-                        ) : c.name === "Libre" && (
-                          <span
-                            className="inline-block text-xs px-2 py-0.5 rounded-full"
-                            style={{ fontFamily: FONT_MONO, background: COLORS.brass, color: "#fff" }}
-                          >
-                            Libre
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2 text-xs mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
-                        <span>{c.actualDuration ?? c.duration ?? 5} min</span>
-                        {c.energy && <span>· {ENERGY_DOT[c.energy] || ""} énergie {c.energy}</span>}
-                        <span>· Nombre de joueurs : {playersCountText(c)}</span>
-                      </div>
-                      <p
-                        style={{
-                          fontFamily: FONT_BODY, color: COLORS.textSoft,
-                          // Hauteur minimale de 2 lignes réservée même pour les résumés courts (ex. "Libre"),
-                          // pour éviter un décalage des cartes suivantes qui ferait rater le bon bouton en cas
-                          // de clics rapprochés sur "Aléatoire".
-                          ...(expandedId === c.id ? {} : { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", minHeight: "2.6em" }),
-                        }}
-                        className="text-sm"
-                      >
-                        {c.summary}
-                      </p>
-                      {expandedId === c.id && (
-                        <div className="mt-1 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-                          <div>{c.level || "Niveau non précisé"}</div>
-                          {c.archetypes?.length > 0 && <div>Archétypes : {c.archetypes.map((a) => a.name).join(", ")}</div>}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex flex-col gap-1 items-end">
-                      <Btn small variant="ghost" onClick={() => replaceCat("second", i)}>Aléatoire</Btn>
-                      <Btn small variant="ghost" onClick={() => setCatPicker({ part: "second", idx: i })}>Modifier</Btn>
-                    </div>
-                  </div>
-                  <div className="flex justify-end items-center mt-2">
-                    <div className="flex items-center gap-3">
-                      <DragHandleLabel />
-                      <button onClick={() => removeCat("second", i)} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
-                    </div>
-                  </div>
-                </IndexCard>
-              </div>
-              {catPicker?.part === "second" && catPicker.idx === i && catPicker.mode !== "add" && (
-                <CategoryPicker
-                  categories={pickerCategories}
-                  excludeIds={allCats.map((c) => c.id)}
-                  onSelect={pickCatManually}
-                  onCancel={() => setCatPicker(null)}
-                />
-              )}
-              <DropZone />
-            </React.Fragment>
-          ))}
+          {result.second.map((c, i) => carteCategorieSpectacle(c, "second", i))}
           <div className="mb-2">
             <Btn small variant="accent" onClick={() => setCatPicker({ mode: "add", part: entracteOn ? "second" : "first" })}><Plus size={13} /> Ajouter une catégorie</Btn>
           </div>
@@ -7512,6 +8855,7 @@ function ModerationTab({ data, update, setTab, isAdmin }) {
   const [rejectingExId, setRejectingExId] = useState(null);
   const [rejectingCatId, setRejectingCatId] = useState(null);
   const [rejectingConceptId, setRejectingConceptId] = useState(null);
+  const [rejectingMancheId, setRejectingMancheId] = useState(null);
   const [rejectReason, setRejectReason] = useState("");
 
   if (!isAdmin) {
@@ -7526,6 +8870,7 @@ function ModerationTab({ data, update, setTab, isAdmin }) {
   const pendingExercises = data.exercises.filter((e) => e.pending);
   const pendingCategories = data.categories.filter((c) => c.pending);
   const pendingConcepts = data.showConcepts.filter((sc) => sc.pending);
+  const pendingManches = (data.ambassadeurManches || []).filter((m) => m.pending);
 
   const approveExercise = (id) => update((d) => {
     const e = d.exercises.find((x) => x.id === id);
@@ -7557,6 +8902,16 @@ function ModerationTab({ data, update, setTab, isAdmin }) {
     if (sc) { sc.pending = false; sc.rejected = true; notifyCreatorRejected(d, sc, "concept de spectacle", reason); }
     return d;
   });
+  const approveManche = (id) => update((d) => {
+    const m = (d.ambassadeurManches || []).find((x) => x.id === id);
+    if (m) { m.pending = false; notifyCreatorApproved(d, m, "manche d'ambassadeur"); }
+    return d;
+  });
+  const rejectManche = (id, reason) => update((d) => {
+    const m = (d.ambassadeurManches || []).find((x) => x.id === id);
+    if (m) { m.pending = false; m.rejected = true; notifyCreatorRejected(d, m, "manche d'ambassadeur", reason); }
+    return d;
+  });
 
   return (
     <div>
@@ -7564,10 +8919,10 @@ function ModerationTab({ data, update, setTab, isAdmin }) {
       <SectionHeader
         icon={AlertTriangle}
         title="À valider"
-        subtitle="Exercices, catégories et concepts de spectacle proposés par la communauté, en attente de validation."
+        subtitle="Exercices, catégories, concepts de spectacle et manches d'ambassadeur proposés par la communauté, en attente de validation."
       />
 
-      {pendingExercises.length === 0 && pendingCategories.length === 0 && pendingConcepts.length === 0 && (
+      {pendingExercises.length === 0 && pendingCategories.length === 0 && pendingConcepts.length === 0 && pendingManches.length === 0 && (
         <Empty text="Rien à valider pour le moment — toutes les propositions de la communauté ont été traitées." />
       )}
 
@@ -7670,6 +9025,40 @@ function ModerationTab({ data, update, setTab, isAdmin }) {
               </IndexCard>
             );
           })}
+        </>
+      )}
+
+      {pendingManches.length > 0 && (
+        <>
+          <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs uppercase mt-3 block">Manches d'ambassadeur ({pendingManches.length})</span>
+          {pendingManches.map((m) => (
+            <IndexCard key={m.id}>
+              <div className="flex justify-between items-start gap-2">
+                <div className="min-w-0">
+                  <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{titreManche(m)}</h3>
+                  <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
+                    {m.themeGeneral ? `${m.themeGeneral} · ` : ""}{m.level}{(m.tranchesAge || []).length > 0 ? ` · ${m.tranchesAge.join(", ")}` : ""}
+                    {m.creatorUsername ? ` · ${m.creatorUsername}${m.creatorTroupe ? ` — Troupe ${m.creatorTroupe}` : ""}` : ""}
+                  </span>
+                </div>
+                <div className="flex gap-1 shrink-0">
+                  <Btn small variant="ghost" onClick={() => approveManche(m.id)}><Check size={13} /> Valider</Btn>
+                  <Btn small variant="ghost" onClick={() => { setRejectingMancheId(m.id); setRejectReason(""); }}><X size={13} /> Refuser</Btn>
+                </div>
+              </div>
+              {rejectingMancheId === m.id && (
+                <RejectReasonBox
+                  reason={rejectReason}
+                  setReason={setRejectReason}
+                  onConfirm={() => { rejectManche(m.id, rejectReason.trim()); setRejectingMancheId(null); setRejectReason(""); }}
+                  onCancel={() => { setRejectingMancheId(null); setRejectReason(""); }}
+                />
+              )}
+              <ol className="text-sm mt-1 list-decimal list-inside" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+                {(m.mots || []).map((mot, i) => <li key={i}>{mot}</li>)}
+              </ol>
+            </IndexCard>
+          ))}
         </>
       )}
     </div>
@@ -8152,6 +9541,16 @@ function MessagesEnvoyesTab({ data, update, setTab, currentUser, isAdmin }) {
 /* ---------- Plans de cours ---------- */
 /* Export PDF d'un plan de cours — fonction autonome (utilisée par PlansTab ET directement depuis
    la page "Créer un cours", pour permettre le téléchargement même sans être connecté). */
+/* jsPDF n'embarque que les polices standard (Helvetica), limitées à Latin-1 : tout caractère en
+   dehors disparaît purement et simplement du PDF. Les accents passent, mais les tirets cadratins
+   s'évaporaient sans qu'on le voie ("Le titre — 7 min" sortait "Le titre  7 min"), et « Bon pied bon
+   œil » sortait « Bon pied bon il » — gênant depuis que les mots de l'ambassadeur sont imprimés. */
+const PDF_REMPLACEMENTS = [
+  [/[—–]/g, "-"], [/œ/g, "oe"], [/Œ/g, "OE"], [/æ/g, "ae"], [/Æ/g, "AE"],
+  [/[’‘]/g, "'"], [/[“”«»]/g, '"'], [/…/g, "..."],
+];
+const pdfTexte = (s) => PDF_REMPLACEMENTS.reduce((t, [re, rep]) => t.replace(re, rep), String(s ?? ""));
+
 function exportCoursePlanPDF(plan, data) {
   const JsPDF = window.jspdf?.jsPDF;
   if (!JsPDF) {
@@ -8167,7 +9566,7 @@ function exportCoursePlanPDF(plan, data) {
   const addLine = (text, { size = 11, bold = false, gap = 7 } = {}) => {
     doc.setFontSize(size);
     doc.setFont(undefined, bold ? "bold" : "normal");
-    doc.splitTextToSize(text, maxWidth).forEach((line) => {
+    doc.splitTextToSize(pdfTexte(text), maxWidth).forEach((line) => {
       if (y > 280) { doc.addPage(); y = 18; }
       doc.text(line, marginX, y);
       y += gap;
@@ -8215,6 +9614,22 @@ function exportCoursePlanPDF(plan, data) {
     });
   }
 
+  // Ambassadeur : le PDF est la feuille de route du maître du jeu, il porte donc les mots à faire
+  // deviner en plus des thèmes. À garder pour soi pendant le cours — les équipes doivent deviner.
+  const ambassadeurManchesDuPlan = (plan.ambassadeurMancheIds || [])
+    .map((id) => (data.ambassadeurManches || []).find((m) => m.id === id))
+    .filter(Boolean);
+  if (ambassadeurManchesDuPlan.length > 0) {
+    addLine("Ambassadeur :", { bold: true, gap: 7 });
+    addLine("Feuille du maître du jeu : à ne pas montrer aux équipes.", { size: 9, gap: 8 });
+    ambassadeurManchesDuPlan.forEach((m, i) => {
+      addLine(`Manche ${numeroManche(i + 1)} — ${titreManche(m)} (${[m.themeGeneral, m.level].filter(Boolean).join(", ")})`, { size: 10, bold: true, gap: 6 });
+      (m.mots || []).forEach((mot, j) => addLine(`   ${j + 1}. ${mot}`, { size: 10, gap: 5 }));
+      y += 3;
+    });
+    y += 4;
+  }
+
   doc.save(`${plan.name || "plan-de-cours"}.pdf`);
 }
 
@@ -8235,7 +9650,7 @@ function exportSpectaclePlanPDF(plan, data) {
   const addLine = (text, { size = 11, bold = false, gap = 7 } = {}) => {
     doc.setFontSize(size);
     doc.setFont(undefined, bold ? "bold" : "normal");
-    doc.splitTextToSize(text, maxWidth).forEach((line) => {
+    doc.splitTextToSize(pdfTexte(text), maxWidth).forEach((line) => {
       if (y > 280) { doc.addPage(); y = 18; }
       doc.text(line, marginX, y);
       y += gap;
@@ -8324,7 +9739,552 @@ function exportSpectaclePlanPDF(plan, data) {
   doc.save(`${plan.name || "spectacle"}.pdf`);
 }
 
-function PlansTab({ data, update, setTab }) {
+/* Détail dépliable d'un plan de cours enregistré : les mêmes cartes que dans le générateur, avec
+   l'ambassadeur prévu prêt à lancer, et les modifications écrites directement dans le plan. */
+function PlanCoursDetail({ plan, data, allData, update, currentUser, isAdmin, profile }) {
+  const [expandedId, setExpandedId] = useState(null);
+  const [picker, setPicker] = useState(null); // { kind, mode, id }
+  const [nom, setNom] = useState(plan.name);
+  // Un plan enregistré s'ouvre VERROUILLÉ : on le relit le jour du cours, souvent en le faisant
+  // défiler d'une main, et un glissement involontaire ou un clic sur "Changer" y serait vite
+  // arrivé. Les cartes restent dépliables pour lire le détail ; le bouton "Modifier" déverrouille.
+  const [modeEdition, setModeEdition] = useState(false);
+  const planIdRef = useRef(plan.id);
+  useEffect(() => { planIdRef.current = plan.id; }, [plan.id]);
+  // Positions absolues occupées par chaque section, tenues à jour à chaque rendu : le gestionnaire
+  // de glisser-déposer doit rester stable (il est capturé par un effet), il lit donc une ref.
+  const positionsRef = useRef({ ech: [], corps: [], cat: [] });
+  const reordonner = useCallback((listKey, from, insertAt) => {
+    const positions = positionsRef.current[listKey] || [];
+    update((d) => {
+      const p = (d.coursePlans || []).find((x) => x.id === planIdRef.current);
+      if (!p) return d;
+      const champ = listKey === "cat" ? "categoryIds" : "exerciseIds";
+      const liste = [...(p[champ] || [])];
+      const nouveaux = reorderArray(positions.map((i) => liste[i]), from, insertAt);
+      positions.forEach((pos, k) => { liste[pos] = nouveaux[k]; });
+      p[champ] = liste;
+      return d;
+    });
+  }, [update]);
+
+  const majPlan = (fn) => update((d) => {
+    const p = (d.coursePlans || []).find((x) => x.id === plan.id);
+    if (p) { if (!p.durationsById) p.durationsById = {}; fn(p); }
+    return d;
+  });
+  const dureeDe = (item, parDefaut) => plan.durationsById?.[item.id] ?? item.duration ?? parDefaut;
+
+  // Tout se manipule par POSITION, jamais par identifiant : une même fiche (typiquement la
+  // catégorie "Libre") peut figurer plusieurs fois dans un plan, et agir par id toucherait
+  // toutes ses occurrences d'un coup.
+  const exercices = (plan.exerciseIds || []).map((id, idx) => ({ idx, ex: data.exercises.find((e) => e.id === id) })).filter((x) => x.ex);
+  const categories = (plan.categoryIds || []).map((id, idx) => ({ idx, cat: data.categories.find((c) => c.id === id) })).filter((x) => x.cat);
+  const exSupprimes = (plan.exerciseIds || []).length - exercices.length;
+  const catSupprimees = (plan.categoryIds || []).length - categories.length;
+  const echauffements = exercices.filter((x) => (x.ex.phase || "Impro") === "Échauffement");
+  const corps = exercices.filter((x) => (x.ex.phase || "Impro") !== "Échauffement");
+  const dejaDansLePlan = [...(plan.exerciseIds || []), ...(plan.categoryIds || [])];
+
+  // Ne libère la durée mémorisée que si la fiche ne figure plus nulle part ailleurs dans le plan.
+  const oublierDuree = (p, id) => {
+    const encorePresent = (p.exerciseIds || []).includes(id) || (p.categoryIds || []).includes(id);
+    if (!encorePresent) delete p.durationsById[id];
+  };
+  const remplacerExercice = (idx, nouveau) => majPlan((p) => {
+    const ancienId = p.exerciseIds[idx];
+    const duree = p.durationsById[ancienId];
+    p.exerciseIds = p.exerciseIds.map((id, i) => (i === idx ? nouveau.id : id));
+    oublierDuree(p, ancienId);
+    p.durationsById[nouveau.id] = duree ?? nouveau.duration ?? 5;
+  });
+  const supprimerExercice = (idx) => majPlan((p) => {
+    const ancienId = p.exerciseIds[idx];
+    p.exerciseIds = p.exerciseIds.filter((_, i) => i !== idx);
+    oublierDuree(p, ancienId);
+  });
+  const ajouterExercice = (ex) => majPlan((p) => {
+    p.exerciseIds = [...p.exerciseIds, ex.id];
+    p.durationsById[ex.id] = ex.duration ?? 5;
+  });
+  const remplacerCategorie = (idx, nouvelle) => majPlan((p) => {
+    const ancienId = (p.categoryIds || [])[idx];
+    const duree = p.durationsById[ancienId];
+    p.categoryIds = (p.categoryIds || []).map((id, i) => (i === idx ? nouvelle.id : id));
+    oublierDuree(p, ancienId);
+    p.durationsById[nouvelle.id] = duree ?? nouvelle.duration ?? 5;
+  });
+  const supprimerCategorie = (idx) => majPlan((p) => {
+    const ancienId = (p.categoryIds || [])[idx];
+    p.categoryIds = (p.categoryIds || []).filter((_, i) => i !== idx);
+    oublierDuree(p, ancienId);
+  });
+  const ajouterCategorie = (cat) => majPlan((p) => {
+    p.categoryIds = [...(p.categoryIds || []), cat.id];
+    p.durationsById[cat.id] = cat.duration ?? 5;
+  });
+
+  // Comme dans le générateur, le sélecteur d'échauffement propose toute la bibliothèque : à toi de
+  // choisir. Attention, une fiche de phase "Impro" ajoutée ici s'affichera dans les exercices,
+  // puisque c'est la phase de la fiche qui décide de sa section.
+  const poolEchauffement = data.exercises;
+  const poolCorps = data.exercises.filter(estCorpsDeCours);
+
+  const totalMin = [...exercices.map((x) => x.ex), ...categories.map((x) => x.cat)]
+    .reduce((s, it) => s + Number(dureeDe(it, 5)), 0) + DEBRIEF_MIN;
+  const fermerPicker = () => setPicker(null);
+  const carte = (kind, mode, id) => picker && picker.kind === kind && picker.mode === mode && picker.id === id;
+
+  // Glisser-déposer : le geste renvoie des positions DANS LA SECTION affichée, alors que le plan
+  // stocke une seule liste d'identifiants. On permute donc les identifiants aux positions occupées
+  // par la section déplacée, sans toucher aux autres sections.
+  positionsRef.current = {
+    ech: echauffements.map((x) => x.idx),
+    corps: corps.map((x) => x.idx),
+    cat: categories.map((x) => x.idx),
+  };
+  const { dragged, dragPos, startPress } = useDragReorder(reordonner);
+  const draggedTitre = dragged
+    ? (dragged.listKey === "cat"
+        ? categories[dragged.index]?.cat?.name
+        : (dragged.listKey === "ech" ? echauffements : corps)[dragged.index]?.ex?.title)
+    : null;
+  // Enveloppe une carte pour la rendre saisissable et déposable (voir useDragReorder). Verrouillé,
+  // le plan ne pose pas de zone de dépôt du tout : aucun geste ne peut plus déplacer une carte.
+  const zoneDeDepot = (listKey, index, contenu) => (modeEdition ? (
+    <div
+      data-drop-card="true"
+      data-list={listKey}
+      data-index={index}
+      onPointerDown={(e) => { if (e.pointerType === "mouse" && !e.target.closest("[data-drag-handle]")) return; startPress(listKey, index, e); }}
+      style={{
+        position: "relative",
+        opacity: dragged && dragged.listKey === listKey && dragged.index === index ? 0.4 : 1,
+        userSelect: "none", WebkitUserSelect: "none", touchAction: "none",
+      }}
+    >
+      {contenu}
+    </div>
+  ) : contenu);
+  const piedDeCarte = (onRemove) => (modeEdition ? (
+    <div className="flex items-center gap-3">
+      <DragHandleLabel />
+      <button onClick={onRemove} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
+    </div>
+  ) : null);
+  const boutonChanger = (onReplace) => (modeEdition ? (
+    <Btn small variant="ghost" onClick={onReplace}>Changer</Btn>
+  ) : null);
+
+  return (
+    <div className="mt-2">
+      {dragged && dragPos && draggedTitre && <DragGhost x={dragPos.x} y={dragPos.y} title={draggedTitre} />}
+      <div className="flex justify-end mb-2">
+        <Btn small variant={modeEdition ? "accent" : "ghost"} onClick={() => { setModeEdition((v) => !v); setPicker(null); }}>
+          {modeEdition ? <><Check size={13} /> Terminer</> : <><Pencil size={13} /> Modifier</>}
+        </Btn>
+      </div>
+      {modeEdition && (
+        <Field label="Nom du cours">
+          <input
+            className={inputClass}
+            style={inputStyle}
+            value={nom}
+            onChange={(e) => setNom(e.target.value)}
+            onBlur={() => { const v = nom.trim(); if (v && v !== plan.name) majPlan((p) => { p.name = v; }); }}
+          />
+        </Field>
+      )}
+
+      {echauffements.map(({ ex, idx }, i) => (
+        <React.Fragment key={`ech-${idx}`}>
+          {zoneDeDepot("ech", i, (
+            <ProgrammeExerciseCard
+              ex={ex}
+              label={echauffements.length > 1 ? `Échauffement ${i + 1}` : "Échauffement"}
+              duree={dureeDe(ex, 5)}
+              participants={0}
+              expanded={expandedId === `ex-${idx}`}
+              onToggle={() => setExpandedId(expandedId === `ex-${idx}` ? null : `ex-${idx}`)}
+              actions={boutonChanger(() => setPicker({ kind: "exercise", mode: "replace", id: idx }))}
+              footerRight={piedDeCarte(() => supprimerExercice(idx))}
+            />
+          ))}
+          {carte("exercise", "replace", idx) && (
+            <ExercisePicker
+              exercises={poolEchauffement}
+              excludeIds={dejaDansLePlan}
+              onSelect={(choisi) => { remplacerExercice(idx, choisi); fermerPicker(); }}
+              onCancel={fermerPicker}
+            />
+          )}
+        </React.Fragment>
+      ))}
+
+      {/* L'ambassadeur prévu pour ce cours, prêt à lancer — et modifiable ici comme dans le générateur. */}
+      <AmbassadeurPlanCard
+        data={allData || data}
+        mancheIds={plan.ambassadeurMancheIds || []}
+        onChange={(ids) => majPlan((p) => { p.ambassadeurMancheIds = ids; })}
+        currentUser={currentUser}
+        isAdmin={isAdmin}
+        profile={profile}
+        update={update}
+        lecture={!modeEdition}
+      />
+
+      {carte("exercise", "add", "warmup") && (
+        <ExercisePicker
+          exercises={poolEchauffement}
+          excludeIds={dejaDansLePlan}
+          onSelect={(choisi) => { ajouterExercice(choisi); fermerPicker(); }}
+          onCancel={fermerPicker}
+        />
+      )}
+      {modeEdition && (
+        <div className="flex gap-2 mb-2 pl-4">
+          <Btn variant="accent" onClick={() => setPicker({ kind: "exercise", mode: "add", id: "warmup" })}><Plus size={14} /> Échauffement</Btn>
+        </div>
+      )}
+
+      {corps.map(({ ex, idx }, i) => (
+        <React.Fragment key={`ex-${idx}`}>
+          {zoneDeDepot("corps", i, (
+            <ProgrammeExerciseCard
+              ex={ex}
+              label={`Exercice ${i + 1}`}
+              duree={dureeDe(ex, 5)}
+              participants={0}
+              expanded={expandedId === `ex-${idx}`}
+              onToggle={() => setExpandedId(expandedId === `ex-${idx}` ? null : `ex-${idx}`)}
+              actions={boutonChanger(() => setPicker({ kind: "exercise", mode: "replace", id: idx }))}
+              footerRight={piedDeCarte(() => supprimerExercice(idx))}
+            />
+          ))}
+          {carte("exercise", "replace", idx) && (
+            <ExercisePicker
+              exercises={poolCorps}
+              excludeIds={dejaDansLePlan}
+              onSelect={(choisi) => { remplacerExercice(idx, choisi); fermerPicker(); }}
+              onCancel={fermerPicker}
+            />
+          )}
+        </React.Fragment>
+      ))}
+      {carte("exercise", "add", "corps") && (
+        <ExercisePicker
+          exercises={poolCorps}
+          excludeIds={dejaDansLePlan}
+          onSelect={(choisi) => { ajouterExercice(choisi); fermerPicker(); }}
+          onCancel={fermerPicker}
+        />
+      )}
+      {modeEdition && (
+        <div className="flex gap-2 mb-2 pl-4">
+          <Btn variant="accent" onClick={() => setPicker({ kind: "exercise", mode: "add", id: "corps" })}><Plus size={14} /> Exercice</Btn>
+        </div>
+      )}
+
+      {categories.map(({ cat, idx }, i) => (
+        <React.Fragment key={`cat-${idx}`}>
+          {zoneDeDepot("cat", i, (
+            <ProgrammeCategoryCard
+              cat={cat}
+              label={categories.length > 1 ? `Catégorie d'impro ${i + 1}` : "Catégorie d'impro"}
+              duree={dureeDe(cat, 5)}
+              expanded={expandedId === `cat-${idx}`}
+              onToggle={() => setExpandedId(expandedId === `cat-${idx}` ? null : `cat-${idx}`)}
+              actions={boutonChanger(() => setPicker({ kind: "category", mode: "replace", id: idx }))}
+              footerLeft={
+                <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
+                  {dureeDe(cat, 5)} min · Nombre de joueurs : {playersCountText(cat)}
+                </span>
+              }
+              footerRight={piedDeCarte(() => supprimerCategorie(idx))}
+            />
+          ))}
+          {carte("category", "replace", idx) && (
+            <CategoryPicker
+              categories={data.categories}
+              excludeIds={dejaDansLePlan}
+              onSelect={(choisie) => { remplacerCategorie(idx, choisie); fermerPicker(); }}
+              onCancel={fermerPicker}
+            />
+          )}
+        </React.Fragment>
+      ))}
+      {carte("category", "add", "impro") && (
+        <CategoryPicker
+          categories={data.categories}
+          excludeIds={dejaDansLePlan}
+          onSelect={(choisie) => { ajouterCategorie(choisie); fermerPicker(); }}
+          onCancel={fermerPicker}
+        />
+      )}
+      {modeEdition && (
+        <div className="flex gap-2 mb-2 pl-4">
+          <Btn variant="accent" onClick={() => setPicker({ kind: "category", mode: "add", id: "impro" })}><Plus size={14} /> Catégorie</Btn>
+        </div>
+      )}
+
+      <IndexCard className="mt-2">
+        <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">Débrief</span>
+        <p style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }} className="text-sm">Temps d'échange collectif en fin de séance — {DEBRIEF_MIN} min.</p>
+      </IndexCard>
+      {(exSupprimes > 0 || catSupprimees > 0) && (
+        <p className="text-xs mt-1" style={{ fontFamily: FONT_MONO, color: COLORS.accent }}>
+          {exSupprimes + catSupprimees} fiche(s) de ce plan ont été supprimées de la bibliothèque depuis.
+        </p>
+      )}
+      <div className="text-right text-sm mt-2" style={{ fontFamily: FONT_MONO, color: COLORS.ink }}>
+        Durée totale : {totalMin} min
+      </div>
+    </div>
+  );
+}
+
+/* Détail dépliable d'un spectacle enregistré : le déroulé complet, dans l'ordre, avec les horaires
+   recalculés si une heure de début avait été saisie. */
+function PlanSpectacleDetail({ plan, data, update }) {
+  const [expandedId, setExpandedId] = useState(null);
+  const [picker, setPicker] = useState(null); // { mode, id }
+  const [nom, setNom] = useState(plan.name);
+  // Verrouillé à l'ouverture, comme un plan de cours : un déroulé de spectacle se consulte en
+  // coulisses, souvent dans la précipitation. Voir PlanCoursDetail.
+  const [modeEdition, setModeEdition] = useState(false);
+  const planIdRef = useRef(plan.id);
+  useEffect(() => { planIdRef.current = plan.id; }, [plan.id]);
+  // Voir PlanCoursDetail : le glisser-déposer réordonne à l'intérieur d'une partie seulement,
+  // en permutant les identifiants aux positions qu'elle occupe.
+  const positionsRef = useRef({ first: [], second: [] });
+  const reordonner = useCallback((listKey, from, insertAt) => {
+    const positions = positionsRef.current[listKey] || [];
+    update((d) => {
+      const p = (d.spectaclePlans || []).find((x) => x.id === planIdRef.current);
+      if (!p) return d;
+      const liste = [...(p.categoryIds || [])];
+      const nouveaux = reorderArray(positions.map((i) => liste[i]), from, insertAt);
+      positions.forEach((pos, k) => { liste[pos] = nouveaux[k]; });
+      p.categoryIds = liste;
+      return d;
+    });
+  }, [update]);
+
+  const majPlan = (fn) => update((d) => {
+    const p = (d.spectaclePlans || []).find((x) => x.id === plan.id);
+    if (p) { if (!p.durationsById) p.durationsById = {}; if (!p.matchModeById) p.matchModeById = {}; fn(p); }
+    return d;
+  });
+
+  // Comme pour les plans de cours : on manipule par POSITION, une même catégorie (souvent "Libre")
+  // pouvant figurer plusieurs fois dans un même déroulé.
+  const cats = (plan.categoryIds || []).map((id, idx) => ({ idx, cat: data.categories.find((c) => c.id === id) })).filter((x) => x.cat);
+  const supprimees = (plan.categoryIds || []).length - cats.length;
+  const dureeDe = (c) => plan.durationsById?.[c.id] ?? c.duration ?? 5;
+  // `firstCount` compte les catégories d'avant l'entracte ; sans entracte, tout est en une partie.
+  const total = (plan.categoryIds || []).length;
+  const firstCount = plan.entracte ? Math.min(plan.entracte.firstCount ?? total, total) : total;
+  const premiere = cats.filter((x) => x.idx < firstCount);
+  const seconde = cats.filter((x) => x.idx >= firstCount);
+  const schedule = computeSpectacleSchedule(
+    premiere.map((x) => dureeDe(x.cat)),
+    seconde.map((x) => dureeDe(x.cat)),
+    !!plan.entracte,
+    plan.startTime,
+    plan.stageWarmup?.duration || 0
+  );
+
+  const oublierDuree = (p, id) => {
+    if (!(p.categoryIds || []).includes(id)) delete p.durationsById[id];
+  };
+  const supprimerCategorie = (idx) => majPlan((p) => {
+    const ancienId = (p.categoryIds || [])[idx];
+    p.categoryIds = (p.categoryIds || []).filter((_, i) => i !== idx);
+    oublierDuree(p, ancienId);
+    // Une catégorie retirée avant l'entracte raccourcit la première partie.
+    if (p.entracte && idx < (p.entracte.firstCount ?? 0)) {
+      p.entracte.firstCount = Math.max(0, p.entracte.firstCount - 1);
+    }
+  });
+  const remplacerCategorie = (idx, nouvelle) => majPlan((p) => {
+    const ancienId = (p.categoryIds || [])[idx];
+    const duree = p.durationsById[ancienId];
+    p.categoryIds = (p.categoryIds || []).map((id, i) => (i === idx ? nouvelle.id : id));
+    oublierDuree(p, ancienId);
+    p.durationsById[nouvelle.id] = duree ?? nouvelle.duration ?? 5;
+  });
+  const ajouterCategorie = (cat, avantEntracte) => majPlan((p) => {
+    const ids = [...(p.categoryIds || [])];
+    const pos = avantEntracte ? (p.entracte?.firstCount ?? ids.length) : ids.length;
+    ids.splice(pos, 0, cat.id);
+    p.categoryIds = ids;
+    p.durationsById[cat.id] = cat.duration ?? 5;
+    if (avantEntracte && p.entracte) p.entracte.firstCount = (p.entracte.firstCount ?? 0) + 1;
+  });
+
+  const heure = (min) => (schedule && min !== null && min !== undefined ? ` — ${minutesToTime(min)}` : "");
+  const carte = (mode, id) => picker && picker.mode === mode && picker.id === id;
+  const fermerPicker = () => setPicker(null);
+
+  positionsRef.current = { first: premiere.map((x) => x.idx), second: seconde.map((x) => x.idx) };
+  const { dragged, dragPos, startPress } = useDragReorder(reordonner);
+  const draggedTitre = dragged
+    ? (dragged.listKey === "first" ? premiere : seconde)[dragged.index]?.cat?.name
+    : null;
+
+  // Verrouillé, aucune zone de dépôt n'est posée : la carte n'est plus saisissable du tout.
+  const enveloppe = (listKey, i, contenu) => (modeEdition ? (
+    <div
+      data-drop-card="true"
+      data-list={listKey}
+      data-index={i}
+      onPointerDown={(e) => { if (e.pointerType === "mouse" && !e.target.closest("[data-drag-handle]")) return; startPress(listKey, i, e); }}
+      style={{
+        position: "relative",
+        opacity: dragged && dragged.listKey === listKey && dragged.index === i ? 0.4 : 1,
+        userSelect: "none", WebkitUserSelect: "none", touchAction: "none",
+      }}
+    >
+      {contenu}
+    </div>
+  ) : contenu);
+
+  const bloc = (liste, listKey, offset, times) => liste.map(({ cat, idx }, i) => (
+    <React.Fragment key={`cat-${idx}`}>
+      {enveloppe(listKey, i, (
+        <ProgrammeCategoryCard
+          cat={cat}
+          label={`Catégorie ${offset + i + 1}${times ? heure(times[i]) : ""}`}
+          duree={dureeDe(cat)}
+          metaInline
+          expanded={expandedId === idx}
+          onToggle={() => setExpandedId(expandedId === idx ? null : idx)}
+          headerRight={plan.format === "Match" ? (
+            <div className="flex rounded-sm overflow-hidden shrink-0" style={{ border: `1px solid ${COLORS.accent}` }} onClick={(e) => e.stopPropagation()}>
+              {["Mixte", "Comparé"].map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => majPlan((p) => { p.matchModeById[cat.id] = mode; })}
+                  className="text-xs px-2 py-1"
+                  style={{ fontFamily: FONT_MONO, background: (plan.matchModeById?.[cat.id] || "Mixte") === mode ? COLORS.accent : "transparent", color: (plan.matchModeById?.[cat.id] || "Mixte") === mode ? "#fff" : COLORS.accent }}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          actions={modeEdition ? <Btn small variant="ghost" onClick={() => setPicker({ mode: "replace", id: idx })}>Changer</Btn> : null}
+          footerRight={modeEdition ? (
+            <div className="flex items-center gap-3">
+              <DragHandleLabel />
+              <button onClick={() => supprimerCategorie(idx)} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
+            </div>
+          ) : null}
+        />
+      ))}
+      {carte("replace", idx) && (
+        <CategoryPicker
+          categories={data.categories}
+          excludeIds={[]}
+          onSelect={(choisie) => { remplacerCategorie(idx, choisie); fermerPicker(); }}
+          onCancel={fermerPicker}
+        />
+      )}
+    </React.Fragment>
+  ));
+
+  return (
+    <div className="mt-2">
+      {dragged && dragPos && draggedTitre && <DragGhost x={dragPos.x} y={dragPos.y} title={draggedTitre} />}
+      <div className="flex justify-end mb-2">
+        <Btn small variant={modeEdition ? "accent" : "ghost"} onClick={() => { setModeEdition((v) => !v); setPicker(null); }}>
+          {modeEdition ? <><Check size={13} /> Terminer</> : <><Pencil size={13} /> Modifier</>}
+        </Btn>
+      </div>
+      {modeEdition && (
+        <Field label="Nom du spectacle">
+          <input
+            className={inputClass}
+            style={inputStyle}
+            value={nom}
+            onChange={(e) => setNom(e.target.value)}
+            onBlur={() => { const v = nom.trim(); if (v && v !== plan.name) majPlan((p) => { p.name = v; }); }}
+          />
+        </Field>
+      )}
+
+      <IndexCard>
+        <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">
+          Introduction — {SPECTACLE_INTRO_MIN} min{heure(schedule?.introStart)}
+        </span>
+      </IndexCard>
+      {plan.stageWarmup && (
+        <IndexCard>
+          <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">
+            Échauffement de scène — {plan.stageWarmup.duration} min{heure(schedule?.stageWarmupStart)}
+          </span>
+          <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{plan.stageWarmup.title}</h3>
+        </IndexCard>
+      )}
+
+      {bloc(premiere, "first", 0, schedule?.firstTimes)}
+      {carte("add", "first") && (
+        <CategoryPicker
+          categories={data.categories}
+          excludeIds={[]}
+          onSelect={(choisie) => { ajouterCategorie(choisie, true); fermerPicker(); }}
+          onCancel={fermerPicker}
+        />
+      )}
+      {modeEdition && (
+        <div className="flex gap-2 mb-2 pl-4">
+          <Btn variant="accent" onClick={() => setPicker({ mode: "add", id: "first" })}><Plus size={14} /> Catégorie</Btn>
+        </div>
+      )}
+
+      {plan.entracte && (
+        <>
+          <IndexCard style={{ background: COLORS.accent, border: `2px solid ${COLORS.ink}`, textAlign: "center", padding: "8px" }}>
+            <span style={{ fontFamily: FONT_DISPLAY, color: "#fff" }} className="font-medium">
+              Entracte — {plan.entracte.duree || SPECTACLE_ENTRACTE_MIN} min{heure(schedule?.entracteStart)}
+            </span>
+          </IndexCard>
+          {bloc(seconde, "second", firstCount, schedule?.secondTimes)}
+          {carte("add", "second") && (
+            <CategoryPicker
+              categories={data.categories}
+              excludeIds={[]}
+              onSelect={(choisie) => { ajouterCategorie(choisie, false); fermerPicker(); }}
+              onCancel={fermerPicker}
+            />
+          )}
+          {modeEdition && (
+            <div className="flex gap-2 mb-2 pl-4">
+              <Btn variant="accent" onClick={() => setPicker({ mode: "add", id: "second" })}><Plus size={14} /> Catégorie</Btn>
+            </div>
+          )}
+        </>
+      )}
+
+      <IndexCard>
+        <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">
+          Salut final — {SPECTACLE_SALUT_MIN} min{heure(schedule?.salutStart)}
+        </span>
+      </IndexCard>
+      {supprimees > 0 && (
+        <p className="text-xs mt-1" style={{ fontFamily: FONT_MONO, color: COLORS.accent }}>
+          {supprimees} catégorie(s) de ce spectacle ont été supprimées de la bibliothèque depuis.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function PlansTab({ data, allData, update, setTab, currentUser, isAdmin, profile }) {
+  // Plan actuellement déplié (un seul à la fois, la page serait sinon interminable).
+  const [ouvertCours, setOuvertCours] = useState(null);
+  const [ouvertSpectacle, setOuvertSpectacle] = useState(null);
+
   useEffect(() => {
     if (window.jspdf) return;
     const script = document.createElement("script");
@@ -8333,63 +10293,95 @@ function PlansTab({ data, update, setTab }) {
     document.body.appendChild(script);
   }, []);
 
-  const exportPlan = (plan) => exportCoursePlanPDF(plan, data);
+  // `allData` et non `data` : le PDF doit contenir les fiches et les manches que la personne a
+  // créées elle-même et qui attendent encore la modération — elle s'en sert déjà à l'écran, elles
+  // sortaient pourtant en « (exercice supprimé) » sur le papier.
+  const exportPlan = (plan) => exportCoursePlanPDF(plan, allData || data);
 
-  const exportSpectaclePlan = (plan) => exportSpectaclePlanPDF(plan, data);
+  const exportSpectaclePlan = (plan) => exportSpectaclePlanPDF(plan, allData || data);
 
+
+  const totalCours = (plan) => {
+    const ex = (plan.exerciseIds || []).map((id) => data.exercises.find((e) => e.id === id)).filter(Boolean);
+    const cats = (plan.categoryIds || []).map((id) => data.categories.find((c) => c.id === id)).filter(Boolean);
+    return [...ex, ...cats].reduce((s, it) => s + Number(plan.durationsById?.[it.id] ?? it.duration ?? 5), 0) + DEBRIEF_MIN;
+  };
 
   return (
     <div>
       {setTab && <LibraryBackBtn onClick={() => setTab("bibliotheque")} />}
-      <SectionHeader icon={ClipboardList} title="Plans de cours" subtitle="Retrouve et exporte les plans générés." />
-      {data.coursePlans.map((plan) => (
-        <IndexCard key={plan.id}>
-          <div className="flex justify-between items-start">
-            <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-lg font-medium">{plan.name}</h3>
-            <button onClick={() => exportPlan(plan)} title="Exporter en PDF" className="p-1 -m-1"><Download size={24} color={COLORS.ink} /></button>
-          </div>
-          <ol className="text-sm mt-1 list-decimal list-inside" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-            {plan.exerciseIds.map((id) => {
-              const e = data.exercises.find((x) => x.id === id);
-              return <li key={id}>{e ? `${e.title} (${e.duration} min)` : "(exercice supprimé)"}</li>;
-            })}
-            {(plan.categoryIds || []).map((id) => {
-              const c = data.categories.find((x) => x.id === id);
-              return <li key={id}>{c ? `${c.name} (${c.duration || 5} min) — catégorie d'impro` : "(catégorie supprimée)"}</li>;
-            })}
-          </ol>
-          <div className="flex justify-end mt-2">
-            <button onClick={() => update((d) => { d.coursePlans = d.coursePlans.filter((x) => x.id !== plan.id); return d; })} title="Supprimer" className="p-1 -m-1">
-              <Trash2 size={22} color={COLORS.accent} />
-            </button>
-          </div>
-        </IndexCard>
-      ))}
-
-      <SectionHeader icon={Theater} title="Spectacles enregistrés" subtitle="Les déroulés de spectacle que tu as sauvegardés." />
-      {data.spectaclePlans.length === 0 && <Empty text="Aucun spectacle enregistré pour l'instant." />}
-      {data.spectaclePlans.map((plan) => (
-        <IndexCard key={plan.id}>
-          <div className="flex justify-between items-start">
-            <div>
-              <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-lg font-medium">{plan.name}</h3>
-              <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{plan.format} · {plan.duree} min</span>
+      <SectionHeader icon={ClipboardList} title="Plans de cours" subtitle="Retrouve, ajuste et exporte les plans enregistrés. Touche un plan pour l'ouvrir." />
+      {data.coursePlans.length === 0 && <Empty text="Aucun plan de cours enregistré pour l'instant." />}
+      {data.coursePlans.map((plan) => {
+        const ouvert = ouvertCours === plan.id;
+        return (
+          <IndexCard key={plan.id}>
+            <div className="flex justify-between items-start gap-2">
+              <div className="flex-1 min-w-0" onClick={() => setOuvertCours(ouvert ? null : plan.id)} style={{ cursor: "pointer" }}>
+                <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-lg font-medium">{plan.name}</h3>
+                <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
+                  {(plan.exerciseIds || []).length} exercice(s) · {(plan.categoryIds || []).length} catégorie(s) · {totalCours(plan)} min
+                  {(plan.ambassadeurMancheIds || []).length > 0 ? " · ambassadeur prévu" : ""}
+                </span>
+              </div>
+              <button onClick={() => setOuvertCours(ouvert ? null : plan.id)} title={ouvert ? "Replier" : "Ouvrir"} className="p-1 -m-1 shrink-0">
+                {ouvert ? <ChevronUp size={22} color={COLORS.ink} /> : <ChevronDown size={22} color={COLORS.ink} />}
+              </button>
             </div>
-            <button onClick={() => exportSpectaclePlan(plan)} title="Exporter en PDF" className="p-1 -m-1"><Download size={24} color={COLORS.ink} /></button>
-          </div>
-          <ol className="text-sm mt-1 list-decimal list-inside" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-            {(plan.categoryIds || []).map((id) => {
-              const c = data.categories.find((x) => x.id === id);
-              return <li key={id}>{c ? `${c.name} (${c.duration || 5} min)` : "(catégorie supprimée)"}</li>;
-            })}
-          </ol>
-          <div className="flex justify-end mt-2">
-            <button onClick={() => update((d) => { d.spectaclePlans = d.spectaclePlans.filter((x) => x.id !== plan.id); return d; })} title="Supprimer" className="p-1 -m-1">
-              <Trash2 size={22} color={COLORS.accent} />
-            </button>
-          </div>
-        </IndexCard>
-      ))}
+            {ouvert && (
+              <PlanCoursDetail
+                plan={plan}
+                data={data}
+                allData={allData}
+                update={update}
+                currentUser={currentUser}
+                isAdmin={isAdmin}
+                profile={profile}
+              />
+            )}
+            {/* Télécharger à gauche, supprimer à droite : les deux actions qui portent sur le plan
+                entier, à distance l'une de l'autre pour ne pas se tromper de bouton. */}
+            <div className="flex justify-between items-center mt-2">
+              <button onClick={() => exportPlan(plan)} title="Télécharger en PDF" className="p-1 -m-1">
+                <Download size={22} color={COLORS.ink} />
+              </button>
+              <button onClick={() => update((d) => { d.coursePlans = d.coursePlans.filter((x) => x.id !== plan.id); return d; })} title="Supprimer ce plan" className="p-1 -m-1">
+                <Trash2 size={22} color={COLORS.accent} />
+              </button>
+            </div>
+          </IndexCard>
+        );
+      })}
+
+      <SectionHeader icon={Theater} title="Spectacles enregistrés" subtitle="Les déroulés de spectacle que tu as sauvegardés. Touche un spectacle pour l'ouvrir." />
+      {data.spectaclePlans.length === 0 && <Empty text="Aucun spectacle enregistré pour l'instant." />}
+      {data.spectaclePlans.map((plan) => {
+        const ouvert = ouvertSpectacle === plan.id;
+        return (
+          <IndexCard key={plan.id}>
+            <div className="flex justify-between items-start gap-2">
+              <div className="flex-1 min-w-0" onClick={() => setOuvertSpectacle(ouvert ? null : plan.id)} style={{ cursor: "pointer" }}>
+                <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-lg font-medium">{plan.name}</h3>
+                <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
+                  {plan.format} · {plan.duree} min · {(plan.categoryIds || []).length} catégorie(s)
+                </span>
+              </div>
+              <button onClick={() => setOuvertSpectacle(ouvert ? null : plan.id)} title={ouvert ? "Replier" : "Ouvrir"} className="p-1 -m-1 shrink-0">
+                {ouvert ? <ChevronUp size={22} color={COLORS.ink} /> : <ChevronDown size={22} color={COLORS.ink} />}
+              </button>
+            </div>
+            {ouvert && <PlanSpectacleDetail plan={plan} data={data} update={update} />}
+            <div className="flex justify-between items-center mt-2">
+              <button onClick={() => exportSpectaclePlan(plan)} title="Télécharger en PDF" className="p-1 -m-1">
+                <Download size={22} color={COLORS.ink} />
+              </button>
+              <button onClick={() => update((d) => { d.spectaclePlans = d.spectaclePlans.filter((x) => x.id !== plan.id); return d; })} title="Supprimer ce spectacle" className="p-1 -m-1">
+                <Trash2 size={22} color={COLORS.accent} />
+              </button>
+            </div>
+          </IndexCard>
+        );
+      })}
     </div>
   );
 }
