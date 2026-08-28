@@ -5202,6 +5202,15 @@ const partieLabel = (manches) => {
   return `Ambassadeur${niveau ? ` ${niveau}` : ""}${age ? ` · ${age}` : ""}`;
 };
 const numeroManche = (n) => String(n).padStart(2, "0");
+// Le mot à mimer se lit à bout de bras, souvent en biais : on prend toute la place disponible. Une
+// seule taille pour tous ne marche pas — ce qui rend « Rubber » énorme fait déborder « Un condamné
+// à mort s'est échappé » — donc trois paliers selon la longueur.
+const tailleDuMot = (texte) => {
+  const n = (texte || "").length;
+  if (n <= 12) return "clamp(48px, 17vw, 104px)";
+  if (n <= 24) return "clamp(44px, 14vw, 92px)";
+  return "clamp(36px, 11vw, 76px)";
+};
 
 /* Déroulé linéaire d'une partie : un écran de titre par manche, puis ses 5 mots, puis la fin.
    Le maître du jeu navigue librement dans les deux sens : les équipes avancent dans la même liste
@@ -5265,18 +5274,23 @@ function AmbassadeurPlayer({ manches, onClose }) {
     };
   }, []);
 
-  const onTouchStart = (e) => { const t = e.touches[0]; touchRef.current = { x: t.clientX, y: t.clientY }; };
-  const onTouchEnd = (e) => {
+  // Le changement de mot se déclenche PENDANT le glissement, dès que le seuil est franchi, et non au
+  // relâchement : sur un vrai téléphone, le navigateur s'approprie souvent le geste en cours de
+  // route (sélection de texte, défilement, navigation arrière) et envoie alors un `touchcancel` — le
+  // `touchend` n'arrive jamais et le swipe était perdu. Voir aussi `touchAction: "pan-y"` plus bas.
+  const onTouchStart = (e) => { const t = e.touches[0]; touchRef.current = { x: t.clientX, y: t.clientY, fait: false }; };
+  const onTouchMove = (e) => {
     const start = touchRef.current;
-    touchRef.current = null;
-    if (!start) return;
-    const t = e.changedTouches[0];
+    if (!start || start.fait) return;
+    const t = e.touches[0];
     const dx = t.clientX - start.x;
     const dy = t.clientY - start.y;
     // Seuil de 40 px et geste franchement horizontal, pour ne pas déclencher sur un simple appui.
     if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy)) return;
+    start.fait = true; // un seul saut par glissement
     if (dx > 0) next(); else prev();
   };
+  const finDuGeste = () => { touchRef.current = null; };
 
   const step = steps[i];
   // Numéro de la manche qui vient de se terminer : sur un écran de titre "Manche 02", c'est la 01 ;
@@ -5291,9 +5305,22 @@ function AmbassadeurPlayer({ manches, onClose }) {
   return (
     <div
       className="fixed inset-0 z-50 flex flex-col"
-      style={{ background: COLORS.ink, color: COLORS.paper }}
+      style={{
+        background: COLORS.ink,
+        color: COLORS.paper,
+        // "pan-y" : on laisse le défilement vertical au navigateur (le sommaire se déroule), mais on
+        // lui retire l'horizontal, qu'il utilisait pour sa navigation arrière ou son élastique — il
+        // avalait le geste avant nous. `userSelect` évite qu'un glissement sur le mot en très gros
+        // démarre une sélection de texte, qui annule elle aussi le geste.
+        touchAction: "pan-y",
+        userSelect: "none",
+        WebkitUserSelect: "none",
+        WebkitTouchCallout: "none",
+      }}
       onTouchStart={onTouchStart}
-      onTouchEnd={onTouchEnd}
+      onTouchMove={onTouchMove}
+      onTouchEnd={finDuGeste}
+      onTouchCancel={finDuGeste}
     >
       <div className="flex items-start justify-between px-4 py-3">
         <div>
@@ -5359,7 +5386,7 @@ function AmbassadeurPlayer({ manches, onClose }) {
             </div>
           )}
           {step.type === "mot" && (
-            <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(28px, 8vw, 60px)", lineHeight: 1.15 }} className="font-semibold">
+            <div style={{ fontFamily: FONT_DISPLAY, fontSize: tailleDuMot(step.text), lineHeight: 1.1 }} className="font-semibold">
               {step.text}
             </div>
           )}
