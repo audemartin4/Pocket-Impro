@@ -5286,26 +5286,36 @@ function AmbassadeurPlayer({ manches, onClose }) {
   const onPointerDown = (e) => {
     touchRef.current = { x: e.clientX, y: e.clientY, fait: false, surBouton: !!e.target.closest?.("button") };
   };
+  // Un glissement franc : au moins 40 px, et plus horizontal que vertical.
+  const glissement = (start, x, y) => {
+    const dx = x - start.x;
+    const dy = y - start.y;
+    if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy)) return 0;
+    return dx > 0 ? 1 : -1;
+  };
   const onPointerMove = (e) => {
     const start = touchRef.current;
     if (!start || start.fait) return;
-    const dx = e.clientX - start.x;
-    const dy = e.clientY - start.y;
-    // Seuil de 40 px et geste franchement horizontal, pour ne pas déclencher sur un simple appui.
-    if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy)) return;
+    const sens = glissement(start, e.clientX, e.clientY);
+    if (!sens) return;
     start.fait = true; // un seul saut par glissement
-    if (dx > 0) next(); else prev();
+    if (sens > 0) next(); else prev();
   };
   const onPointerUp = (e) => {
     const start = touchRef.current;
     touchRef.current = null;
-    // Appui simple : ni glissement déjà traité, ni bouton touché, ni sommaire ouvert (on y touche
-    // les mots pour s'y rendre, pas pour avancer).
     if (!start || start.fait || start.surBouton || sommaireOpen) return;
+    // Filet de sécurité : certains navigateurs retiennent les `pointermove` le temps de décider à
+    // qui appartient le geste, et ne les relâchent jamais. Sans ce rattrapage au relâchement, le
+    // glissement passait inaperçu — c'est ce qui se produisait sur un Samsung sous Chrome.
+    const sens = glissement(start, e.clientX, e.clientY);
+    if (sens) { if (sens > 0) next(); else prev(); return; }
+    // Appui simple. Sur le tout premier écran il n'y a rien derrière : toute la surface fait
+    // "commencer", pour qu'un appui à gauche ne donne pas l'impression d'un écran mort. Ensuite,
+    // moitié gauche = retour, moitié droite = suivant — revenir en arrière est aussi courant
+    // qu'avancer (deux équipes ne sont jamais au même mot), la règle doit rester évidente.
     if (Math.abs(e.clientX - start.x) > 12 || Math.abs(e.clientY - start.y) > 12) return;
-    // Moitié / moitié, et pas une petite zone de retour dans un grand "suivant" : revenir en arrière
-    // est aussi courant qu'avancer (deux équipes ne sont jamais au même mot), la règle doit rester
-    // évidente — la gauche ramène, la droite avance, comme les deux flèches en pied d'écran.
+    if (i === 0) { next(); return; }
     if (e.clientX < window.innerWidth / 2) prev(); else next();
   };
   const finDuGeste = () => { touchRef.current = null; };
