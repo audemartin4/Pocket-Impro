@@ -5433,7 +5433,7 @@ function AmbassadeurPlayer({ manches, onClose }) {
           <ChevronLeft size={30} color={COLORS.paper} />
         </button>
         <span className="text-xs" style={{ fontFamily: FONT_MONO, color: COLORS.paper + "80" }}>
-          {i === 0 ? "Swipe vers la droite pour commencer" : "← retour · swipe droite : suivant"}
+          {i === 0 ? "Swipe vers la droite pour commencer" : "← retour · suivant"}
         </span>
         <button onClick={next} disabled={i === steps.length - 1} className="p-2" style={{ opacity: i === steps.length - 1 ? 0.25 : 1 }} title="Suivant">
           <ChevronRight size={30} color={COLORS.paper} />
