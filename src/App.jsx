@@ -5303,7 +5303,10 @@ function AmbassadeurPlayer({ manches, onClose }) {
     // les mots pour s'y rendre, pas pour avancer).
     if (!start || start.fait || start.surBouton || sommaireOpen) return;
     if (Math.abs(e.clientX - start.x) > 12 || Math.abs(e.clientY - start.y) > 12) return;
-    if (e.clientX < window.innerWidth * 0.35) prev(); else next();
+    // Moitié / moitié, et pas une petite zone de retour dans un grand "suivant" : revenir en arrière
+    // est aussi courant qu'avancer (deux équipes ne sont jamais au même mot), la règle doit rester
+    // évidente — la gauche ramène, la droite avance, comme les deux flèches en pied d'écran.
+    if (e.clientX < window.innerWidth / 2) prev(); else next();
   };
   const finDuGeste = () => { touchRef.current = null; };
 
