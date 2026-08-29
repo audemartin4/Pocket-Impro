@@ -6218,6 +6218,20 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
   const setSlotsBrouillon = useCallback((slots) => {
     setBrouillon?.((b) => ({ slots, manchesLocales: b?.manchesLocales || [] }));
   }, [setBrouillon]);
+
+  // Entrer dans un rayon est une étape de navigation à part entière : on la pousse dans
+  // l'historique, pour que « page précédente » (celle du navigateur comme celle du téléphone)
+  // ramène à la liste des rayons au lieu de quitter la bibliothèque.
+  const ouvrirTheme = (t) => {
+    window.history.pushState({ tab: "ambassadeurs-liste", themeAmbassadeur: t }, "", "#ambassadeurs-liste");
+    setFiltreTheme(t);
+  };
+  useEffect(() => {
+    if (!catalogue) return undefined;
+    const onPop = (e) => setFiltreTheme(e.state?.themeAmbassadeur || "");
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [catalogue]);
   const [toastMsg, showToast] = useToast();
 
   const canCreate = isAdmin || !!currentUser;
@@ -6336,7 +6350,14 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
     <div>
       <Toast toast={toastMsg} />
       {playing && <AmbassadeurPlayer manches={playing} onClose={() => setPlaying(null)} />}
-      {setTab && <LibraryBackBtn label={onlyUserCreated ? "Mon profil" : "Bibliothèque"} onClick={() => setTab(onlyUserCreated ? "profil" : "bibliotheque")} />}
+      {/* Dans un rayon du catalogue, le retour ramène aux rayons, pas d'un coup à la bibliothèque.
+          Il passe par l'historique du navigateur, pour que le bouton « page précédente » du
+          téléphone fasse exactement la même chose. */}
+      {setTab && (
+        catalogue && filtreTheme
+          ? <LibraryBackBtn label="Tous les thèmes" onClick={() => window.history.back()} />
+          : <LibraryBackBtn label={onlyUserCreated ? "Mon profil" : "Bibliothèque"} onClick={() => setTab(onlyUserCreated ? "profil" : "bibliotheque")} />
+      )}
       <SectionHeader
         icon={Hand}
         title={onlyUserCreated ? "Manches d'ambassadeur créées" : catalogue ? "Toutes les manches" : "Ambassadeurs"}
@@ -6430,7 +6451,7 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
           ) : (
             <>
               {themesDuCatalogue.map((t) => (
-                <button key={t} onClick={() => setFiltreTheme(t)} className="w-full text-left">
+                <button key={t} onClick={() => ouvrirTheme(t)} className="w-full text-left">
                   <IndexCard style={{ cursor: "pointer" }}>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -6448,7 +6469,7 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
                 </button>
               ))}
               {manchesSansTheme > 0 && (
-                <button onClick={() => setFiltreTheme(SANS_THEME)} className="w-full text-left">
+                <button onClick={() => ouvrirTheme(SANS_THEME)} className="w-full text-left">
                   <IndexCard style={{ cursor: "pointer" }}>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -6470,13 +6491,6 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
 
       {catalogue && filtreTheme && (
         <>
-          <button
-            onClick={() => setFiltreTheme("")}
-            className="flex items-center gap-1 mb-3 text-sm"
-            style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}
-          >
-            <ChevronLeft size={16} /> Tous les thèmes
-          </button>
           <div className="grid grid-cols-2 gap-2">
             <Field label="Trier par">
               <select className={inputClass} style={inputStyle} value={tri} onChange={(e) => setTri(e.target.value)}>
@@ -6486,7 +6500,7 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
               </select>
             </Field>
             <Field label="Thème">
-              <select className={inputClass} style={inputStyle} value={filtreTheme} onChange={(e) => setFiltreTheme(e.target.value)}>
+              <select className={inputClass} style={inputStyle} value={filtreTheme} onChange={(e) => ouvrirTheme(e.target.value)}>
                 {themesDuCatalogue.map((t) => <option key={t}>{t}</option>)}
                 {manchesSansTheme > 0 && <option value={SANS_THEME}>Sans thème</option>}
               </select>
