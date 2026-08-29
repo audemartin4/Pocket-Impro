@@ -5869,6 +5869,7 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditMa
   // Cinéma"). Il ne s'applique qu'aux tirages et au sélecteur — rien n'oblige les trois manches
   // d'un même ambassadeur à partager leur thème.
   const [themeFiltre, setThemeFiltre] = useState("");
+  const [niveauFiltre, setNiveauFiltre] = useState("");
 
   const manchesChoisies = slots.map((id) => manchesDispo.find((m) => m.id === id)).filter(Boolean);
   const nomAuto = manchesChoisies.length > 0 ? partieLabel(manchesChoisies) : "";
@@ -5878,11 +5879,27 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditMa
   // manche pour jouer, enregistrer ou rattacher à un cours.
   const auMoinsUneManche = manchesChoisies.length > 0;
   const complet = slots.every(Boolean);
-  const manchesFiltrees = themeFiltre ? manchesDispo.filter((m) => m.themeGeneral === themeFiltre) : manchesDispo;
+  const manchesFiltrees = manchesDispo
+    .filter((m) => !themeFiltre || m.themeGeneral === themeFiltre)
+    .filter((m) => !niveauFiltre || m.level === niveauFiltre);
   const resteAPiocher = manchesFiltrees.some((m) => !slots.includes(m.id));
   const themesDisponibles = AMBASSADEUR_THEMES_GENERAUX.filter((t) => manchesDispo.some((m) => m.themeGeneral === t));
+  const niveauxDisponibles = NIVEAUX.filter((n) => manchesDispo.some((m) => m.level === n));
+  // Deux propositions distinctes, et le THÈME PRIME : demander un thème ratisse tous les niveaux —
+  // un ambassadeur « Cinéma » reste un ambassadeur Cinéma —, tandis que demander un niveau reste à
+  // l'intérieur du thème choisi s'il y en a un. C'est le niveau qu'on sacrifie, jamais le thème.
+  const poolParTheme = themeFiltre ? manchesDispo.filter((m) => m.themeGeneral === themeFiltre) : [];
+  const poolParNiveau = niveauFiltre ? manchesFiltrees : [];
 
   const setSlot = (i, id) => setSlots((prev) => prev.map((v, j) => (j === i ? id : v)));
+
+  // Monte d'un coup une partie entière depuis un vivier donné. On remplace tout l'assemblage, et on
+  // prend ce qu'il y a si le vivier n'a pas trois manches.
+  const proposerDepuis = (vivier) => {
+    const tirees = shuffleArray(vivier).slice(0, AMBASSADEUR_MANCHES_PAR_PARTIE).map((m) => m.id);
+    while (tirees.length < AMBASSADEUR_MANCHES_PAR_PARTIE) tirees.push(null);
+    setSlots(tirees);
+  };
 
   const completerAuHasard = () => {
     setSlots((prev) => {
@@ -5912,14 +5929,59 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditMa
         {!canSave && " Sans compte, tu peux tout monter et y jouer tout de suite : ton ambassadeur t'attend tant que tu ne fermes pas l'appli, et tu le retrouves depuis l'accueil. Il faut un compte pour le garder au-delà."}
       </p>
 
-      {/* Le menu n'apparaît que si la banque a de quoi le remplir. */}
+      {/* Les menus n'apparaissent que si la banque a de quoi les remplir. */}
       {themesDisponibles.length > 0 && (
-        <Field label="Thème général (facultatif)">
-          <select className={inputClass} style={inputStyle} value={themeFiltre} onChange={(e) => setThemeFiltre(e.target.value)}>
-            <option value="">Tous les thèmes</option>
-            {themesDisponibles.map((t) => <option key={t}>{t}</option>)}
-          </select>
-        </Field>
+        <>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Thème général (facultatif)">
+              <select className={inputClass} style={inputStyle} value={themeFiltre} onChange={(e) => setThemeFiltre(e.target.value)}>
+                <option value="">Tous les thèmes</option>
+                {themesDisponibles.map((t) => <option key={t}>{t}</option>)}
+              </select>
+            </Field>
+            <Field label="Niveau (facultatif)">
+              <select className={inputClass} style={inputStyle} value={niveauFiltre} onChange={(e) => setNiveauFiltre(e.target.value)}>
+                <option value="">Tous les niveaux</option>
+                {niveauxDisponibles.map((n) => <option key={n}>{n}</option>)}
+              </select>
+            </Field>
+          </div>
+          {/* Une proposition par critère posé. */}
+          {(themeFiltre || niveauFiltre) && (
+            <div className="mb-3 flex flex-col items-start gap-2">
+              {themeFiltre && (
+                <div>
+                  <Btn small variant="accent" disabled={poolParTheme.length === 0} onClick={() => proposerDepuis(poolParTheme)}>
+                    <Shuffle size={13} /> {AMBASSADEUR_MANCHES_PAR_PARTIE} manches · {themeFiltre}
+                    {niveauFiltre ? " · tous niveaux" : ""}
+                  </Btn>
+                  {poolParTheme.length < AMBASSADEUR_MANCHES_PAR_PARTIE && (
+                    <p className="text-xs mt-1 italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+                      {poolParTheme.length === 0
+                        ? "Aucune manche ne correspond à ce thème pour l'instant."
+                        : `Seulement ${poolParTheme.length} manche(s) : la partie sera plus courte.`}
+                    </p>
+                  )}
+                </div>
+              )}
+              {niveauFiltre && (
+                <div>
+                  <Btn small variant="accent" disabled={poolParNiveau.length === 0} onClick={() => proposerDepuis(poolParNiveau)}>
+                    <Shuffle size={13} /> {AMBASSADEUR_MANCHES_PAR_PARTIE} manches · {niveauFiltre}
+                    {themeFiltre ? ` · ${themeFiltre}` : ""}
+                  </Btn>
+                  {poolParNiveau.length < AMBASSADEUR_MANCHES_PAR_PARTIE && (
+                    <p className="text-xs mt-1 italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+                      {poolParNiveau.length === 0
+                        ? (themeFiltre ? "Aucune manche de ce niveau dans ce thème." : "Aucune manche de ce niveau pour l'instant.")
+                        : `Seulement ${poolParNiveau.length} manche(s) : la partie sera plus courte.`}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </>
       )}
 
       {slots.map((id, i) => {
