@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
 import "./index.css";
 import { supabase } from "./supabaseClient.js";
+import { APP_DATA_ROW_ID } from "./appDataRow.js";
 
 /**
  * Remplacement de window.storage (API propre à l'environnement "Artifacts" de Claude.ai, sur
@@ -11,7 +12,7 @@ import { supabase } from "./supabaseClient.js";
  * mêmes données. App.jsx n'a besoin d'AUCUNE modification pour cette partie : même forme d'API
  * (get/set/delete/list). Voir README.md pour le setup Supabase.
  */
-const ROW_ID = "main";
+const ROW_ID = APP_DATA_ROW_ID;
 
 window.storage = {
   async get(key) {

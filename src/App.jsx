@@ -6,6 +6,7 @@ import {
   Facebook, Instagram, Play, Hand
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
+import { APP_DATA_ROW_ID } from "./appDataRow.js";
 import { useAuthUser, signIn, signUp, signOut, resetPasswordForEmail, updatePassword } from "./auth.js";
 
 // Longueur minimale des mots de passe. Doit rester alignée sur le réglage "Minimum password length"
@@ -1358,7 +1359,7 @@ function useAppData() {
       .channel("app_data-sync")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "app_data", filter: "id=eq.main" },
+        { event: "*", schema: "public", table: "app_data", filter: `id=eq.${APP_DATA_ROW_ID}` },
         (payload) => {
           const incoming = payload.new && payload.new.value;
           if (incoming === undefined) return;

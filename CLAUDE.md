@@ -17,6 +17,13 @@ Prérequis : copier `.env.example` vers `.env` et y renseigner `VITE_SUPABASE_UR
 `VITE_SUPABASE_ANON_KEY` (voir README.md pour le SQL de création de la table `app_data`).
 Sans ces variables, l'appli démarre mais ne peut ni lire ni écrire les données.
 
+**En développement, toujours poser `VITE_APP_DATA_ID=dev`** dans son `.env` : sans elle, le serveur
+de dev lit ET écrit dans `main`, c'est-à-dire dans les données réelles de la troupe. Un onglet de
+test resté ouvert y a détruit un plan de cours enregistré le 2026-08-28. La ligne `dev` est une copie
+de `main`, à rafraîchir au besoin :
+`insert into app_data (id, value) select 'dev', value from app_data where id='main'
+ on conflict (id) do update set value = excluded.value;`
+
 ## Architecture
 
 Appli **Vite + React + Tailwind**, francophone, à destination d'une troupe d'improvisation théâtrale
