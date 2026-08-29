@@ -5421,23 +5421,6 @@ function AmbassadeurPlayer({ manches, onClose }) {
             ? `MANCHE ${numeroManche(step.manche)} · MOT ${step.index}/${step.total}`
             : step.type === "manche" ? `MANCHE ${numeroManche(step.manche)}` : "FIN"}
         </div>
-        {/* Les pastilles disent d'un seul coup d'œil, sans lire, combien de mots restent. */}
-        {step.type === "mot" && (
-          <div className="flex gap-3 mt-3">
-            {Array.from({ length: step.total }, (_, k) => (
-              <span
-                key={k}
-                className="rounded-full"
-                style={{
-                  width: 16,
-                  height: 16,
-                  background: k < step.index ? COLORS.brass : "transparent",
-                  border: `1px solid ${COLORS.brass}${k < step.index ? "" : "66"}`,
-                }}
-              />
-            ))}
-          </div>
-        )}
         {/* Le sommaire du maître du jeu : sans ce bouton explicite, personne ne devinait que le
             compteur était cliquable. C'est pourtant l'outil clé pour retrouver le bon mot quand
             deux équipes n'en sont pas au même endroit. */}
@@ -5586,6 +5569,26 @@ function AmbassadeurPlayer({ manches, onClose }) {
               </button>
             )
           )}
+        </div>
+      )}
+
+      {/* Les pastilles disent d'un seul coup d'œil, sans lire, combien de mots restent. Elles vivent
+          en bas, juste au-dessus des repères de navigation : le regard va au mot, elles n'ont pas à
+          lui disputer le haut de l'écran. */}
+      {step.type === "mot" && (
+        <div className="flex justify-center gap-5 pb-8">
+          {Array.from({ length: step.total }, (_, k) => (
+            <span
+              key={k}
+              className="rounded-full"
+              style={{
+                width: 32,
+                height: 32,
+                background: k < step.index ? COLORS.brass : "transparent",
+                border: `1px solid ${COLORS.brass}${k < step.index ? "" : "66"}`,
+              }}
+            />
+          ))}
         </div>
       )}
 
