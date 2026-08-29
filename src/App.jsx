@@ -293,9 +293,11 @@ const AMBASSADEUR_THEMES_GENERAUX = [
 ];
 const AMBASSADEUR_MOTS_PAR_MANCHE = 5;
 const AMBASSADEUR_MANCHES_PAR_PARTIE = 3;
-// Un mot ou une phrase doit rester lisible en très gros sur un téléphone tenu à bout de bras :
-// au-delà, le texte passe sur trois lignes et rétrécit. Même limite pour les thèmes.
-const AMBASSADEUR_LONGUEUR_MAX = 35;
+// Longueur maximale d'un mot, d'une phrase à mimer ou d'un titre de manche. Portée à 80 : la
+// bibliothèque importée contient des situations entières (« Se rendre compte qu'on a oublié son
+// portefeuille au moment de payer le resto »), et il n'y a pas de raison d'interdire à la main ce
+// qu'on affiche déjà. Au-delà, le texte passe sur plusieurs lignes et rétrécit (voir tailleDuMot).
+const AMBASSADEUR_LONGUEUR_MAX = 80;
 // Temps réservé au jeu dans un plan de cours : trois manches de mime prennent au moins 10 minutes,
 // et rarement plus d'un quart d'heure.
 const AMBASSADEUR_MIN_MIN = 10;
@@ -5249,7 +5251,10 @@ const tailleDuMot = (texte) => {
   const n = (texte || "").length;
   if (n <= 12) return "clamp(48px, 17vw, 104px)";
   if (n <= 24) return "clamp(44px, 14vw, 92px)";
-  return "clamp(36px, 11vw, 76px)";
+  if (n <= 45) return "clamp(36px, 11vw, 76px)";
+  // Les situations entières de la bibliothèque importée vont jusqu'à 80 caractères : au-delà de
+  // quatre lignes, mieux vaut réduire que déborder sous les flèches.
+  return "clamp(28px, 8.5vw, 56px)";
 };
 
 /* Déroulé linéaire d'une partie : un écran de titre par manche, puis ses 5 mots, puis la fin.
@@ -5277,6 +5282,8 @@ function AmbassadeurPlayer({ manches, onClose }) {
   // aux joueurs — seulement dans le sommaire (l'antisèche du MJ) et sur ce bouton de révélation,
   // qu'il actionne une fois que les équipes ont répondu.
   const [themeRevele, setThemeRevele] = useState(null);
+  // Récapitulatif de fin de partie : tous les thèmes d'un coup.
+  const [tousLesThemesReveles, setTousLesThemesReveles] = useState(false);
   const touchRef = useRef(null);
 
   const next = useCallback(() => setI((v) => Math.min(v + 1, steps.length - 1)), [steps.length]);
@@ -5403,10 +5410,12 @@ function AmbassadeurPlayer({ manches, onClose }) {
     >
       {/* Repère de progression, centré en haut : c'est l'information qu'on cherche du coin de l'œil
           en pleine partie ("où on en est"), elle ne doit pas se chercher dans un coin. */}
-      <div className="relative px-12 py-3 flex flex-col items-center">
+      <div className="relative px-3 py-3 flex flex-col items-center">
+        {/* Compteur discret, mais pastilles bien visibles : c'est la progression qu'on lit d'un coup
+            d'œil, pas le texte. */}
         <div
-          className="text-sm px-3 py-1 rounded-full"
-          style={{ fontFamily: FONT_MONO, color: COLORS.brass, border: `1px solid ${COLORS.brass}66` }}
+          className="px-2 py-0.5 rounded-full whitespace-nowrap"
+          style={{ fontFamily: FONT_MONO, fontSize: 20, color: COLORS.brass, border: `1px solid ${COLORS.brass}66` }}
         >
           {step.type === "mot"
             ? `MANCHE ${numeroManche(step.manche)} · MOT ${step.index}/${step.total}`
@@ -5414,14 +5423,14 @@ function AmbassadeurPlayer({ manches, onClose }) {
         </div>
         {/* Les pastilles disent d'un seul coup d'œil, sans lire, combien de mots restent. */}
         {step.type === "mot" && (
-          <div className="flex gap-1.5 mt-2">
+          <div className="flex gap-3 mt-3">
             {Array.from({ length: step.total }, (_, k) => (
               <span
                 key={k}
                 className="rounded-full"
                 style={{
-                  width: 8,
-                  height: 8,
+                  width: 16,
+                  height: 16,
                   background: k < step.index ? COLORS.brass : "transparent",
                   border: `1px solid ${COLORS.brass}${k < step.index ? "" : "66"}`,
                 }}
@@ -5434,8 +5443,8 @@ function AmbassadeurPlayer({ manches, onClose }) {
             deux équipes n'en sont pas au même endroit. */}
         <button
           onClick={() => setSommaireOpen((v) => !v)}
-          className="block text-xs mt-1.5 underline"
-          style={{ fontFamily: FONT_MONO, color: COLORS.paper + "aa" }}
+          className="block mt-2 underline"
+          style={{ fontFamily: FONT_MONO, fontSize: 20, color: COLORS.paper + "aa" }}
         >
           {sommaireOpen ? "Masquer le détail" : "Voir le détail"}
         </button>
@@ -5512,7 +5521,7 @@ function AmbassadeurPlayer({ manches, onClose }) {
                     Fin de la partie
                   </div>
                   <button
-                    onClick={() => setI(0)}
+                    onClick={() => { setI(0); setThemeRevele(null); setTousLesThemesReveles(false); }}
                     className="mt-5 px-4 py-2 rounded-sm text-sm"
                     style={{ fontFamily: FONT_BODY, background: COLORS.brass, color: COLORS.ink }}
                   >
@@ -5531,8 +5540,33 @@ function AmbassadeurPlayer({ manches, onClose }) {
               <ChevronRight size={34} color={COLORS.paper} />
             </button>
           </div>
+          {/* Fin de partie : le récapitulatif de tous les thèmes, pour les annoncer d'un coup et
+              départager les équipes qui les cherchaient encore. */}
+          {step.type === "fin" && (
+            tousLesThemesReveles ? (
+              <ol className="mt-6 text-center">
+                <div className="text-xs mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.paper + "80" }}>
+                  {manches.length > 1 ? "Les thèmes de la partie" : "Le thème de la partie"}
+                </div>
+                {manches.map((m, k) => (
+                  <li key={m.id || k} className="text-lg" style={{ fontFamily: FONT_DISPLAY, color: COLORS.paper }}>
+                    <span style={{ fontFamily: FONT_MONO, color: COLORS.brass }} className="text-xs">{numeroManche(k + 1)} · </span>
+                    {titreManche(m)}
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <button
+                onClick={() => setTousLesThemesReveles(true)}
+                className="mt-6 text-xs px-3 py-1.5 rounded-full"
+                style={{ fontFamily: FONT_MONO, color: COLORS.paper + "aa", border: `1px solid ${COLORS.paper}33` }}
+              >
+                {manches.length > 1 ? `Révéler les ${manches.length} thèmes` : "Révéler le thème"}
+              </button>
+            )
+          )}
           {/* Révélation du thème de la manche qui vient de se terminer, à la demande du MJ. */}
-          {mancheTerminee > 0 && (
+          {step.type !== "fin" && mancheTerminee > 0 && (
             themeRevele === mancheTerminee ? (
               <div className="mt-6 text-center">
                 <div className="text-xs" style={{ fontFamily: FONT_MONO, color: COLORS.paper + "80" }}>
