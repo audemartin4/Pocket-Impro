@@ -5862,6 +5862,7 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditMa
   const [picking, setPicking] = useState(null);
   const [creating, setCreating] = useState(null);
   const [editing, setEditing] = useState(null);
+  const [motsOuverts, setMotsOuverts] = useState(null); // emplacement dont on lit les mots
   const [nom, setNom] = useState("");
   const [nomModifie, setNomModifie] = useState(false);
   // Filtre facultatif : monter un ambassadeur entier dans un même thème général ("un ambassadeur
@@ -5927,24 +5928,36 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditMa
           <div key={i} className="mb-2">
             <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">Manche {numeroManche(i + 1)}</span>
             {m ? (
-              <div className="flex items-center justify-between gap-2 mt-0.5">
-                <div className="min-w-0">
-                  <div style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium truncate">{titreManche(m)}</div>
-                  <div style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
-                    {detailManche(m)}
+              <>
+                <div className="flex items-center justify-between gap-2 mt-0.5">
+                  <div className="min-w-0">
+                    <div style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium truncate">{titreManche(m)}</div>
+                    <div style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
+                      {detailManche(m)}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {/* Relire les mots avant de lancer la partie : on veut savoir ce qu'on a pioché,
+                        et vérifier qu'aucun ne tombe à plat pour le groupe qu'on a en face. */}
+                    <Btn small variant="ghost" onClick={() => setMotsOuverts(motsOuverts === i ? null : i)}>
+                      {motsOuverts === i ? "Masquer" : "Voir"}
+                    </Btn>
+                    {/* Corriger une manche sans quitter l'assemblage : on repère une faute de frappe
+                        surtout au moment de la relire dans son ambassadeur. Seulement les siennes. */}
+                    {onEditManche && peutModifierManche?.(m) && (
+                      <button onClick={() => { setEditing(i); setCreating(null); setPicking(null); }} title="Modifier cette manche" className="p-1">
+                        <Pencil size={15} color={COLORS.ink} />
+                      </button>
+                    )}
+                    <Btn small variant="ghost" onClick={() => setSlot(i, null)}><X size={13} /> Retirer</Btn>
                   </div>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  {/* Corriger une manche sans quitter l'assemblage : on repère une faute de frappe
-                      surtout au moment de la relire dans son ambassadeur. Seulement les siennes. */}
-                  {onEditManche && peutModifierManche?.(m) && (
-                    <button onClick={() => { setEditing(i); setCreating(null); setPicking(null); }} title="Modifier cette manche" className="p-1">
-                      <Pencil size={15} color={COLORS.ink} />
-                    </button>
-                  )}
-                  <Btn small variant="ghost" onClick={() => setSlot(i, null)}><X size={13} /> Retirer</Btn>
-                </div>
-              </div>
+                {motsOuverts === i && (
+                  <ol className="text-sm mt-1 list-decimal list-inside" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+                    {(m.mots || []).map((mot, k) => <li key={k}>{mot}</li>)}
+                  </ol>
+                )}
+              </>
             ) : (
               <div className="flex gap-2 mt-0.5">
                 {/* "Piocher" disparaît quand il ne reste plus rien à piocher (banque vide, ou toutes
@@ -6071,7 +6084,12 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
   const manchesVisibles = catalogue
     ? allManches.filter((m) => mancheVisiblePar(m, currentUser, isAdmin))
     : allManches.filter((m) => m.creatorUsername === currentUser);
-  const peutModifier = (m) => isAdmin || (!!m.creatorUsername && m.creatorUsername === currentUser);
+  // Une manche publiée dans la bibliothèque commune ne se retouche plus : elle a été validée telle
+  // quelle, et d'autres l'ont peut-être déjà rattachée à un cours. Seul l'Admin y revient — c'est la
+  // même règle que pour les exercices et les catégories. Son auteur garde la main tant qu'elle n'est
+  // pas publique : gardée pour soi, en attente de modération, ou refusée.
+  const peutModifier = (m) =>
+    isAdmin || (!!m.creatorUsername && m.creatorUsername === currentUser && (m.prive || m.pending || m.rejected));
   // Dans l'assembleur, on corrige aussi les manches montées sans compte : elles n'appartiennent qu'à
   // cet onglet, personne d'autre ne les verra jamais.
   const peutModifierDansAssemblage = (m) => !!m.locale || peutModifier(m);
@@ -6472,6 +6490,12 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
                 )}
               </div>
             </div>
+            {/* Dire pourquoi le crayon a disparu, sinon l'auteur croit à une panne. */}
+            {!isAdmin && m.creatorUsername === currentUser && !m.prive && !m.pending && !m.rejected && (
+              <p className="text-xs mt-1" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
+                Publiée dans la bibliothèque commune — seule la modération peut encore la modifier.
+              </p>
+            )}
             {m.prive && (
               <p className="text-xs mt-1" style={{ fontFamily: FONT_MONO, color: COLORS.brass }}>
                 Gardée pour toi — non partagée avec la communauté.
@@ -6573,7 +6597,10 @@ function AmbassadeurPlanCard({ data, mancheIds, onChange, currentUser, isAdmin, 
       return d;
     });
   };
-  const peutModifierManche = (m) => !!m.locale || isAdmin || (!!m.creatorUsername && m.creatorUsername === currentUser);
+  // Même règle qu'en bibliothèque : une manche déjà publiée ne se retouche pas depuis un plan de
+  // cours non plus.
+  const peutModifierManche = (m) =>
+    !!m.locale || isAdmin || (!!m.creatorUsername && m.creatorUsername === currentUser && (m.prive || m.pending || m.rejected));
 
   // Tirage au niveau du cours quand il en a un ; on élargit à toute la bibliothèque s'il n'y a pas
   // assez de manches de ce niveau pour monter les trois manches.
