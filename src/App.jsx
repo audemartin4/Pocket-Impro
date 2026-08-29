@@ -5174,6 +5174,9 @@ const mancheSousEmbargo = (m) => Date.now() < mancheOuverteALaCommunauteLe(m);
 // Le titre (champ `theme`) est facultatif : partout où une manche s'affiche par son nom, il faut un
 // repli, sinon la carte, le sélecteur ou le PDF montrent une ligne vide.
 const titreManche = (m) => (m && m.theme) || "Manche sans titre";
+// Thème, niveau et tranches d'âge sont tous facultatifs : on n'assemble que ce qui est renseigné,
+// sinon la ligne de détail se remplit de séparateurs orphelins (« Cinéma ·  ·  »).
+const detailManche = (m) => [m.themeGeneral, m.level, (m.tranchesAge || []).join(", ")].filter(Boolean).join(" · ");
 // "11 septembre" ; l'année n'apparaît que si elle diffère de l'année en cours (fin décembre).
 const formatJour = (ts) => {
   const d = new Date(ts);
@@ -5661,9 +5664,9 @@ function AmbassadeurMancheForm({ initial, data, onSave, onCancel, saveLabel = "E
 
   const setMot = (i, v) => setMots((prev) => prev.map((m, j) => (j === i ? v : m)));
   const toggleAge = (a) => setTranchesAge((prev) => (prev.includes(a) ? prev.filter((x) => x !== a) : [...prev, a]));
-  // Ni le thème général ni le titre ne sont obligatoires : on peut n'avoir qu'une liste de cinq mots
-  // en tête, et la ranger (ou la nommer) plus tard.
-  const complet = level && tranchesAge.length > 0 && mots.every((m) => m.trim());
+  // Seuls les mots sont obligatoires : ce sont eux qu'on mime. Le thème, le titre, le niveau et les
+  // tranches d'âge servent à ranger et à filtrer — on peut les remplir plus tard, ou jamais.
+  const complet = mots.every((m) => m.trim());
 
   return (
     <IndexCard>
@@ -5800,7 +5803,7 @@ function AmbassadeurManchePicker({ manches, excludeIds = [], onSelect, onCancel 
           >
             <span style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-sm font-medium">{titreManche(m)}</span>
             <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
-              {" "}· {m.themeGeneral ? `${m.themeGeneral} · ` : ""}{m.level}{(m.tranchesAge || []).length > 0 ? ` · ${m.tranchesAge.join(", ")}` : ""}
+              {detailManche(m) ? ` · ${detailManche(m)}` : ""}
               {m.prive ? " · gardée pour toi" : m.pending ? " · en attente" : ""}
             </span>
           </button>
@@ -5812,7 +5815,7 @@ function AmbassadeurManchePicker({ manches, excludeIds = [], onSelect, onCancel 
 
 /* Assemblage d'une partie : trois emplacements, chacun rempli par une manche existante ou par une
    manche créée à la volée (qui rejoint alors la bibliothèque commune). */
-function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onSave, onCancel, onPlay, canSave, onRattacher, slotsInitiaux, onSlotsChange, currentUser, isAdmin }) {
+function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditManche, peutModifierManche, onSave, onCancel, onPlay, canSave, onRattacher, slotsInitiaux, onSlotsChange, currentUser, isAdmin }) {
   const [slots, setSlots] = useState(() => {
     const base = [...(slotsInitiaux || [])];
     while (base.length < AMBASSADEUR_MANCHES_PAR_PARTIE) base.push(null);
@@ -5825,6 +5828,7 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onSave, 
   useEffect(() => { signaler.current?.(slots); }, [slots]);
   const [picking, setPicking] = useState(null);
   const [creating, setCreating] = useState(null);
+  const [editing, setEditing] = useState(null);
   const [nom, setNom] = useState("");
   const [nomModifie, setNomModifie] = useState(false);
   // Filtre facultatif : monter un ambassadeur entier dans un même thème général ("un ambassadeur
@@ -5835,6 +5839,10 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onSave, 
   const manchesChoisies = slots.map((id) => manchesDispo.find((m) => m.id === id)).filter(Boolean);
   const nomAuto = manchesChoisies.length > 0 ? partieLabel(manchesChoisies) : "";
   const nomEffectif = nomModifie ? nom : nomAuto;
+  // Trois manches, c'est la partie complète — mais rien n'oblige à les avoir toutes : une seule
+  // manche se joue très bien, le temps d'un échauffement ou d'un essai. On n'exige donc qu'une
+  // manche pour jouer, enregistrer ou rattacher à un cours.
+  const auMoinsUneManche = manchesChoisies.length > 0;
   const complet = slots.every(Boolean);
   const manchesFiltrees = themeFiltre ? manchesDispo.filter((m) => m.themeGeneral === themeFiltre) : manchesDispo;
   const resteAPiocher = manchesFiltrees.some((m) => !slots.includes(m.id));
@@ -5890,10 +5898,19 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onSave, 
                 <div className="min-w-0">
                   <div style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium truncate">{titreManche(m)}</div>
                   <div style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
-                    {m.themeGeneral ? `${m.themeGeneral} · ` : ""}{m.level}{(m.tranchesAge || []).length > 0 ? ` · ${m.tranchesAge.join(", ")}` : ""}
+                    {detailManche(m)}
                   </div>
                 </div>
-                <Btn small variant="ghost" onClick={() => setSlot(i, null)}><X size={13} /> Retirer</Btn>
+                <div className="flex items-center gap-1 shrink-0">
+                  {/* Corriger une manche sans quitter l'assemblage : on repère une faute de frappe
+                      surtout au moment de la relire dans son ambassadeur. Seulement les siennes. */}
+                  {onEditManche && peutModifierManche?.(m) && (
+                    <button onClick={() => { setEditing(i); setCreating(null); setPicking(null); }} title="Modifier cette manche" className="p-1">
+                      <Pencil size={15} color={COLORS.ink} />
+                    </button>
+                  )}
+                  <Btn small variant="ghost" onClick={() => setSlot(i, null)}><X size={13} /> Retirer</Btn>
+                </div>
               </div>
             ) : (
               <div className="flex gap-2 mt-0.5">
@@ -5922,6 +5939,18 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onSave, 
                 onCancel={() => setCreating(null)}
               />
             )}
+            {editing === i && m && (
+              <AmbassadeurMancheForm
+                data={data}
+                initial={m}
+                saveLabel="Enregistrer les modifications"
+                currentUser={currentUser}
+                isAdmin={isAdmin}
+                peutPartager={canSave}
+                onSave={(f) => { onEditManche(m.id, f); setEditing(null); }}
+                onCancel={() => setEditing(null)}
+              />
+            )}
           </div>
         );
       })}
@@ -5932,7 +5961,7 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onSave, 
 
       {/* Monté depuis un plan de cours (onRattacher), l'ambassadeur n'a pas besoin d'être nommé ni
           enregistré à part : il est rattaché au cours, qui porte déjà son propre nom. */}
-      {complet && canSave && !onRattacher && (
+      {auMoinsUneManche && canSave && !onRattacher && (
         <div className="mt-3">
           <Field label="Nom de l'ambassadeur">
             <input
@@ -5946,15 +5975,17 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onSave, 
       )}
       <div className="flex flex-wrap gap-2 mt-2">
         {onRattacher && (
-          <Btn variant="accent" disabled={!complet} onClick={() => onRattacher(slots)}><Check size={14} /> Utiliser dans ce cours</Btn>
+          <Btn variant="accent" disabled={!auMoinsUneManche} onClick={() => onRattacher(slots.filter(Boolean))}><Check size={14} /> Utiliser dans ce cours</Btn>
         )}
-        <Btn variant={onRattacher ? "ghost" : "accent"} disabled={!complet} onClick={() => onPlay(manchesChoisies)}><Play size={14} /> Jouer maintenant</Btn>
+        <Btn variant={onRattacher ? "ghost" : "accent"} disabled={!auMoinsUneManche} onClick={() => onPlay(manchesChoisies)}>
+          <Play size={14} /> {manchesChoisies.length === 1 ? "Jouer cette manche" : "Jouer maintenant"}
+        </Btn>
         {canSave && !onRattacher && (
-          <Btn disabled={!complet || !nomEffectif.trim()} onClick={() => onSave({ nom: nomEffectif.trim(), mancheIds: slots })}><Save size={14} /> Enregistrer</Btn>
+          <Btn disabled={!auMoinsUneManche || !nomEffectif.trim()} onClick={() => onSave({ nom: nomEffectif.trim(), mancheIds: slots.filter(Boolean) })}><Save size={14} /> Enregistrer</Btn>
         )}
         <Btn variant="ghost" onClick={onCancel}><X size={14} /> Annuler</Btn>
       </div>
-      {!canSave && !onRattacher && complet && (
+      {!canSave && !onRattacher && auMoinsUneManche && (
         <p className="text-xs mt-2 italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
           Connecte-toi ou crée un compte (onglet Mon profil) pour enregistrer cet ambassadeur et le retrouver plus tard.
         </p>
@@ -6005,6 +6036,9 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
     ? allManches.filter((m) => mancheVisiblePar(m, currentUser, isAdmin))
     : allManches.filter((m) => m.creatorUsername === currentUser);
   const peutModifier = (m) => isAdmin || (!!m.creatorUsername && m.creatorUsername === currentUser);
+  // Dans l'assembleur, on corrige aussi les manches montées sans compte : elles n'appartiennent qu'à
+  // cet onglet, personne d'autre ne les verra jamais.
+  const peutModifierDansAssemblage = (m) => !!m.locale || peutModifier(m);
   const parTitre = (a, b) => (a.theme || "").localeCompare(b.theme || "", "fr");
   const comparateurs = {
     theme: (a, b) => (a.themeGeneral || "").localeCompare(b.themeGeneral || "", "fr") || parTitre(a, b),
@@ -6045,23 +6079,32 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
     return manche.id;
   };
 
-  const modifierManche = (id, f) => update((d) => {
+  // Applique le formulaire à une manche existante. `partage` n'est pas un champ stocké : il pilote
+  // `prive` et l'entrée (ou la sortie) de la file de modération.
+  const mancheModifiee = (avant, f) => {
     const { partage = true, ...reste } = f;
-    if (partage && f.theme && !(d.ambassadeurThemes || []).includes(f.theme)) (d.ambassadeurThemes = d.ambassadeurThemes || []).push(f.theme);
-    const i = (d.ambassadeurManches || []).findIndex((m) => m.id === id);
-    if (i >= 0) {
-      const avant = d.ambassadeurManches[i];
-      d.ambassadeurManches[i] = {
-        ...avant,
-        ...reste,
-        prive: !partage,
-        // La partager après coup, c'est la proposer : elle entre alors dans la file de modération.
-        // La reprendre pour soi l'en retire.
-        pending: partage ? (avant.prive ? !isAdmin : avant.pending) : false,
-      };
+    return {
+      ...avant,
+      ...reste,
+      prive: !partage,
+      // La partager après coup, c'est la proposer ; la reprendre pour soi la retire de la file.
+      pending: partage ? (avant.prive ? !isAdmin : avant.pending) : false,
+    };
+  };
+
+  const modifierManche = (id, f) => {
+    // Une manche créée sans compte ne vit que dans cet onglet : elle se corrige sur place.
+    if (manchesLocales.some((m) => m.id === id)) {
+      setManchesLocales((prev) => prev.map((m) => (m.id === id ? { ...mancheModifiee(m, f), locale: true, pending: false } : m)));
+      return;
     }
-    return d;
-  });
+    update((d) => {
+      if (f.partage !== false && f.theme && !(d.ambassadeurThemes || []).includes(f.theme)) (d.ambassadeurThemes = d.ambassadeurThemes || []).push(f.theme);
+      const i = (d.ambassadeurManches || []).findIndex((m) => m.id === id);
+      if (i >= 0) d.ambassadeurManches[i] = mancheModifiee(d.ambassadeurManches[i], f);
+      return d;
+    });
+  };
 
   const supprimerManche = (id) => update((d) => {
     d.ambassadeurManches = (d.ambassadeurManches || []).filter((m) => m.id !== id);
@@ -6209,6 +6252,8 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
           slotsInitiaux={brouillon?.slots}
           onSlotsChange={setSlotsBrouillon}
           onCreateManche={creerManche}
+          onEditManche={modifierManche}
+          peutModifierManche={peutModifierDansAssemblage}
           onSave={enregistrerPartie}
           onCancel={() => { setMode(null); setBrouillon?.(null); }}
           onPlay={(manches) => setPlaying(manches)}
@@ -6224,8 +6269,12 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
           isAdmin={isAdmin}
           peutPartager={canCreate}
           onSave={(f) => {
-            creerManche(f);
-            setMode(null);
+            // La manche à peine créée doit être jouable : on bascule sur l'assembleur avec elle en
+            // première place. Un appui sur "Jouer cette manche" suffit alors, sans attendre d'en
+            // avoir trois.
+            const id = creerManche(f);
+            setSlotsBrouillon([id, null, null]);
+            setMode("partie");
             showToast(f.partage === false ? "Manche enregistrée, gardée pour toi ✓"
               : isAdmin ? "Manche ajoutée ✓"
                 : "Manche envoyée à la modération — tu peux déjà t'en servir ✓");
@@ -6304,7 +6353,7 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
               <div className="min-w-0">
                 <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{titreManche(m)}</h3>
                 <div style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
-                  {m.themeGeneral ? `${m.themeGeneral} · ` : ""}{m.level}{(m.tranchesAge || []).length > 0 ? ` · ${m.tranchesAge.join(", ")}` : ""}
+                  {detailManche(m)}
                   {m.creatorUsername ? ` · ${m.creatorUsername}${m.creatorTroupe ? ` — Troupe ${m.creatorTroupe}` : ""}` : ""}
                 </div>
               </div>
@@ -6372,7 +6421,6 @@ function AmbassadeurPlanCard({ data, mancheIds, onChange, currentUser, isAdmin, 
   const dispo = [...manchesJouables(data, currentUser, isAdmin), ...manchesLocales];
   const assezPourPiocher = dispo.length >= AMBASSADEUR_MANCHES_PAR_PARTIE;
   const manches = mancheIds.map((id) => dispo.find((m) => m.id === id)).filter(Boolean);
-  const complet = manches.length === AMBASSADEUR_MANCHES_PAR_PARTIE;
   // Une manche enregistrée dans un plan peut disparaître ensuite (supprimée, refusée en modération,
   // ou proposée par quelqu'un d'autre et pas encore validée). On le dit explicitement plutôt que de
   // laisser croire que l'ambassadeur n'a jamais eu que deux manches.
@@ -6401,6 +6449,26 @@ function AmbassadeurPlanCard({ data, mancheIds, onChange, currentUser, isAdmin, 
     });
     return manche.id;
   };
+
+  // Corriger une manche depuis le plan de cours, sans aller la chercher dans la bibliothèque.
+  const modifierManche = (id, f) => {
+    const { partage = true, ...reste } = f;
+    const appliquer = (avant) => ({
+      ...avant, ...reste, prive: !partage,
+      pending: partage ? (avant.prive ? !isAdmin : avant.pending) : false,
+    });
+    // Manche montée ici sans compte : elle ne vit que dans cet écran.
+    if (manchesLocales.some((m) => m.id === id)) {
+      setManchesLocales((prev) => prev.map((m) => (m.id === id ? { ...appliquer(m), locale: true, pending: false } : m)));
+      return;
+    }
+    update?.((d) => {
+      const i = (d.ambassadeurManches || []).findIndex((m) => m.id === id);
+      if (i >= 0) d.ambassadeurManches[i] = appliquer(d.ambassadeurManches[i]);
+      return d;
+    });
+  };
+  const peutModifierManche = (m) => !!m.locale || isAdmin || (!!m.creatorUsername && m.creatorUsername === currentUser);
 
   // Tirage au niveau du cours quand il en a un ; on élargit à toute la bibliothèque s'il n'y a pas
   // assez de manches de ce niveau pour monter les trois manches.
@@ -6466,10 +6534,11 @@ function AmbassadeurPlanCard({ data, mancheIds, onChange, currentUser, isAdmin, 
                     {manches.map((m) => <li key={m.id}>{titreManche(m)}</li>)}
                   </ol>
                 )}
-                {!complet && (
+                {/* On ne signale que ce qui a disparu : deux manches choisies délibérément, c'est un
+                    choix, pas un manque — une partie courte se joue très bien. */}
+                {manquantes > 0 && (
                   <p className="text-xs mt-1" style={{ fontFamily: FONT_MONO, color: COLORS.accent }}>
-                    {manquantes > 0 && `${phraseManquantes} `}
-                    Il en reste {manches.length} sur {AMBASSADEUR_MANCHES_PAR_PARTIE}.
+                    {phraseManquantes} Il en reste {manches.length} sur {AMBASSADEUR_MANCHES_PAR_PARTIE}.
                   </p>
                 )}
               </div>
@@ -6500,6 +6569,8 @@ function AmbassadeurPlanCard({ data, mancheIds, onChange, currentUser, isAdmin, 
             manchesDispo={dispo}
             slotsInitiaux={mancheIds}
             onCreateManche={creerManche}
+            onEditManche={modifierManche}
+            peutModifierManche={peutModifierManche}
             onCancel={() => setCreation(false)}
             onPlay={(choisies) => { onChange(choisies.map((m) => m.id)); setCreation(false); setPlaying(true); }}
             onRattacher={(ids) => { onChange(ids); setCreation(false); }}
@@ -9205,7 +9276,7 @@ function ModerationTab({ data, update, setTab, isAdmin }) {
                 <div className="min-w-0">
                   <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{titreManche(m)}</h3>
                   <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
-                    {m.themeGeneral ? `${m.themeGeneral} · ` : ""}{m.level}{(m.tranchesAge || []).length > 0 ? ` · ${m.tranchesAge.join(", ")}` : ""}
+                    {detailManche(m)}
                     {m.creatorUsername ? ` · ${m.creatorUsername}${m.creatorTroupe ? ` — Troupe ${m.creatorTroupe}` : ""}` : ""}
                   </span>
                 </div>
