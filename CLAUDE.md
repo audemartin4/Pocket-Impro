@@ -40,8 +40,12 @@ et de spectacle — vit dans **un unique objet JSON** dans la colonne `value`.
 Conséquences pratiques :
 
 - `App.jsx` n'a aucune notion de Supabase pour les données métier : il appelle `window.storage.get/set`.
-- Les écritures sont **debouncées à 500 ms** puis écrasent tout le blob (`useAppData`, `App.jsx`).
-  Pas de fusion : deux éditions simultanées → la dernière gagne.
+- Les écritures sont **debouncées à 500 ms**. `window.storage.set` **relit la base puis fusionne**
+  avant d'écrire (`src/fusionBlob.js`) : chaque onglet n'impose que ce qu'il a lui-même modifié
+  depuis sa dernière lecture, le reste vient de la base. Les listes d'objets à `id` se fusionnent
+  élément par élément (ajouts des deux côtés conservés, suppressions respectées) ; sur une même
+  fiche modifiée des deux côtés, le dernier écrivain gagne — mais sur cette fiche seulement.
+  `set` renvoie la valeur réellement écrite, que `useAppData` adopte pour ne pas la réécraser.
 - Un canal **Supabase Realtime** (`postgres_changes` sur `app_data`) resynchronise les autres
   navigateurs. `lastSentRef` sert à ignorer l'écho de sa propre écriture.
 - Toute donnée métier se modifie via le helper `update((d) => …)`, qui fait un `structuredClone` du

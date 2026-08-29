@@ -1345,7 +1345,17 @@ function useAppData() {
     const t = setTimeout(() => {
       const json = JSON.stringify(data);
       lastSentRef.current = json;
-      window.storage.set("impro-data", json).catch(() => {});
+      window.storage
+        .set("impro-data", json)
+        .then((res) => {
+          // `set` relit la base et fusionne avant d'écrire : ce qui est réellement enregistré peut
+          // donc contenir le travail de quelqu'un d'autre. On l'adopte, sinon la prochaine
+          // sauvegarde de cet onglet le réécraserait aussitôt.
+          if (!res || !res.value || res.value === json) return;
+          lastSentRef.current = res.value;
+          setData(mergeDetailedCategories(mergeMissingCategories(JSON.parse(res.value))));
+        })
+        .catch(() => {});
     }, 500);
     return () => clearTimeout(t);
   }, [data, loaded]);
