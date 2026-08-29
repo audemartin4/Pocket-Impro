@@ -5278,13 +5278,24 @@ const numeroManche = (n) => String(n).padStart(2, "0");
 // seule taille pour tous ne marche pas — ce qui rend « Rubber » énorme fait déborder « Un condamné
 // à mort s'est échappé » — donc trois paliers selon la longueur.
 const tailleDuMot = (texte) => {
-  const n = (texte || "").length;
-  if (n <= 12) return "clamp(48px, 17vw, 104px)";
-  if (n <= 24) return "clamp(44px, 14vw, 92px)";
-  if (n <= 45) return "clamp(36px, 11vw, 76px)";
-  // Les situations entières de la bibliothèque importée vont jusqu'à 80 caractères : au-delà de
-  // quatre lignes, mieux vaut réduire que déborder sous les flèches.
-  return "clamp(28px, 8.5vw, 56px)";
+  const t = texte || "";
+  const n = t.length;
+  const palier = n <= 12 ? "clamp(48px, 17vw, 104px)"
+    : n <= 24 ? "clamp(44px, 14vw, 92px)"
+      : n <= 45 ? "clamp(36px, 11vw, 76px)"
+        // Les situations entières de la bibliothèque importée vont jusqu'à 80 caractères : au-delà
+        // de quatre lignes, mieux vaut réduire que déborder sous les flèches.
+        : "clamp(28px, 8.5vw, 56px)";
+  // Un palier ne suffit pas : « Superman » est court mais indivisible, et à 17vw il débordait sur
+  // les flèches, qu'aucun retour à la ligne ne peut sauver. On plafonne donc la taille à ce que le
+  // MOT LE PLUS LONG peut occuper entre les deux flèches (une centaine de pixels à elles deux,
+  // marges comprises), en comptant une largeur moyenne de 0,58 em par caractère. Le texte, lui,
+  // passe à la ligne entre les mots autant que nécessaire.
+  const motLePlusLong = Math.max(1, ...t.split(/\s+/).filter(Boolean).map((m) => m.length));
+  const plafond = `calc((100vw - 112px) / ${(motLePlusLong * 0.58).toFixed(2)})`;
+  // Pas de plancher : on préfère un mot plus petit à un mot coupé. Le pire cas de la bibliothèque
+  // (« l'extra-terrestre », 17 caractères) tombe à 25 px sur un téléphone étroit, ce qui reste lisible.
+  return `min(${palier}, ${plafond})`;
 };
 
 /* Déroulé linéaire d'une partie : un écran de titre par manche, puis ses 5 mots, puis la fin.
@@ -5507,11 +5518,11 @@ function AmbassadeurPlayer({ manches, onClose }) {
           {/* Les deux flèches encadrent le mot, au milieu de l'écran : c'est là que les yeux sont, et
               elles rappellent d'un coup d'œil que la gauche ramène et la droite avance — la même
               règle que les deux moitiés de l'écran. */}
-          <div className="w-full flex items-center justify-between gap-1">
+          <div className="w-full flex items-center justify-between gap-0.5">
             <button
               onClick={prev}
               disabled={i === 0}
-              className="p-2 shrink-0"
+              className="p-1 shrink-0"
               style={{ opacity: i === 0 ? 0.25 : 1 }}
               title="Précédent"
             >
@@ -5524,8 +5535,16 @@ function AmbassadeurPlayer({ manches, onClose }) {
                 </div>
               )}
               {step.type === "mot" && (
-                <div style={{ fontFamily: FONT_DISPLAY, fontSize: tailleDuMot(step.text), lineHeight: 1.1 }} className="font-semibold">
-                  {step.text}
+                <div
+                  style={{ fontFamily: FONT_DISPLAY, fontSize: tailleDuMot(step.text), lineHeight: 1.1 }}
+                  className="font-semibold"
+                >
+                  {/* Chaque mot est insécable : le navigateur coupait volontiers au trait d'union
+                      (« Arrête- » / « moi si tu peux »), alors qu'on préfère réduire la taille.
+                      Les retours à la ligne n'ont lieu qu'entre les mots. */}
+                  {step.text.split(/(\s+)/).map((bout, k) => (
+                    /^\s+$/.test(bout) ? bout : <span key={k} style={{ whiteSpace: "nowrap" }}>{bout}</span>
+                  ))}
                 </div>
               )}
               {step.type === "fin" && (
@@ -5546,7 +5565,7 @@ function AmbassadeurPlayer({ manches, onClose }) {
             <button
               onClick={next}
               disabled={i === steps.length - 1}
-              className="p-2 shrink-0"
+              className="p-1 shrink-0"
               style={{ opacity: i === steps.length - 1 ? 0.25 : 1 }}
               title="Suivant"
             >
