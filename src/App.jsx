@@ -288,8 +288,8 @@ const TRANCHES_AGE = ["Enfants", "Ados", "Adultes", "Senior"];
 // français » se range dans « Cinéma ». C'est le sous-thème que les équipes doivent deviner en fin
 // de manche — le thème général, lui, n'est qu'une étagère.
 const AMBASSADEUR_THEMES_GENERAUX = [
-  "Cinéma", "Cuisine", "Expressions", "Fêtes et traditions", "Géographie", "Histoire",
-  "Littérature", "Métier", "Musique", "Nature", "Objets du quotidien", "Sport",
+  "Arts", "Cinéma", "Cuisine", "Expressions", "Fêtes et traditions", "Géographie", "Histoire",
+  "Jeux", "Littérature", "Métier", "Musique", "Nature", "Sport", "Vie quotidienne",
 ];
 const AMBASSADEUR_MOTS_PAR_MANCHE = 5;
 const AMBASSADEUR_MANCHES_PAR_PARTIE = 3;
@@ -5177,6 +5177,9 @@ const titreManche = (m) => (m && m.theme) || "Manche sans titre";
 // Thème, niveau et tranches d'âge sont tous facultatifs : on n'assemble que ce qui est renseigné,
 // sinon la ligne de détail se remplit de séparateurs orphelins (« Cinéma ·  ·  »).
 const detailManche = (m) => [m.themeGeneral, m.level, (m.tranchesAge || []).join(", ")].filter(Boolean).join(" · ");
+// Valeur interne du rayon « Sans thème » dans le catalogue : un thème général vide voulant déjà dire
+// « tous les rayons », il faut un marqueur distinct.
+const SANS_THEME = "__sans-theme__";
 // "11 septembre" ; l'année n'apparaît que si elle diffère de l'année en cours (fin décembre).
 const formatJour = (ts) => {
   const d = new Date(ts);
@@ -5756,13 +5759,11 @@ function AmbassadeurMancheForm({ initial, data, onSave, onCancel, saveLabel = "E
 function AmbassadeurManchePicker({ manches, excludeIds = [], onSelect, onCancel }) {
   const [query, setQuery] = useState("");
   const [niveau, setNiveau] = useState("");
-  const [age, setAge] = useState("");
   const found = manches
     .filter((m) => !excludeIds.includes(m.id))
     .filter((m) => !niveau || m.level === niveau)
-    .filter((m) => !age || (m.tranchesAge || []).includes(age))
     .filter((m) => matchesKeywords(query, m.theme, m.themeGeneral, (m.mots || []).join(" ")))
-    .sort((a, b) => a.theme.localeCompare(b.theme, "fr"))
+    .sort((a, b) => (a.theme || "").localeCompare(b.theme || "", "fr"))
     .slice(0, 40);
   return (
     <IndexCard style={{ borderColor: COLORS.accent }}>
@@ -5777,20 +5778,15 @@ function AmbassadeurManchePicker({ manches, excludeIds = [], onSelect, onCancel 
       <div className="mb-3">
         <input className={inputClass} style={inputStyle} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Thème ou mot…" autoFocus />
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <Field label="Niveau">
-          <select className={inputClass} style={inputStyle} value={niveau} onChange={(e) => setNiveau(e.target.value)}>
-            <option value="">Tous</option>
-            {NIVEAUX.map((n) => <option key={n}>{n}</option>)}
-          </select>
-        </Field>
-        <Field label="Tranche d'âge">
-          <select className={inputClass} style={inputStyle} value={age} onChange={(e) => setAge(e.target.value)}>
-            <option value="">Toutes</option>
-            {TRANCHES_AGE.map((a) => <option key={a}>{a}</option>)}
-          </select>
-        </Field>
-      </div>
+      {/* Pas de filtre par tranche d'âge ici : les manches de la bibliothèque n'ont pas encore d'âge
+          fiable, un filtre ne renverrait rien. On le remettra quand les âges seront renseignés. Le
+          choix reste offert à la création d'une manche, où c'est l'auteur qui le renseigne. */}
+      <Field label="Niveau">
+        <select className={inputClass} style={inputStyle} value={niveau} onChange={(e) => setNiveau(e.target.value)}>
+          <option value="">Tous</option>
+          {NIVEAUX.map((n) => <option key={n}>{n}</option>)}
+        </select>
+      </Field>
       <div className="max-h-64 overflow-y-auto">
         {found.length === 0 && <Empty text="Aucune manche ne correspond." />}
         {found.map((m) => (
@@ -6006,8 +6002,11 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
   const [playing, setPlaying] = useState(null); // tableau de manches en cours de jeu
   const [expandedId, setExpandedId] = useState(null);
   const [reglesOuvertes, setReglesOuvertes] = useState(false);
-  const [tri, setTri] = useState("theme");
+  const [tri, setTri] = useState("titre");
+  // "" = on est sur la liste des rayons ; sinon on est entré dans un thème (SANS_THEME pour celles
+  // qui n'en ont pas encore).
   const [filtreTheme, setFiltreTheme] = useState("");
+  const [rechercheCatalogue, setRechercheCatalogue] = useState("");
   const [filtreNiveau, setFiltreNiveau] = useState("");
   const [filtreAge, setFiltreAge] = useState("");
   // Manches créées sans compte : elles ne partent pas dans la base commune (rien à modérer, aucun
@@ -6047,13 +6046,16 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
     age: (a, b) => TRANCHES_AGE.indexOf((a.tranchesAge || [])[0]) - TRANCHES_AGE.indexOf((b.tranchesAge || [])[0]) || parTitre(a, b),
   };
   const mesManches = manchesVisibles
-    .filter((m) => !filtreTheme || m.themeGeneral === filtreTheme)
+    .filter((m) => !filtreTheme || (filtreTheme === SANS_THEME ? !m.themeGeneral : m.themeGeneral === filtreTheme))
     .filter((m) => !filtreNiveau || m.level === filtreNiveau)
     .filter((m) => !filtreAge || (m.tranchesAge || []).includes(filtreAge))
+    .filter((m) => matchesKeywords(rechercheCatalogue, m.theme, m.themeGeneral, (m.mots || []).join(" ")))
     .sort(comparateurs[tri] || comparateurs.theme);
   // Seulement les thèmes réellement représentés : un menu qui propose des rayons vides fait croire
   // à un filtre cassé.
   const themesDuCatalogue = AMBASSADEUR_THEMES_GENERAUX.filter((t) => manchesVisibles.some((m) => m.themeGeneral === t));
+  const manchesSansTheme = manchesVisibles.filter((m) => !m.themeGeneral).length;
+  const ageRenseigne = manchesVisibles.some((m) => (m.tranchesAge || []).length > 0);
   const dispoPourPartie = [...manchesJouables(data, currentUser, isAdmin), ...manchesLocales];
   const parties = onlyUserCreated
     ? (data.ambassadeurs || []).filter((a) => a.creatorUsername === currentUser)
@@ -6207,23 +6209,84 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
         </p>
       )}
 
-      {/* Tri et filtres seulement s'il y a quelque chose à trier : sur un catalogue vide, quatre
-          menus déroulants n'offrent que des choix sans effet. */}
-      {catalogue && manchesVisibles.length > 0 && (
+      {/* Le catalogue s'ouvre sur ses rayons, comme les échauffements, les exercices et les
+          catégories : une liste de deux cents manches à plat ne se parcourt pas. On entre dans un
+          thème, on y trouve ses manches, et le bouton de retour ramène aux rayons. */}
+      {catalogue && !filtreTheme && manchesVisibles.length > 0 && (
         <>
+          <input
+            className={inputClass}
+            style={{ ...inputStyle, marginBottom: 12 }}
+            value={rechercheCatalogue}
+            onChange={(e) => setRechercheCatalogue(e.target.value)}
+            placeholder="Chercher un titre, un thème ou un mot…"
+          />
+          {rechercheCatalogue.trim() ? (
+            <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs uppercase block mb-1">
+              {mesManches.length} manche(s)
+            </span>
+          ) : (
+            <>
+              {themesDuCatalogue.map((t) => (
+                <button key={t} onClick={() => setFiltreTheme(t)} className="w-full text-left">
+                  <IndexCard style={{ cursor: "pointer" }}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Hand size={18} color={COLORS.accent} />
+                        <div style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{t}</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
+                          {manchesVisibles.filter((m) => m.themeGeneral === t).length}
+                        </span>
+                        <ChevronRight size={16} color={COLORS.textSoft} />
+                      </div>
+                    </div>
+                  </IndexCard>
+                </button>
+              ))}
+              {manchesSansTheme > 0 && (
+                <button onClick={() => setFiltreTheme(SANS_THEME)} className="w-full text-left">
+                  <IndexCard style={{ cursor: "pointer" }}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Hand size={18} color={COLORS.textSoft} />
+                        <div style={{ fontFamily: FONT_DISPLAY, color: COLORS.textSoft }} className="font-medium">Sans thème</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{manchesSansTheme}</span>
+                        <ChevronRight size={16} color={COLORS.textSoft} />
+                      </div>
+                    </div>
+                  </IndexCard>
+                </button>
+              )}
+            </>
+          )}
+        </>
+      )}
+
+      {catalogue && filtreTheme && (
+        <>
+          <button
+            onClick={() => setFiltreTheme("")}
+            className="flex items-center gap-1 mb-3 text-sm"
+            style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}
+          >
+            <ChevronLeft size={16} /> Tous les thèmes
+          </button>
           <div className="grid grid-cols-2 gap-2">
             <Field label="Trier par">
               <select className={inputClass} style={inputStyle} value={tri} onChange={(e) => setTri(e.target.value)}>
-                <option value="theme">Thème</option>
                 <option value="titre">Titre</option>
                 <option value="niveau">Niveau</option>
-                <option value="age">Tranche d'âge</option>
+                {ageRenseigne && <option value="age">Tranche d'âge</option>}
               </select>
             </Field>
             <Field label="Thème">
               <select className={inputClass} style={inputStyle} value={filtreTheme} onChange={(e) => setFiltreTheme(e.target.value)}>
-                <option value="">Tous</option>
                 {themesDuCatalogue.map((t) => <option key={t}>{t}</option>)}
+                {manchesSansTheme > 0 && <option value={SANS_THEME}>Sans thème</option>}
               </select>
             </Field>
             <Field label="Niveau">
@@ -6232,12 +6295,16 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
                 {NIVEAUX.map((n) => <option key={n}>{n}</option>)}
               </select>
             </Field>
-            <Field label="Tranche d'âge">
-              <select className={inputClass} style={inputStyle} value={filtreAge} onChange={(e) => setFiltreAge(e.target.value)}>
-                <option value="">Toutes</option>
-                {TRANCHES_AGE.map((a) => <option key={a}>{a}</option>)}
-              </select>
-            </Field>
+            {/* Le filtre par âge n'apparaît que si des manches en portent un : tant que la
+                bibliothèque n'est pas renseignée, il ne ferait que vider la liste. */}
+            {ageRenseigne && (
+              <Field label="Tranche d'âge">
+                <select className={inputClass} style={inputStyle} value={filtreAge} onChange={(e) => setFiltreAge(e.target.value)}>
+                  <option value="">Toutes</option>
+                  {TRANCHES_AGE.map((a) => <option key={a}>{a}</option>)}
+                </select>
+              </Field>
+            )}
           </div>
           <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs uppercase block mb-1">
             {mesManches.length} manche(s)
@@ -6326,7 +6393,8 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
         </>
       )}
 
-      {(onlyUserCreated || catalogue) && mesManches.length === 0 && (
+      {/* Sur le catalogue, la liste n'apparaît qu'une fois entré dans un rayon (ou en cherchant). */}
+      {(onlyUserCreated || (catalogue && (filtreTheme || rechercheCatalogue.trim()))) && mesManches.length === 0 && (
         <Empty text={
           onlyUserCreated ? "Tu n'as pas encore créé de manche d'ambassadeur."
             // Distinguer les deux vides : un catalogue encore vide n'est pas un filtre trop étroit.
@@ -6335,7 +6403,7 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
         } />
       )}
 
-      {(onlyUserCreated || catalogue) && mesManches.map((m) => (
+      {(onlyUserCreated || (catalogue && (filtreTheme || rechercheCatalogue.trim()))) && mesManches.map((m) => (
         editingId === m.id ? (
           <AmbassadeurMancheForm
             key={m.id}
