@@ -5384,32 +5384,49 @@ function AmbassadeurPlayer({ manches, onClose }) {
       onPointerUp={onPointerUp}
       onPointerCancel={finDuGeste}
     >
-      <div className="flex items-start justify-between px-4 py-3">
-        <div>
-          <div
-            className="text-xs px-2 py-1 rounded-full inline-block"
-            style={{ fontFamily: FONT_MONO, color: COLORS.brass, border: `1px solid ${COLORS.brass}66` }}
-          >
-            {step.type === "mot"
-              ? `MANCHE ${numeroManche(step.manche)} · MOT ${step.index}/${step.total}`
-              : step.type === "manche" ? `MANCHE ${numeroManche(step.manche)}` : "FIN"}
-          </div>
-          {/* Le sommaire du maître du jeu : sans ce bouton explicite, personne ne devinait que le
-              compteur était cliquable. C'est pourtant l'outil clé pour retrouver le bon mot quand
-              deux équipes n'en sont pas au même endroit. */}
-          <button
-            onClick={() => setSommaireOpen((v) => !v)}
-            className="block text-xs mt-1 underline"
-            style={{ fontFamily: FONT_MONO, color: COLORS.paper + "aa" }}
-          >
-            {sommaireOpen ? "Masquer le détail" : "Voir le détail"}
-          </button>
+      {/* Repère de progression, centré en haut : c'est l'information qu'on cherche du coin de l'œil
+          en pleine partie ("où on en est"), elle ne doit pas se chercher dans un coin. */}
+      <div className="relative px-12 py-3 flex flex-col items-center">
+        <div
+          className="text-sm px-3 py-1 rounded-full"
+          style={{ fontFamily: FONT_MONO, color: COLORS.brass, border: `1px solid ${COLORS.brass}66` }}
+        >
+          {step.type === "mot"
+            ? `MANCHE ${numeroManche(step.manche)} · MOT ${step.index}/${step.total}`
+            : step.type === "manche" ? `MANCHE ${numeroManche(step.manche)}` : "FIN"}
         </div>
+        {/* Les pastilles disent d'un seul coup d'œil, sans lire, combien de mots restent. */}
+        {step.type === "mot" && (
+          <div className="flex gap-1.5 mt-2">
+            {Array.from({ length: step.total }, (_, k) => (
+              <span
+                key={k}
+                className="rounded-full"
+                style={{
+                  width: 8,
+                  height: 8,
+                  background: k < step.index ? COLORS.brass : "transparent",
+                  border: `1px solid ${COLORS.brass}${k < step.index ? "" : "66"}`,
+                }}
+              />
+            ))}
+          </div>
+        )}
+        {/* Le sommaire du maître du jeu : sans ce bouton explicite, personne ne devinait que le
+            compteur était cliquable. C'est pourtant l'outil clé pour retrouver le bon mot quand
+            deux équipes n'en sont pas au même endroit. */}
+        <button
+          onClick={() => setSommaireOpen((v) => !v)}
+          className="block text-xs mt-1.5 underline"
+          style={{ fontFamily: FONT_MONO, color: COLORS.paper + "aa" }}
+        >
+          {sommaireOpen ? "Masquer le détail" : "Voir le détail"}
+        </button>
         {/* La croix ferme d'abord le sommaire : on l'ouvre en pleine partie pour retrouver un mot, et
             en sortir ne doit pas coûter la partie entière. */}
         <button
           onClick={() => (sommaireOpen ? setSommaireOpen(false) : onClose())}
-          className="p-1 -m-1"
+          className="absolute right-4 top-3 p-1"
           title={sommaireOpen ? "Fermer le détail" : "Quitter la partie"}
         >
           <X size={22} color={COLORS.paper} />
