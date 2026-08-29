@@ -291,6 +291,36 @@ const AMBASSADEUR_THEMES_GENERAUX = [
   "Arts", "Cinéma", "Cuisine", "Expressions", "Fêtes et traditions", "Géographie", "Histoire",
   "Jeux", "Littérature", "Métier", "Musique", "Nature", "Sport", "Vie quotidienne",
 ];
+// Quand un rayon est trop maigre pour monter trois manches, on va chercher ailleurs — mais pas
+// n'importe quoi : une manche dont le TITRE parle du même sujet. « Expressions françaises avec des
+// animaux » fait très bien l'affaire dans un ambassadeur Nature. D'où ces mots de parenté, un par
+// rayon ; la liste se complète au fil de la bibliothèque.
+const AMBASSADEUR_MOTS_VOISINS = {
+  "Arts": ["art", "peinture", "tableau", "sculpture", "musee", "danse", "theatre", "improvisation"],
+  "Cinéma": ["film", "cinema", "serie", "acteur", "disney", "dessin anime", "realisateur"],
+  "Cuisine": ["cuisine", "gastronomie", "patisserie", "plat", "recette", "aliment", "repas", "gateau", "biscuit", "vin", "dejeuner", "chocolat"],
+  "Expressions": ["expression", "proverbe", "dicton", "slogan", "lapsus", "contrepeterie", "phrase"],
+  "Fêtes et traditions": ["fete", "noel", "tradition", "carnaval", "anniversaire", "mariage", "vacances", "annee"],
+  "Géographie": ["lieu", "monument", "ville", "pays", "region", "voyage", "touristique", "montpellier", "paris"],
+  "Histoire": ["histoire", "moyen age", "antique", "mythologi", "roi", "guerre", "siecle", "epoque", "biblique", "grec"],
+  "Jeux": ["jeu", "jeux", "carte", "monopoly", "televise", "partie"],
+  "Littérature": ["roman", "conte", "livre", "album", "auteur", "piece", "fable", "poeme", "litterature"],
+  "Métier": ["metier", "bureau", "travail", "profession", "espionnage", "criminalite"],
+  "Musique": ["chanson", "musique", "comptine", "instrument", "chanteur", "paroles", "musicale"],
+  "Nature": ["animal", "animaux", "mer", "plage", "jardin", "montagne", "fleur", "arbre", "foret", "saison", "campagne", "ours"],
+  "Sport": ["sport", "olympi", "tennis", "foot", "ski", "course", "match", "randonnee"],
+  "Vie quotidienne": ["quotidien", "maison", "objet", "emotion", "matin", "enfant", "galere", "bureau", "numerique"],
+};
+/* Manches d'un AUTRE rayon dont le titre parle du sujet demandé. */
+const manchesVoisines = (theme, banque) => {
+  const mots = AMBASSADEUR_MOTS_VOISINS[theme] || [];
+  if (!mots.length) return [];
+  return banque.filter((m) => {
+    if (m.themeGeneral === theme) return false;
+    const titre = normalize(m.theme || "");
+    return mots.some((mot) => titre.includes(mot));
+  });
+};
 const AMBASSADEUR_MOTS_PAR_MANCHE = 5;
 const AMBASSADEUR_MANCHES_PAR_PARTIE = 3;
 // Longueur maximale d'un mot, d'une phrase à mimer ou d'un titre de manche. Portée à 80 : la
@@ -5870,6 +5900,8 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditMa
   // d'un même ambassadeur à partager leur thème.
   const [themeFiltre, setThemeFiltre] = useState("");
   const [niveauFiltre, setNiveauFiltre] = useState("");
+  // Ce que la dernière proposition a dû concéder, à dire au maître du jeu.
+  const [noteProposition, setNoteProposition] = useState(null);
 
   const manchesChoisies = slots.map((id) => manchesDispo.find((m) => m.id === id)).filter(Boolean);
   const nomAuto = manchesChoisies.length > 0 ? partieLabel(manchesChoisies) : "";
@@ -5882,7 +5914,10 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditMa
   const manchesFiltrees = manchesDispo
     .filter((m) => !themeFiltre || m.themeGeneral === themeFiltre)
     .filter((m) => !niveauFiltre || m.level === niveauFiltre);
-  const resteAPiocher = manchesFiltrees.some((m) => !slots.includes(m.id));
+  // On peut toujours changer une manche tant qu'il en existe une autre, même si le filtre courant
+  // est épuisé : le sélecteur montre alors toute la banque plutôt qu'une liste vide.
+  const resteAPiocher = manchesDispo.some((m) => !slots.includes(m.id));
+  const vivierDuSelecteur = manchesFiltrees.some((m) => !slots.includes(m.id)) ? manchesFiltrees : manchesDispo;
   const themesDisponibles = AMBASSADEUR_THEMES_GENERAUX.filter((t) => manchesDispo.some((m) => m.themeGeneral === t));
   const niveauxDisponibles = NIVEAUX.filter((n) => manchesDispo.some((m) => m.level === n));
   // Deux propositions distinctes, et le THÈME PRIME : demander un thème ratisse tous les niveaux —
@@ -5893,12 +5928,48 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditMa
 
   const setSlot = (i, id) => setSlots((prev) => prev.map((v, j) => (j === i ? id : v)));
 
-  // Monte d'un coup une partie entière depuis un vivier donné. On remplace tout l'assemblage, et on
-  // prend ce qu'il y a si le vivier n'a pas trois manches.
-  const proposerDepuis = (vivier) => {
-    const tirees = shuffleArray(vivier).slice(0, AMBASSADEUR_MANCHES_PAR_PARTIE).map((m) => m.id);
-    while (tirees.length < AMBASSADEUR_MANCHES_PAR_PARTIE) tirees.push(null);
-    setSlots(tirees);
+  const poser = (manches) => {
+    const ids = manches.map((m) => m.id);
+    while (ids.length < AMBASSADEUR_MANCHES_PAR_PARTIE) ids.push(null);
+    setSlots(ids);
+  };
+
+  // Le thème prime, mais un rayon trop maigre ne condamne pas la partie : on complète avec des
+  // manches d'un autre rayon qui parlent du même sujet — « Expressions françaises avec des animaux »
+  // dans un ambassadeur Nature — et on le signale.
+  const proposerParTheme = () => {
+    const exactes = shuffleArray(poolParTheme).slice(0, AMBASSADEUR_MANCHES_PAR_PARTIE);
+    const manque = AMBASSADEUR_MANCHES_PAR_PARTIE - exactes.length;
+    if (manque <= 0) { setNoteProposition(null); poser(exactes); return; }
+    const voisines = shuffleArray(manchesVoisines(themeFiltre, manchesDispo)).slice(0, manque);
+    setNoteProposition(
+      voisines.length === 0
+        ? `Seulement ${exactes.length} manche(s) en ${themeFiltre} : la partie sera plus courte.`
+        : `Pas assez de manches ${themeFiltre} : ${voisines.map((m) => `« ${titreManche(m)} »`).join(", ")} ` +
+          `${voisines.length > 1 ? "complètent" : "complète"} la partie — même sujet, autre rayon.`
+    );
+    poser([...exactes, ...voisines]);
+  };
+
+  // Le niveau, lui, se négocie : plutôt qu'une partie amputée, on complète avec des manches d'un
+  // autre niveau — en restant dans le thème choisi — et on le dit franchement au maître du jeu,
+  // qui saura adapter ou remplacer la manche en trop.
+  const proposerParNiveau = () => {
+    const exactes = shuffleArray(poolParNiveau).slice(0, AMBASSADEUR_MANCHES_PAR_PARTIE);
+    const manque = AMBASSADEUR_MANCHES_PAR_PARTIE - exactes.length;
+    if (manque <= 0) { setNoteProposition(null); poser(exactes); return; }
+    const dejaPris = new Set(exactes.map((m) => m.id));
+    // On élargit d'abord aux autres niveaux du thème, puis aux rayons voisins par le sujet.
+    const autourDuTheme = themeFiltre ? [...poolParTheme, ...manchesVoisines(themeFiltre, manchesDispo)] : manchesDispo;
+    const complement = shuffleArray(autourDuTheme.filter((m) => !dejaPris.has(m.id) && m.level !== niveauFiltre)).slice(0, manque);
+    const niveauxAjoutes = [...new Set(complement.map((m) => m.level).filter(Boolean))];
+    setNoteProposition(
+      complement.length === 0
+        ? `Pas assez de manches ${niveauFiltre}${themeFiltre ? ` en ${themeFiltre}` : ""} : la partie sera plus courte.`
+        : `Pas assez de manches ${niveauFiltre}${themeFiltre ? ` en ${themeFiltre}` : ""} : ${complement.length} manche(s) d'un autre niveau` +
+          `${niveauxAjoutes.length ? ` (${niveauxAjoutes.join(", ")})` : ""} complètent la partie.`
+    );
+    poser([...exactes, ...complement]);
   };
 
   const completerAuHasard = () => {
@@ -5950,34 +6021,33 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditMa
           {(themeFiltre || niveauFiltre) && (
             <div className="mb-3 flex flex-col items-start gap-2">
               {themeFiltre && (
-                <div>
-                  <Btn small variant="accent" disabled={poolParTheme.length === 0} onClick={() => proposerDepuis(poolParTheme)}>
-                    <Shuffle size={13} /> {AMBASSADEUR_MANCHES_PAR_PARTIE} manches · {themeFiltre}
-                    {niveauFiltre ? " · tous niveaux" : ""}
-                  </Btn>
-                  {poolParTheme.length < AMBASSADEUR_MANCHES_PAR_PARTIE && (
-                    <p className="text-xs mt-1 italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-                      {poolParTheme.length === 0
-                        ? "Aucune manche ne correspond à ce thème pour l'instant."
-                        : `Seulement ${poolParTheme.length} manche(s) : la partie sera plus courte.`}
-                    </p>
-                  )}
-                </div>
+                /* Pas d'avertissement avant le clic : le rayon peut être maigre et la proposition
+                   quand même complète, grâce aux manches voisines. C'est la note d'après-coup qui
+                   dit ce qui a réellement été retenu. */
+                <Btn
+                  small
+                  variant="accent"
+                  disabled={poolParTheme.length === 0 && manchesVoisines(themeFiltre, manchesDispo).length === 0}
+                  onClick={proposerParTheme}
+                >
+                  <Shuffle size={13} /> {AMBASSADEUR_MANCHES_PAR_PARTIE} manches · {themeFiltre}
+                  {niveauFiltre ? " · tous niveaux" : ""}
+                </Btn>
               )}
               {niveauFiltre && (
                 <div>
-                  <Btn small variant="accent" disabled={poolParNiveau.length === 0} onClick={() => proposerDepuis(poolParNiveau)}>
+                  {/* Actif même s'il manque des manches de ce niveau : il complètera avec d'autres
+                      niveaux du même thème et le signalera. */}
+                  <Btn small variant="accent" disabled={(themeFiltre ? poolParTheme : manchesDispo).length === 0} onClick={proposerParNiveau}>
                     <Shuffle size={13} /> {AMBASSADEUR_MANCHES_PAR_PARTIE} manches · {niveauFiltre}
                     {themeFiltre ? ` · ${themeFiltre}` : ""}
                   </Btn>
-                  {poolParNiveau.length < AMBASSADEUR_MANCHES_PAR_PARTIE && (
-                    <p className="text-xs mt-1 italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-                      {poolParNiveau.length === 0
-                        ? (themeFiltre ? "Aucune manche de ce niveau dans ce thème." : "Aucune manche de ce niveau pour l'instant.")
-                        : `Seulement ${poolParNiveau.length} manche(s) : la partie sera plus courte.`}
-                    </p>
-                  )}
                 </div>
+              )}
+              {noteProposition && (
+                <p className="text-xs italic" style={{ fontFamily: FONT_BODY, color: COLORS.accent }}>
+                  {noteProposition}
+                </p>
               )}
             </div>
           )}
@@ -6001,9 +6071,22 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditMa
                   <div className="flex items-center gap-1 shrink-0">
                     {/* Relire les mots avant de lancer la partie : on veut savoir ce qu'on a pioché,
                         et vérifier qu'aucun ne tombe à plat pour le groupe qu'on a en face. */}
-                    <Btn small variant="ghost" onClick={() => setMotsOuverts(motsOuverts === i ? null : i)}>
-                      {motsOuverts === i ? "Masquer" : "Voir"}
-                    </Btn>
+                    <button
+                      onClick={() => setMotsOuverts(motsOuverts === i ? null : i)}
+                      title={motsOuverts === i ? "Masquer les mots" : "Voir les mots"}
+                      className="p-1"
+                    >
+                      {motsOuverts === i
+                        ? <EyeOff size={17} color={COLORS.ink} />
+                        : <Eye size={17} color={COLORS.ink} />}
+                    </button>
+                    {/* Une manche proposée ne convient pas ? On en choisit une autre à sa place,
+                        sans défaire l'assemblage. */}
+                    {resteAPiocher && (
+                      <Btn small variant="ghost" onClick={() => { setPicking(picking === i ? null : i); setCreating(null); setEditing(null); }}>
+                        Changer
+                      </Btn>
+                    )}
                     {/* Corriger une manche sans quitter l'assemblage : on repère une faute de frappe
                         surtout au moment de la relire dans son ambassadeur. Seulement les siennes. */}
                     {onEditManche && peutModifierManche?.(m) && (
@@ -6011,7 +6094,9 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditMa
                         <Pencil size={15} color={COLORS.ink} />
                       </button>
                     )}
-                    <Btn small variant="ghost" onClick={() => setSlot(i, null)}><X size={13} /> Retirer</Btn>
+                    <button onClick={() => { setSlot(i, null); setNoteProposition(null); }} title="Retirer cette manche" className="p-1">
+                      <Trash2 size={17} color={COLORS.accent} />
+                    </button>
                   </div>
                 </div>
                 {motsOuverts === i && (
@@ -6030,9 +6115,9 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditMa
             )}
             {picking === i && (
               <AmbassadeurManchePicker
-                manches={manchesFiltrees}
+                manches={vivierDuSelecteur}
                 excludeIds={slots.filter(Boolean)}
-                onSelect={(m2) => { setSlot(i, m2.id); setPicking(null); }}
+                onSelect={(m2) => { setSlot(i, m2.id); setPicking(null); setNoteProposition(null); }}
                 onCancel={() => setPicking(null)}
               />
             )}
