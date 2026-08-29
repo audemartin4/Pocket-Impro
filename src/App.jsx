@@ -5581,7 +5581,7 @@ function AmbassadeurPlayer({ manches, onClose }) {
                   {manches.length > 1 ? "Les thèmes de la partie" : "Le thème de la partie"}
                 </div>
                 {manches.map((m, k) => (
-                  <li key={m.id || k} className="text-lg" style={{ fontFamily: FONT_DISPLAY, color: COLORS.paper }}>
+                  <li key={m.id || k} style={{ fontFamily: FONT_DISPLAY, fontSize: 27, lineHeight: 1.25, color: COLORS.paper }}>
                     <span style={{ fontFamily: FONT_MONO, color: COLORS.brass }} className="text-xs">{numeroManche(k + 1)} · </span>
                     {titreManche(m)}
                   </li>
@@ -5604,7 +5604,9 @@ function AmbassadeurPlayer({ manches, onClose }) {
                 <div className="text-xs" style={{ fontFamily: FONT_MONO, color: COLORS.paper + "80" }}>
                   Thème de la manche {numeroManche(mancheTerminee)}
                 </div>
-                <div className="text-lg mt-1" style={{ fontFamily: FONT_DISPLAY, color: COLORS.paper }}>
+                {/* Le thème révélé s'annonce à la cantonade : il se lit d'un peu plus loin que le
+                    reste, d'où une taille de moitié supérieure. */}
+                <div className="mt-1" style={{ fontFamily: FONT_DISPLAY, fontSize: 27, color: COLORS.paper }}>
                   {titreManche(manches[mancheTerminee - 1])}
                 </div>
               </div>
