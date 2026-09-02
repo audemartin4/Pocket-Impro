@@ -1501,6 +1501,39 @@ function Btn({ children, onClick, variant = "solid", small, type = "button", dis
   );
 }
 
+/* Suppression en deux temps : le premier appui arme, le second supprime, et l'armement retombe tout
+   seul au bout de quelques secondes. Les données sont partagées par toute la troupe : un pouce égaré
+   sur une corbeille effaçait une fiche pour tout le monde, sans retour possible. Pas de fenêtre du
+   navigateur, qui s'affiche mal sur certains téléphones et sort du style de l'appli. */
+function BoutonSupprimer({ onDelete, titre = "Supprimer", texte = false, taille = 22 }) {
+  const [arme, setArme] = useState(false);
+  useEffect(() => {
+    if (!arme) return undefined;
+    const t = setTimeout(() => setArme(false), 4000);
+    return () => clearTimeout(t);
+  }, [arme]);
+
+  if (arme) {
+    return (
+      <button
+        onClick={() => { setArme(false); onDelete(); }}
+        className="inline-flex items-center gap-1 rounded-sm px-2 py-1 text-xs"
+        style={{ fontFamily: FONT_BODY, background: COLORS.accent, color: "#fff" }}
+        title="Confirmer la suppression"
+      >
+        <Trash2 size={13} color="#fff" /> Confirmer
+      </button>
+    );
+  }
+  return texte ? (
+    <Btn small variant="ghost" onClick={() => setArme(true)}>{titre}</Btn>
+  ) : (
+    <button onClick={() => setArme(true)} title={titre} className="p-1 -m-1">
+      <Trash2 size={taille} color={COLORS.accent} />
+    </button>
+  );
+}
+
 /* Question Oui/Non avec pastille verte + coche sur le choix sélectionné. */
 function OuiNonField({ label, value, onChange }) {
   return (
@@ -2584,9 +2617,7 @@ function BibliothequeTab({ data, update, setTab, isAdmin, currentUser, goToLibra
                     </button>
                     {isAdmin && <Btn small variant="ghost" onClick={() => setEditingExerciseId(ex.id)}>Modifier</Btn>}
                     {isAdmin && (
-                      <Btn small variant="ghost" onClick={() => update((d) => { d.exercises = d.exercises.filter((x) => x.id !== ex.id); return d; })}>
-                        Supprimer
-                      </Btn>
+                      <BoutonSupprimer texte onDelete={() => update((d) => { d.exercises = d.exercises.filter((x) => x.id !== ex.id); return d; })} />
                     )}
                   </div>
                 </div>
@@ -2625,9 +2656,7 @@ function BibliothequeTab({ data, update, setTab, isAdmin, currentUser, goToLibra
                     </button>
                     {isAdmin && <Btn small variant="ghost" onClick={() => setEditingCategoryId(c.id)}>Modifier</Btn>}
                     {isAdmin && (
-                      <Btn small variant="ghost" onClick={() => update((d) => { d.categories = d.categories.filter((x) => x.id !== c.id); return d; })}>
-                        Supprimer
-                      </Btn>
+                      <BoutonSupprimer texte onDelete={() => update((d) => { d.categories = d.categories.filter((x) => x.id !== c.id); return d; })} />
                     )}
                   </div>
                 </div>
@@ -3809,14 +3838,10 @@ function ExercicesTab({ data, update, isAdmin, currentUser, profile, onlyUserCre
             )}
             {isAdmin && <Btn small variant="ghost" onClick={() => setEditing(ex.id)}>Modifier</Btn>}
             {isAdmin && (
-              <Btn small variant="ghost" onClick={() => update((d) => { d.exercises = d.exercises.filter((x) => x.id !== ex.id); return d; })}>
-                Supprimer
-              </Btn>
+              <BoutonSupprimer texte onDelete={() => update((d) => { d.exercises = d.exercises.filter((x) => x.id !== ex.id); return d; })} />
             )}
             {!isAdmin && (ex.pending || ex.rejected) && ex.creatorUsername === currentUser && (
-              <Btn small variant="ghost" onClick={() => update((d) => { d.exercises = d.exercises.filter((x) => x.id !== ex.id); return d; })}>
-                Supprimer
-              </Btn>
+              <BoutonSupprimer texte onDelete={() => update((d) => { d.exercises = d.exercises.filter((x) => x.id !== ex.id); return d; })} />
             )}
           </div>
         </div>
@@ -4723,14 +4748,10 @@ function CategoriesTab({ data, update, isAdmin, currentUser, onlyUserCreated, in
             )}
             {isAdmin && <Btn small variant="ghost" onClick={() => setEditing(c.id)}>Modifier</Btn>}
             {isAdmin && (
-              <Btn small variant="ghost" onClick={() => update((d) => { d.categories = d.categories.filter((x) => x.id !== c.id); return d; })}>
-                Supprimer
-              </Btn>
+              <BoutonSupprimer texte onDelete={() => update((d) => { d.categories = d.categories.filter((x) => x.id !== c.id); return d; })} />
             )}
             {!isAdmin && (c.pending || c.rejected) && c.creatorUsername === currentUser && (
-              <Btn small variant="ghost" onClick={() => update((d) => { d.categories = d.categories.filter((x) => x.id !== c.id); return d; })}>
-                Supprimer
-              </Btn>
+              <BoutonSupprimer texte onDelete={() => update((d) => { d.categories = d.categories.filter((x) => x.id !== c.id); return d; })} />
             )}
           </div>
         </div>
@@ -5157,9 +5178,11 @@ function SpectaclesTab({ data, update, setTab, currentUser, isAdmin, onlyUserCre
                 {sc.type && <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">{sc.type}</span>}
               </div>
               {(isAdmin || (sc.creatorUsername === currentUser && (sc.pending || sc.rejected))) && (
-                <button onClick={() => update((d) => { d.showConcepts = d.showConcepts.filter((x) => x.id !== sc.id); return d; })}>
-                  <Trash2 size={14} color={COLORS.accent} />
-                </button>
+                <BoutonSupprimer
+                  taille={16}
+                  titre="Supprimer ce concept"
+                  onDelete={() => update((d) => { d.showConcepts = d.showConcepts.filter((x) => x.id !== sc.id); return d; })}
+                />
               )}
             </div>
             {sc.pending && (
@@ -6612,16 +6635,13 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
                 </div>
                 {(isAdmin || !p.creatorUsername || p.creatorUsername === currentUser) && (
                   <div className="flex justify-end mt-2">
-                    <button
-                      title="Supprimer cet ambassadeur"
-                      className="p-1 -m-1"
-                      onClick={() => {
+                    <BoutonSupprimer
+                      titre="Supprimer cet ambassadeur"
+                      onDelete={() => {
                         update((d) => { d.ambassadeurs = (d.ambassadeurs || []).filter((x) => x.id !== p.id); return d; });
                         showToast("Ambassadeur supprimé");
                       }}
-                    >
-                      <Trash2 size={22} color={COLORS.accent} />
-                    </button>
+                    />
                   </div>
                 )}
               </IndexCard>
@@ -6710,9 +6730,7 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
                 {expandedId === m.id ? "Masquer les mots" : `Voir les ${(m.mots || []).length} mots`}
               </button>
               {peutModifier(m) && (
-                <button onClick={() => supprimerManche(m.id)} title="Supprimer cette manche" className="p-1 -m-1">
-                  <Trash2 size={22} color={COLORS.accent} />
-                </button>
+                <BoutonSupprimer onDelete={() => supprimerManche(m.id)} titre="Supprimer cette manche" />
               )}
             </div>
             {expandedId === m.id && (
