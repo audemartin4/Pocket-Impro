@@ -6662,13 +6662,12 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
                   {m.creatorUsername ? ` · ${m.creatorUsername}${m.creatorTroupe ? ` — Troupe ${m.creatorTroupe}` : ""}` : ""}
                 </div>
               </div>
-              <div className="flex items-center gap-1 shrink-0">
+              {/* Empilés plutôt que côte à côte : le titre d'une manche est souvent long, et deux
+                  boutons en ligne le repoussaient sur trois lignes. */}
+              <div className="flex flex-col items-end gap-1 shrink-0">
                 <Btn small variant="ghost" onClick={() => setPlaying([m])}><Play size={13} /> Jouer</Btn>
                 {peutModifier(m) && (
-                  <>
-                    <button onClick={() => setEditingId(m.id)} title="Modifier"><Pencil size={15} color={COLORS.ink} /></button>
-                    <button onClick={() => supprimerManche(m.id)} title="Supprimer"><Trash2 size={15} color={COLORS.accent} /></button>
-                  </>
+                  <Btn small variant="ghost" onClick={() => setEditingId(m.id)}>Modifier</Btn>
                 )}
               </div>
             </div>
@@ -6700,14 +6699,22 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
                 Non validée par la modération — visible uniquement par toi.
               </p>
             )}
-            {/* Les mots restent masqués par défaut : la page se consulte aussi devant les joueurs. */}
-            <button
-              onClick={() => setExpandedId(expandedId === m.id ? null : m.id)}
-              className="text-xs mt-1"
-              style={{ fontFamily: FONT_MONO, color: COLORS.brass }}
-            >
-              {expandedId === m.id ? "Masquer les mots" : `Voir les ${(m.mots || []).length} mots`}
-            </button>
+            {/* Les mots restent masqués par défaut : la page se consulte aussi devant les joueurs.
+                La corbeille est reléguée en bas à droite, loin des boutons qu'on touche souvent. */}
+            <div className="flex items-center justify-between gap-2 mt-1">
+              <button
+                onClick={() => setExpandedId(expandedId === m.id ? null : m.id)}
+                className="text-xs"
+                style={{ fontFamily: FONT_MONO, color: COLORS.brass }}
+              >
+                {expandedId === m.id ? "Masquer les mots" : `Voir les ${(m.mots || []).length} mots`}
+              </button>
+              {peutModifier(m) && (
+                <button onClick={() => supprimerManche(m.id)} title="Supprimer cette manche" className="p-1 -m-1">
+                  <Trash2 size={22} color={COLORS.accent} />
+                </button>
+              )}
+            </div>
             {expandedId === m.id && (
               <ol className="text-sm mt-1 list-decimal list-inside" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
                 {(m.mots || []).map((mot, i) => <li key={i}>{mot}</li>)}
