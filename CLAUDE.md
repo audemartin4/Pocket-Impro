@@ -140,6 +140,17 @@ Distinctions à respecter, elles pilotent les générateurs :
 - **`actualDuration`** : durée resserrée que le générateur a réservée pour ce créneau, prioritaire sur
   la `duration` brute de la fiche. La conserver lors d'un remplacement de carte, sinon le total
   affiché dérive.
+- **Fiches proches** (`EXERCICES_PROCHES`) : paires de titres qui se recoupent (deux variantes du
+  même jeu). Les générateurs de **cours** et d'**échauffement** ne doivent jamais en enchaîner deux
+  à la suite — elles peuvent figurer dans le même programme, mais pas l'une derrière l'autre, et la
+  règle vaut aussi entre le dernier échauffement et le premier exercice. Le bouton **« Aléatoire »**
+  d'une carte, lui, reste libre de proposer la fiche voisine : c'est un choix explicite de
+  l'utilisateur. La table est indexée par titre (pas un champ de fiche) : elle est symétrique par
+  construction, n'exige aucune migration, et un titre encore absent de la bibliothèque est ignoré.
+  Renommer une fiche, en revanche, casse le lien sans rien signaler.
+- **`publics`** : tranches d'âge d'une fiche d'exercice (`"Enfants" | "Ados" | "Adultes" | "Senior"`,
+  même vocabulaire que `TRANCHES_AGE`). Renseigné sur le lot importé en septembre 2026 et **lu par
+  aucun écran pour l'instant** : il attend le « choix par tranche d'âge » annoncé sur l'accueil.
 - **Ambassadeur** (jeu de mime) : une **manche** (`ambassadeurManches`) est la brique réutilisable —
   un thème général, un titre, un niveau, des tranches d'âge, 5 mots ; c'est elle qui passe par la
   modération. Classement sur deux niveaux : `themeGeneral` vient de la liste **fermée**
