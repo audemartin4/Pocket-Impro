@@ -43,6 +43,16 @@ window.storage = {
     if (erreurLecture) throw erreurLecture;
 
     const distant = ligne ? ligne.value : null;
+    // Garde-fou : un onglet qui n'a jamais réussi à LIRE la base n'a rien à lui imposer. Sans ce
+    // test, une lecture ratée au démarrage (jeton expiré au réveil du téléphone, coupure réseau)
+    // faisait repartir l'appli d'une base vide, qu'elle réécrivait 500 ms plus tard par-dessus les
+    // données de toute la troupe : c'est ce qui a effacé la banque de manches d'ambassadeur et des
+    // plans de cours enregistrés. On adopte l'état de la base au lieu de l'écraser, et l'appli
+    // repart de là (useAppData ré-adopte la valeur renvoyée).
+    if (distant !== null && dernierEtatConnu === null) {
+      dernierEtatConnu = distant;
+      return { key, value: JSON.stringify(distant), shared: true };
+    }
     const aEcrire = distant === null ? local : fusionnerBlob(dernierEtatConnu, local, distant);
 
     const { error } = await supabase.from("app_data").upsert({ id: ROW_ID, value: aEcrire });

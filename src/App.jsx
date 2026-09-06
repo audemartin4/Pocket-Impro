@@ -1480,25 +1480,41 @@ function mergeMissingCategories(data) {
 function useAppData() {
   const [data, setData] = useState(null);
   const [loaded, setLoaded] = useState(false);
+  // Lecture initiale impossible (réseau, jeton expiré…) : on n'affiche PAS une bibliothèque vide,
+  // on le dit. Voir le commentaire du catch plus bas.
+  const [erreurChargement, setErreurChargement] = useState(false);
   // Dernière valeur qu'on vient d'envoyer nous-même, pour ignorer l'écho Realtime de notre propre
   // écriture (Supabase Realtime notifie aussi l'auteur du changement).
   const lastSentRef = useRef(null);
 
   useEffect(() => {
+    const pause = (ms) => new Promise((r) => setTimeout(r, ms));
     (async () => {
-      try {
-        const res = await window.storage.get("impro-data");
-        if (res && res.value) {
-          lastSentRef.current = res.value;
-          setData(mergeDetailedCategories(mergeMissingCategories(JSON.parse(res.value))));
-        } else {
-          setData(mergeDetailedCategories(mergeMissingCategories(SEED)));
+      // Au réveil d'un téléphone, la toute première requête part parfois avec un jeton périmé et
+      // revient en 401 avant que la session ne se rafraîchisse : on réessaie deux fois avant de
+      // conclure à une panne.
+      for (const attente of [0, 1000, 3000]) {
+        if (attente) await pause(attente);
+        try {
+          const res = await window.storage.get("impro-data");
+          if (res && res.value) {
+            lastSentRef.current = res.value;
+            setData(mergeDetailedCategories(mergeMissingCategories(JSON.parse(res.value))));
+          } else {
+            // Lecture réussie mais aucune ligne : c'est une vraie base vierge, le seed s'applique.
+            setData(mergeDetailedCategories(mergeMissingCategories(SEED)));
+          }
+          setLoaded(true);
+          return;
+        } catch {
+          // On ne repart JAMAIS du seed sur une lecture ratée : l'appli écrirait cet état inventé
+          // par-dessus les données de toute la troupe 500 ms plus tard (l'effet d'écriture se
+          // déclenche sur `data`). C'est ce qui a effacé la banque de manches d'ambassadeur et des
+          // plans de cours enregistrés. Mieux vaut un écran d'erreur qu'une bibliothèque vide.
         }
-      } catch {
-        setData(mergeDetailedCategories(mergeMissingCategories(SEED)));
-      } finally {
-        setLoaded(true);
       }
+      setErreurChargement(true);
+      setLoaded(true);
     })();
   }, []);
 
@@ -1545,7 +1561,7 @@ function useAppData() {
     return () => supabase.removeChannel(channel);
   }, [loaded]);
 
-  return [data, setData, loaded];
+  return [data, setData, loaded, erreurChargement];
 }
 
 /* ---------- Small UI atoms ---------- */
@@ -2171,7 +2187,7 @@ export default function ImproApp() {
     document.body.appendChild(script);
   }, []);
 
-  const [data, setData, loaded] = useAppData();
+  const [data, setData, loaded, erreurChargement] = useAppData();
   const [tab, setTabRaw] = useState(() => window.location.hash.slice(1) || "accueil");
   const tabRef = useRef(tab);
   useEffect(() => { tabRef.current = tab; }, [tab]);
@@ -2232,6 +2248,24 @@ export default function ImproApp() {
     };
   }, [data]);
 
+  // Lecture impossible : on le dit franchement plutôt que d'ouvrir une bibliothèque vide — qui
+  // serait aussitôt enregistrée par-dessus les données de la troupe (voir useAppData).
+  if (erreurChargement) {
+    return (
+      <div style={{ background: COLORS.paper, fontFamily: FONT_BODY }} className="min-h-screen flex items-center justify-center p-6">
+        <div className="max-w-sm text-center">
+          <p style={{ color: COLORS.ink, fontFamily: FONT_DISPLAY }} className="text-lg font-semibold mb-2">
+            Impossible de charger les données
+          </p>
+          <p style={{ color: COLORS.textSoft }} className="text-sm mb-4">
+            La connexion n'a pas abouti. Rien n'a été modifié : tes fiches, tes plans et tes manches
+            sont intacts. Vérifie ta connexion et réessaie.
+          </p>
+          <Btn variant="accent" onClick={() => window.location.reload()}>Réessayer</Btn>
+        </div>
+      </div>
+    );
+  }
   if (!loaded || !data) {
     return (
       <div style={{ background: COLORS.paper, fontFamily: FONT_BODY }} className="min-h-screen flex items-center justify-center">
