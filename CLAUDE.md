@@ -51,6 +51,30 @@ Conséquences pratiques :
 - Toute donnée métier se modifie via le helper `update((d) => …)`, qui fait un `structuredClone` du
   blob complet — on mute donc librement le clone.
 
+**Sauvegardes.** Tout tenant dans une seule ligne, une écriture fautive efface tout le monde : c'est
+arrivé trois fois (banque de manches vidée, plan de cours « Test03 » perdu). Un trigger
+`app_data_archive` archive donc, à la **première modification de chaque journée**, l'état d'avant
+cette modification, dans `app_data_sauvegardes` (30 jours de rétention, ~192 Ko par instantané). La
+table est fermée aux clés publiques et la fonction avale ses propres erreurs : une sauvegarde
+impossible ne doit jamais empêcher l'appli d'enregistrer. Pour restaurer une journée entière :
+
+```sql
+update app_data a set value = s.value
+from app_data_sauvegardes s
+where a.id = 'main' and s.row_id = 'main' and s.jour = '2026-09-06';
+```
+
+Pour ne remettre qu'une partie (recommandé si le reste a bougé depuis) :
+`... set value = a.value || jsonb_build_object('ambassadeurManches', s.value->'ambassadeurManches')`.
+
+**Cause connue des pertes** (corrigée le 2026-09-06) : quand la première lecture échouait — 401
+« JWT expired » au réveil d'un téléphone — `useAppData` repartait du `SEED`, et l'effet d'écriture
+renvoyait cette base inventée par-dessus le contenu réel 500 ms plus tard, sans aucun message.
+D'où deux règles à ne pas défaire : **ne jamais retomber sur le `SEED` après une lecture ratée**
+(seulement après une lecture réussie qui ne trouve aucune ligne), et **ne jamais écrire depuis un
+onglet qui n'a jamais réussi à lire** (`dernierEtatConnu === null` ⇒ on adopte la base, on ne
+l'écrase pas).
+
 ### 2. Les migrations de données, pas les fichiers de seed
 
 Les données de seed (`SEED`, `CATEGORIES_A_FUSIONNER`, `CATEGORIES_DETAILLEES`,
