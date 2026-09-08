@@ -3542,12 +3542,15 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
         <div className="grid grid-cols-2 gap-3 mb-4 mt-4">
           {stats.map((s) => (
             <button key={s.label} onClick={() => setTab(s.tab)} className="text-left">
+              {/* Modèle validé par Aude : le chiffre seul en haut, un filet, puis l'icône et le
+                  libellé côte à côte en bas. Le nombre se lit d'un coup d'œil, le libellé n'est
+                  plus qu'une légende. */}
               <IndexCard style={{ cursor: "pointer" }}>
-                {/* Icône calée à droite : le chiffre et son libellé se lisent alors sur une colonne
-                    bien nette à gauche, sans le décrochement que créait l'icône au-dessus d'eux. */}
-                <div className="flex justify-end"><s.icon size={16} color={COLORS.accent} /></div>
-                <div style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-2xl mt-1">{s.n}</div>
-                <div style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs uppercase">{s.label}</div>
+                <div style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-3xl font-semibold leading-none">{s.n}</div>
+                <div className="flex items-start gap-2 mt-3 pt-2" style={{ borderTop: `1px solid ${COLORS.cardEdge}` }}>
+                  <s.icon size={14} color={COLORS.accent} className="shrink-0 mt-0.5" />
+                  <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase leading-tight">{s.label}</span>
+                </div>
               </IndexCard>
             </button>
           ))}
