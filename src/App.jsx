@@ -3545,11 +3545,15 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
               {/* Modèle validé par Aude : le chiffre seul en haut, un filet, puis l'icône et le
                   libellé côte à côte en bas. Le nombre se lit d'un coup d'œil, le libellé n'est
                   plus qu'une légende. */}
-              <IndexCard style={{ cursor: "pointer" }}>
-                <div style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-3xl font-semibold leading-none">{s.n}</div>
-                <div className="flex items-start gap-2 mt-3 pt-2" style={{ borderTop: `1px solid ${COLORS.cardEdge}` }}>
+              {/* Hauteur pleine et marge annulée (l'écart vient déjà du `gap` de la grille) : sinon
+                  une tuile au libellé court est plus petite que sa voisine et se retrouve centrée
+                  dans sa case, ce qui décale les deux cartes d'une même ligne. */}
+              <IndexCard style={{ cursor: "pointer", height: "100%", marginBottom: 0 }}>
+                <div style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-2xl font-semibold leading-none">{s.n}</div>
+                <div className="flex items-start gap-2 mt-2 pt-2" style={{ borderTop: `1px solid ${COLORS.cardEdge}` }}>
                   <s.icon size={14} color={COLORS.accent} className="shrink-0 mt-0.5" />
-                  <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase leading-tight">{s.label}</span>
+                  {/* Le libellé garde le gris des légendes de toute l'appli ; seule l'icône est rouge. */}
+                  <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs uppercase leading-tight">{s.label}</span>
                 </div>
               </IndexCard>
             </button>
