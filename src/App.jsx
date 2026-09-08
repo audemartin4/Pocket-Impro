@@ -3079,7 +3079,9 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
     { label: "Catégories créées", n: data.categories.filter((c) => c.creatorUsername === currentUser).length, icon: Tag, tab: "categories-crees" },
     { label: "Exercices créés", n: data.exercises.filter((e) => e.creatorUsername === currentUser).length, icon: Users, tab: "exercices-crees" },
     { label: "Concepts de spectacle créés", n: data.showConcepts.filter((sc) => sc.creatorUsername === currentUser).length, icon: Theater, tab: "spectacles-crees" },
-    { label: "Manches d'ambassadeur créées", n: (data.ambassadeurManches || []).filter((m) => m.creatorUsername === currentUser).length, icon: Hand, tab: "ambassadeurs-crees" },
+    // Cet écran réunit les manches ET les assemblages, archivés compris : le compte doit donc porter
+    // sur les deux, sinon un ambassadeur archivé sans manche à soi se retrouve derrière un « 0 ».
+    { label: "Manches et ambassadeurs créés", n: (data.ambassadeurManches || []).filter((m) => m.creatorUsername === currentUser).length + (data.ambassadeurs || []).filter((a) => a.creatorUsername === currentUser).length, icon: Hand, tab: "ambassadeurs-crees" },
     { label: "Favoris", n: nbFavoris, icon: Star, tab: "favoris" },
   ];
 
@@ -6486,9 +6488,21 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
   // Sans ce filtre, chaque assemblage de chaque membre s'affichait chez tout le monde et la page
   // devenait vite illisible. Comme il ne passe par aucune modération, l'Admin n'a pas non plus à le
   // voir — même principe qu'une manche gardée pour soi.
-  const parties = currentUser
+  const mesParties = currentUser
     ? (data.ambassadeurs || []).filter((a) => a.creatorUsername === currentUser)
     : [];
+  // Archiver, c'est ranger : l'assemblage sort de la liste "prêts à jouer" sans être supprimé. On ne
+  // le retrouve plus que dans la section Ambassadeur du profil (cet écran-ci, `onlyUserCreated`) et
+  // sur le cours enregistré, qui garde de toute façon ses propres manches (`ambassadeurMancheIds`).
+  const parties = onlyUserCreated ? mesParties : mesParties.filter((a) => !a.archive);
+  const archiverPartie = (p, archive) => {
+    update((d) => {
+      const i = (d.ambassadeurs || []).findIndex((x) => x.id === p.id);
+      if (i >= 0) d.ambassadeurs[i] = { ...d.ambassadeurs[i], archive };
+      return d;
+    });
+    showToast(archive ? "Ambassadeur archivé — tu le retrouves dans ton profil" : "Ambassadeur remis dans la liste ✓");
+  };
 
   // Crée une manche et renvoie son id, pour que l'assemblage puisse la placer aussitôt dans son
   // emplacement. Comme pour les exercices, une manche créée par un compte non-admin reste "pending"
@@ -6573,9 +6587,9 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
       )}
       <SectionHeader
         icon={Hand}
-        title={onlyUserCreated ? "Manches d'ambassadeur créées" : catalogue ? "Toutes les manches" : "Ambassadeurs"}
+        title={onlyUserCreated ? "Mes manches et ambassadeurs" : catalogue ? "Toutes les manches" : "Ambassadeurs"}
         subtitle={onlyUserCreated
-          ? "Tes manches proposées, quel que soit leur statut de validation."
+          ? "Tes manches proposées, quel que soit leur statut de validation, et tes ambassadeurs montés — archivés compris."
           : catalogue
             ? "Toutes les manches de 5 mots disponibles pour monter un ambassadeur. Les mots restent masqués tant que tu ne les ouvres pas."
             : "Le jeu de mime : 3 manches de 5 mots ou phrases à faire deviner. Monte ton ambassadeur, puis fais défiler les mots sur ton téléphone."}
@@ -6781,7 +6795,11 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
 
       {parties.length > 0 && (
         <>
-          <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs uppercase">Ambassadeurs prêts à jouer</span>
+          {/* Sur le profil, la liste contient aussi les archivés : le titre ne peut plus promettre
+              qu'ils sont tous prêts à jouer. */}
+          <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs uppercase">
+            {onlyUserCreated ? "Mes ambassadeurs" : "Ambassadeurs prêts à jouer"}
+          </span>
           {parties.map((p) => {
             const manches = manchesDeLaPartie(p);
             const manquantes = (p.mancheIds || []).length - manches.length;
@@ -6795,15 +6813,19 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
                     <div style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
                       {/* Plus de « par untel » : cette liste ne contient que ses propres assemblages. */}
                       {manches.length} manche(s)
-                      {manquantes > 0 ? ` · ${manquantes} n'${manquantes === 1 ? "est" : "sont"} plus disponible${manquantes === 1 ? "" : "s"} dans la bibliothèque` : ""}
+                      {manquantes > 0 ? ` · ${manquantes} ${manquantes === 1 ? "n'est" : "ne sont"} plus disponible${manquantes === 1 ? "" : "s"} dans la bibliothèque` : ""}
+                      {p.archive ? " · archivé" : ""}
                     </div>
                   </div>
                   <div className="shrink-0">
                     <Btn small variant="accent" disabled={manches.length === 0} onClick={() => setPlaying(manches)}><Play size={13} /> Jouer</Btn>
                   </div>
                 </div>
-                {/* Chacun ne voit que ses propres assemblages : la corbeille est donc toujours là. */}
-                <div className="flex justify-end mt-2">
+                {/* Chacun ne voit que ses propres assemblages : archivage et corbeille sont toujours là. */}
+                <div className="flex justify-end items-center gap-2 mt-2">
+                  <Btn small variant="ghost" onClick={() => archiverPartie(p, !p.archive)}>
+                    {p.archive ? "Remettre dans la liste" : "Archiver"}
+                  </Btn>
                   <BoutonSupprimer
                     titre="Supprimer cet ambassadeur"
                     onDelete={() => {
