@@ -1855,7 +1855,7 @@ function SearchableMultiSelect({ allOptions, selected, onChange, placeholder = "
       />
       {open && (
         <div
-          className="absolute z-20 left-0 right-0 mt-1 rounded-sm max-h-48 overflow-y-auto"
+          className="absolute z-20 left-0 right-0 mt-1 rounded-sm max-h-48 overflow-y-auto liste-defilante"
           style={{
             background: "#fff",
             border: `1px solid ${COLORS.cardEdge}`,
@@ -1895,11 +1895,13 @@ function SearchableMultiSelect({ allOptions, selected, onChange, placeholder = "
 
 /* Menu déroulant avec recherche, sélection UNIQUE (pas de tags) — ex. filtre thématique. */
 /**
- * `maxVisible` limite la HAUTEUR de la liste à ce nombre de lignes : on n'en voit que trois, on
- * fait défiler pour le reste — rien n'est retiré du choix. `resetLabel` à `null` retire la ligne
- * « Tous », qui n'a de sens que là où le champ sert de filtre.
+ * `maxVisible` limite la HAUTEUR de la liste à ce nombre de lignes : on n'en voit que quelques-unes,
+ * on fait défiler pour le reste — rien n'est retiré du choix. `resetLabel` à `null` retire la ligne
+ * « Tous », qui n'a de sens que là où le champ sert de filtre. `proposerAvantSaisie` à `false`
+ * n'ouvre la liste qu'une fois une lettre tapée : sur un champ où l'on écrit son propre texte, se
+ * faire recouvrir par deux cents propositions dès le clic est plus gênant qu'utile.
  */
-function SearchableSingleSelect({ allOptions, value, onChange, placeholder = "Chercher…", allowCreate = false, onCreate, createLabel, maxLength, maxVisible, resetLabel = "Tous" }) {
+function SearchableSingleSelect({ allOptions, value, onChange, placeholder = "Chercher…", allowCreate = false, onCreate, createLabel, maxLength, maxVisible, resetLabel = "Tous", proposerAvantSaisie = true }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const filtered = [...allOptions].sort((a, b) => a.localeCompare(b, "fr")).filter((o) => matchesKeywords(query, o));
@@ -1920,9 +1922,9 @@ function SearchableSingleSelect({ allOptions, value, onChange, placeholder = "Ch
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         placeholder={value || placeholder}
       />
-      {open && (
+      {open && (proposerAvantSaisie || trimmedQuery) && (
         <div
-          className="absolute z-20 left-0 right-0 mt-1 rounded-sm max-h-48 overflow-y-auto"
+          className="absolute z-20 left-0 right-0 mt-1 rounded-sm max-h-48 overflow-y-auto liste-defilante"
           style={{
             background: "#fff",
             border: `1px solid ${COLORS.cardEdge}`,
@@ -6013,8 +6015,9 @@ function AmbassadeurMancheForm({ initial, data, onSave, onCancel, saveLabel = "E
       </div>
       {/* Le titre, lui, s'écrit librement — c'est ce que les équipes doivent deviner en fin de
           manche. Le sélecteur sert surtout à voir ce qui existe déjà et à ne pas refaire deux fois
-          la même manche : trois propositions suffisent pour ça, et la ligne « Tous » n'a aucun sens
-          quand on écrit un titre. */}
+          la même manche : rien ne s'affiche tant qu'aucune lettre n'est tapée (on vient ici pour
+          écrire son titre, pas pour se faire recouvrir par deux cents propositions), puis cinq
+          propositions à l'œil. La ligne « Tous » n'aurait ici aucun sens. */}
       <Field label="Titre de la manche">
         <SearchableSingleSelect
           allOptions={themesExistants}
@@ -6025,8 +6028,9 @@ function AmbassadeurMancheForm({ initial, data, onSave, onCancel, saveLabel = "E
           createLabel={(q) => `+ Créer le titre "${q}"`}
           placeholder="Chercher un titre existant ou en écrire un…"
           maxLength={AMBASSADEUR_LONGUEUR_MAX}
-          maxVisible={3}
+          maxVisible={5}
           resetLabel={null}
+          proposerAvantSaisie={false}
         />
       </Field>
       <div className="grid grid-cols-2 gap-2">
@@ -8420,9 +8424,9 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
           Durée totale estimée : {tempsTotal} min (feedbacks inclus {DEBRIEF_MIN} minutes)
         </p>
         <Field label="Objectif pédagogique (optionnel)">
-          {/* Trois objectifs à l'œil, le reste au défilement : la liste complète poussait le bouton
+          {/* Cinq objectifs à l'œil, le reste au défilement : la liste complète poussait le bouton
               "Créer" hors de l'écran sur téléphone. */}
-          <SearchableMultiSelect allOptions={familiesObjectifsWithCustom(data)} selected={objectifs} onChange={setObjectifs} maxVisible={3} />
+          <SearchableMultiSelect allOptions={familiesObjectifsWithCustom(data)} selected={objectifs} onChange={setObjectifs} maxVisible={5} />
         </Field>
         <Btn variant="accent" onClick={generate}><Sparkles size={14} /> Créer</Btn>
       </IndexCard>

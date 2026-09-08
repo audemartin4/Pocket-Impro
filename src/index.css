@@ -5,3 +5,24 @@
 body {
   margin: 0;
 }
+
+/* Listes déroulantes de recherche (titre de manche, objectif pédagogique…) : elles ne montrent que
+   quelques propositions et se font défiler pour le reste. La barre de défilement par défaut est fine
+   et, sur téléphone, elle s'efface au bout d'une seconde — rien n'indiquait alors qu'il y avait
+   autre chose à voir. On la force donc : plus large, toujours affichée, aux couleurs de l'appli
+   (laiton sur papier). */
+.liste-defilante {
+  scrollbar-width: auto;
+  scrollbar-color: #a9812f #ede6d6;
+}
+.liste-defilante::-webkit-scrollbar {
+  width: 12px;
+}
+.liste-defilante::-webkit-scrollbar-track {
+  background: #ede6d6;
+}
+.liste-defilante::-webkit-scrollbar-thumb {
+  background: #a9812f;
+  border-radius: 6px;
+  border: 2px solid #ede6d6;
+}
