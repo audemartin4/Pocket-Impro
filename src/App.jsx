@@ -3082,11 +3082,15 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
 
   const nbFavoris = data.exercises.filter((e) => e.favorite).length + data.categories.filter((c) => c.favorite).length;
 
+  // L'ordre compte : les tuiles se rangent sur deux colonnes, de gauche à droite puis ligne par
+  // ligne. Aude veut lire une colonne "ce que j'ai préparé" (plans de cours, exercices, manches et
+  // ambassadeurs) et une colonne "le reste" (spectacles, catégories, favoris) — d'où l'alternance
+  // ci-dessous, à conserver si on ajoute une tuile.
   const stats = [
     { label: "Plans de cours enregistrés", n: data.coursePlans.length, icon: ClipboardList, tab: "plans" },
     { label: "Spectacles enregistrés", n: data.spectaclePlans.length, icon: Theater, tab: "plans" },
-    { label: "Catégories créées", n: data.categories.filter((c) => c.creatorUsername === currentUser).length, icon: Tag, tab: "categories-crees" },
     { label: "Exercices créés", n: data.exercises.filter((e) => e.creatorUsername === currentUser).length, icon: Users, tab: "exercices-crees" },
+    { label: "Catégories créées", n: data.categories.filter((c) => c.creatorUsername === currentUser).length, icon: Tag, tab: "categories-crees" },
     ...(CONCEPTS_SPECTACLE_VISIBLES
       ? [{ label: "Concepts de spectacle créés", n: data.showConcepts.filter((sc) => sc.creatorUsername === currentUser).length, icon: Theater, tab: "spectacles-crees" }]
       : []),
