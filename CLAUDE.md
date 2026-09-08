@@ -18,9 +18,9 @@ Prérequis : copier `.env.example` vers `.env` et y renseigner `VITE_SUPABASE_UR
 Sans ces variables, l'appli démarre mais ne peut ni lire ni écrire les données.
 
 **En développement, toujours poser `VITE_APP_DATA_ID=dev`** dans son `.env` : sans elle, le serveur
-de dev lit ET écrit dans `main`, c'est-à-dire dans les données réelles de la troupe. Un onglet de
-test resté ouvert y a détruit un plan de cours enregistré le 2026-08-28. La ligne `dev` est une copie
-de `main`, à rafraîchir au besoin :
+de dev lit ET écrit dans `main`, c'est-à-dire dans les données réelles de la troupe — toute fiche de
+test, toute manipulation d'écran s'y enregistre pour tout le monde. La ligne `dev` est une copie de
+`main`, à rafraîchir au besoin :
 `insert into app_data (id, value) select 'dev', value from app_data where id='main'
  on conflict (id) do update set value = excluded.value;`
 
@@ -106,7 +106,9 @@ manuelle faite ensuite par un utilisateur dans l'interface.
 charge le profil associé (`username`, `troupe`, `ville`, `is_admin`) depuis la table `profiles`.
 C'est distinct des données métier du blob.
 
-Deux tables Supabase seulement : `app_data` (le blob) et `profiles`. **Chaque opération SQL réellement
+Deux tables Supabase seulement côté appli : `app_data` (le blob) et `profiles` — la troisième,
+`app_data_sauvegardes`, n'est alimentée que par un trigger et reste fermée aux clés publiques (voir
+« Sauvegardes »). **Chaque opération SQL réellement
 effectuée par l'appli a besoin d'une policy RLS correspondante** (SELECT/INSERT/UPDATE/DELETE) — une
 policy manquante fait échouer l'opération de façon parfois silencieuse (`window.storage.set` est
 appelé avec `.catch(() => {})`). En cas de comportement « ça ne sauvegarde pas », vérifier
@@ -123,21 +125,22 @@ Les fiches créées par la communauté ont des drapeaux `pending` / `rejected`. 
 
 Choisir le mauvais des deux est le piège classique de ce fichier.
 
-### 5. `App.jsx` : un seul fichier de ~8400 lignes
+### 5. `App.jsx` : un seul fichier de ~10 800 lignes
 
-Volontairement monolithique (héritage de l'artifact). Organisation interne :
+Volontairement monolithique (héritage de l'artifact). Les numéros de ligne ci-dessous bougent à
+chaque ajout : chercher plutôt le nom. Organisation interne :
 
 - **Constantes de domaine** en haut : `COLORS`, polices, `NIVEAUX`, `ENERGIES`, `FORMATS_JEU`,
-  `SECTIONS_EXERCICE`, familles d'objectifs, puis les gros tableaux de seed.
-- **Composants UI réutilisables** (~l.1275-1830) : `IndexCard`, `Btn`, `Field`, `ExercisePicker`,
-  `CategoryPicker`, etc.
+  `SECTIONS_EXERCICE`, `EXERCICES_PROCHES`, familles d'objectifs, puis les gros tableaux de seed.
+- **Composants UI réutilisables** (à partir de `/* Small UI atoms */`) : `IndexCard`, `Btn`, `Field`,
+  `SearchableMultiSelect`, `SearchableSingleSelect`, `ExercisePicker`, `CategoryPicker`, etc.
 - **Cartes de programme** : `ProgrammeExerciseCard` / `ProgrammeCategoryCard` servent les trois
   écrans qui affichent un programme (générateur de cours, générateur de spectacle, plans
   enregistrés). Ce qui diffère d'un écran à l'autre passe par des emplacements (`star`, `badges`,
   `actions`, `footerRight`…), jamais par une variante interne : toute retouche de présentation se
   fait donc une seule fois. Le glisser-déposer (`useDragReorder` + `data-drop-card`) est branché
   par l'écran appelant, pas par la carte.
-- **`ImproApp`** (l.1843) : racine. La navigation est un `useState` `tab` synchronisé avec
+- **`ImproApp`** : racine. La navigation est un `useState` `tab` synchronisé avec
   `window.location.hash` et l'historique du navigateur ; le rendu est une longue liste de
   `{tab === "…" && <XxxTab … />}`.
 - **Un composant `XxxTab` par écran**, puis les générateurs (`buildCours`, `buildSpectacle`) et les
@@ -181,7 +184,12 @@ Distinctions à respecter, elles pilotent les générateurs :
   `AMBASSADEUR_THEMES_GENERAUX` (les utilisateurs n'en créent pas), tandis que le **titre** est le
   champ `theme` (nom historique) — libre, créé à la volée, et c'est LUI le secret de jeu.
   Les deux sont **facultatifs** : afficher une manche par son nom passe par `titreManche()`. Un
-  **ambassadeur** (`ambassadeurs`) n'est qu'un assemblage de 3 ids de manches, donc pas de modération.
+  **ambassadeur** (`ambassadeurs`) n'est qu'un assemblage de 3 ids de manches, donc pas de
+  modération — et, justement parce qu'il ne regarde que celui qui l'a monté pour son cours, il
+  **n'est visible que de son créateur** (`creatorUsername`), Admin compris. Son drapeau `archive` le
+  range : il quitte la liste « Ambassadeurs prêts à jouer » et ne reste que dans la section
+  Ambassadeur du profil. Les plans de cours, eux, gardent leurs propres manches
+  (`ambassadeurMancheIds`) et ne dépendent pas des assemblages.
   Le **titre est un secret de jeu** : les équipes doivent le deviner en fin de manche, il ne doit
   jamais s'afficher sur un écran visible des joueurs (écran de jeu, listes publiques) — seulement
   dans le sommaire du maître du jeu, derrière un bouton de révélation, ou au moment de préparer.
@@ -195,6 +203,15 @@ Distinctions à respecter, elles pilotent les générateurs :
   Toute liste de manches passe par `mancheVisiblePar()` / `manchesJouables()` : les lire directement
   dans `data.ambassadeurManches` laisse fuiter les manches privées ou sous embargo des autres (mots,
   thèmes, suggestions de doublon).
+
+### Écrans mis de côté
+
+`CONCEPTS_SPECTACLE_VISIBLES` (à `false` depuis le 2026-09-06) masque **les concepts de spectacle** :
+la carte de la bibliothèque, la tuile du profil et les deux écrans `spectacles` /
+`spectacles-crees`, qui ne répondent plus (une adresse tapée à la main affiche une page vide, comme
+n'importe quelle adresse inconnue). Rien n'est supprimé : ni `SpectaclesTab`, ni les fiches en base,
+ni les blocs Admin (modération et « Validés » continuent volontairement de les lister). Repasser la
+constante à `true` remet tout en place.
 
 ## Conventions
 
