@@ -6481,9 +6481,14 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
   const manchesSansTheme = manchesVisibles.filter((m) => !m.themeGeneral).length;
   const ageRenseigne = manchesVisibles.some((m) => (m.tranchesAge || []).length > 0);
   const dispoPourPartie = [...manchesJouables(data, currentUser, isAdmin), ...manchesLocales];
-  const parties = onlyUserCreated
+  // Un ambassadeur n'est qu'un assemblage personnel de trois manches, monté pour un cours précis :
+  // il ne regarde que celui qui l'a monté, sur tous les écrans (montage, mes créations, catalogue).
+  // Sans ce filtre, chaque assemblage de chaque membre s'affichait chez tout le monde et la page
+  // devenait vite illisible. Comme il ne passe par aucune modération, l'Admin n'a pas non plus à le
+  // voir — même principe qu'une manche gardée pour soi.
+  const parties = currentUser
     ? (data.ambassadeurs || []).filter((a) => a.creatorUsername === currentUser)
-    : (data.ambassadeurs || []);
+    : [];
 
   // Crée une manche et renvoie son id, pour que l'assemblage puisse la placer aussitôt dans son
   // emplacement. Comme pour les exercices, une manche créée par un compte non-admin reste "pending"
@@ -6788,26 +6793,25 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
                     {/* Pas de rappel des thèmes ici : ils sont à deviner, et cette page peut être
                         consultée devant les joueurs. Le nom de la partie suffit à s'y retrouver. */}
                     <div style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
+                      {/* Plus de « par untel » : cette liste ne contient que ses propres assemblages. */}
                       {manches.length} manche(s)
                       {manquantes > 0 ? ` · ${manquantes} n'${manquantes === 1 ? "est" : "sont"} plus disponible${manquantes === 1 ? "" : "s"} dans la bibliothèque` : ""}
-                      {p.creatorUsername ? ` · par ${p.creatorUsername}` : ""}
                     </div>
                   </div>
                   <div className="shrink-0">
                     <Btn small variant="accent" disabled={manches.length === 0} onClick={() => setPlaying(manches)}><Play size={13} /> Jouer</Btn>
                   </div>
                 </div>
-                {(isAdmin || !p.creatorUsername || p.creatorUsername === currentUser) && (
-                  <div className="flex justify-end mt-2">
-                    <BoutonSupprimer
-                      titre="Supprimer cet ambassadeur"
-                      onDelete={() => {
-                        update((d) => { d.ambassadeurs = (d.ambassadeurs || []).filter((x) => x.id !== p.id); return d; });
-                        showToast("Ambassadeur supprimé");
-                      }}
-                    />
-                  </div>
-                )}
+                {/* Chacun ne voit que ses propres assemblages : la corbeille est donc toujours là. */}
+                <div className="flex justify-end mt-2">
+                  <BoutonSupprimer
+                    titre="Supprimer cet ambassadeur"
+                    onDelete={() => {
+                      update((d) => { d.ambassadeurs = (d.ambassadeurs || []).filter((x) => x.id !== p.id); return d; });
+                      showToast("Ambassadeur supprimé");
+                    }}
+                  />
+                </div>
               </IndexCard>
             );
           })}
