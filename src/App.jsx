@@ -1816,7 +1816,11 @@ function MultiTagPicker({ allOptions, selected, onChange, color = COLORS.brass, 
 }
 
 /* Sélecteur multiple avec recherche dans un menu déroulant (pour les objectifs des générateurs). */
-function SearchableMultiSelect({ allOptions, selected, onChange, placeholder = "Chercher un objectif…", onCreate, createLabel }) {
+// Hauteur d'une ligne de proposition : padding vertical (2 × 6 px) + interligne du `text-sm`.
+// Sert à n'afficher qu'un nombre voulu de propositions à l'œil, le reste venant au défilement.
+const HAUTEUR_LIGNE_LISTE = 32;
+
+function SearchableMultiSelect({ allOptions, selected, onChange, placeholder = "Chercher un objectif…", onCreate, createLabel, maxVisible }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const sortedOptions = [...allOptions].sort((a, b) => a.localeCompare(b, "fr"));
@@ -1852,7 +1856,12 @@ function SearchableMultiSelect({ allOptions, selected, onChange, placeholder = "
       {open && (
         <div
           className="absolute z-20 left-0 right-0 mt-1 rounded-sm max-h-48 overflow-y-auto"
-          style={{ background: "#fff", border: `1px solid ${COLORS.cardEdge}`, boxShadow: "0 6px 14px rgba(0,0,0,0.12)" }}
+          style={{
+            background: "#fff",
+            border: `1px solid ${COLORS.cardEdge}`,
+            boxShadow: "0 6px 14px rgba(0,0,0,0.12)",
+            ...(maxVisible ? { maxHeight: maxVisible * HAUTEUR_LIGNE_LISTE } : null),
+          }}
         >
           {filtered.length === 0 && !query.trim() && (
             <div className="px-3 py-2 text-sm" style={{ color: COLORS.textSoft, fontFamily: FONT_BODY }}>Tape pour chercher un objectif…</div>
@@ -1886,15 +1895,14 @@ function SearchableMultiSelect({ allOptions, selected, onChange, placeholder = "
 
 /* Menu déroulant avec recherche, sélection UNIQUE (pas de tags) — ex. filtre thématique. */
 /**
- * `maxOptions` limite le nombre de propositions affichées (le reste se trouve en tapant quelques
- * lettres de plus) ; `resetLabel` à `null` retire la ligne « Tous », qui n'a de sens que là où le
- * champ sert de filtre.
+ * `maxVisible` limite la HAUTEUR de la liste à ce nombre de lignes : on n'en voit que trois, on
+ * fait défiler pour le reste — rien n'est retiré du choix. `resetLabel` à `null` retire la ligne
+ * « Tous », qui n'a de sens que là où le champ sert de filtre.
  */
-function SearchableSingleSelect({ allOptions, value, onChange, placeholder = "Chercher…", allowCreate = false, onCreate, createLabel, maxLength, maxOptions, resetLabel = "Tous" }) {
+function SearchableSingleSelect({ allOptions, value, onChange, placeholder = "Chercher…", allowCreate = false, onCreate, createLabel, maxLength, maxVisible, resetLabel = "Tous" }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
-  const trouvees = [...allOptions].sort((a, b) => a.localeCompare(b, "fr")).filter((o) => matchesKeywords(query, o));
-  const filtered = maxOptions ? trouvees.slice(0, maxOptions) : trouvees;
+  const filtered = [...allOptions].sort((a, b) => a.localeCompare(b, "fr")).filter((o) => matchesKeywords(query, o));
   const trimmedQuery = query.trim();
   // Insensible casse/accents/pluriel (voir tagOverlap) : évite de proposer "+ Ajouter" pour une
   // variante d'une option déjà existante.
@@ -1915,7 +1923,12 @@ function SearchableSingleSelect({ allOptions, value, onChange, placeholder = "Ch
       {open && (
         <div
           className="absolute z-20 left-0 right-0 mt-1 rounded-sm max-h-48 overflow-y-auto"
-          style={{ background: "#fff", border: `1px solid ${COLORS.cardEdge}`, boxShadow: "0 6px 14px rgba(0,0,0,0.12)" }}
+          style={{
+            background: "#fff",
+            border: `1px solid ${COLORS.cardEdge}`,
+            boxShadow: "0 6px 14px rgba(0,0,0,0.12)",
+            ...(maxVisible ? { maxHeight: maxVisible * HAUTEUR_LIGNE_LISTE } : null),
+          }}
         >
           {resetLabel && (
             <button
@@ -6012,7 +6025,7 @@ function AmbassadeurMancheForm({ initial, data, onSave, onCancel, saveLabel = "E
           createLabel={(q) => `+ Créer le titre "${q}"`}
           placeholder="Chercher un titre existant ou en écrire un…"
           maxLength={AMBASSADEUR_LONGUEUR_MAX}
-          maxOptions={3}
+          maxVisible={3}
           resetLabel={null}
         />
       </Field>
@@ -8407,7 +8420,9 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
           Durée totale estimée : {tempsTotal} min (feedbacks inclus {DEBRIEF_MIN} minutes)
         </p>
         <Field label="Objectif pédagogique (optionnel)">
-          <SearchableMultiSelect allOptions={familiesObjectifsWithCustom(data)} selected={objectifs} onChange={setObjectifs} />
+          {/* Trois objectifs à l'œil, le reste au défilement : la liste complète poussait le bouton
+              "Créer" hors de l'écran sur téléphone. */}
+          <SearchableMultiSelect allOptions={familiesObjectifsWithCustom(data)} selected={objectifs} onChange={setObjectifs} maxVisible={3} />
         </Field>
         <Btn variant="accent" onClick={generate}><Sparkles size={14} /> Créer</Btn>
       </IndexCard>
