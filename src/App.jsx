@@ -3543,7 +3543,9 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
           {stats.map((s) => (
             <button key={s.label} onClick={() => setTab(s.tab)} className="text-left">
               <IndexCard style={{ cursor: "pointer" }}>
-                <s.icon size={16} color={COLORS.accent} />
+                {/* Icône calée à droite : le chiffre et son libellé se lisent alors sur une colonne
+                    bien nette à gauche, sans le décrochement que créait l'icône au-dessus d'eux. */}
+                <div className="flex justify-end"><s.icon size={16} color={COLORS.accent} /></div>
                 <div style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-2xl mt-1">{s.n}</div>
                 <div style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs uppercase">{s.label}</div>
               </IndexCard>
