@@ -6416,6 +6416,10 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
   const [rechercheCatalogue, setRechercheCatalogue] = useState("");
   const [filtreNiveau, setFiltreNiveau] = useState("");
   const [filtreAge, setFiltreAge] = useState("");
+  // Section "Mes manches et ambassadeurs" du profil : deux listes de nature différente (des manches
+  // proposées à la communauté d'un côté, ses propres assemblages de l'autre). On en montre une à la
+  // fois plutôt que de les empiler.
+  const [vueProfil, setVueProfil] = useState("manches"); // "manches" | "ambassadeurs"
   // Manches créées sans compte : elles ne partent pas dans la base commune (rien à modérer, aucun
   // auteur à qui les rattacher). Elles vivent le temps de la visite, pour monter et jouer une
   // partie tout de suite. Voir le message affiché dans l'assembleur. Elles sont rangées avec le
@@ -6495,6 +6499,11 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
   // le retrouve plus que dans la section Ambassadeur du profil (cet écran-ci, `onlyUserCreated`) et
   // sur le cours enregistré, qui garde de toute façon ses propres manches (`ambassadeurMancheIds`).
   const parties = onlyUserCreated ? mesParties : mesParties.filter((a) => !a.archive);
+  // Sur le profil, l'onglet choisi décide ; sur le catalogue, la liste n'apparaît qu'une fois entré
+  // dans un rayon (ou en cherchant) ; sur la page Ambassadeur, jamais.
+  const montreLesManches = onlyUserCreated
+    ? vueProfil === "manches"
+    : !!(catalogue && (filtreTheme || rechercheCatalogue.trim()));
   const archiverPartie = (p, archive) => {
     update((d) => {
       const i = (d.ambassadeurs || []).findIndex((x) => x.id === p.id);
@@ -6594,6 +6603,32 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
             ? "Toutes les manches de 5 mots disponibles pour monter un ambassadeur. Les mots restent masqués tant que tu ne les ouvres pas."
             : "Le jeu de mime : 3 manches de 5 mots ou phrases à faire deviner. Monte ton ambassadeur, puis fais défiler les mots sur ton téléphone."}
       />
+
+      {/* Deux listes, une à la fois : les manches qu'on a proposées, ou les ambassadeurs qu'on a
+          montés (archivés compris). Les compteurs évitent d'avoir à cliquer pour savoir si l'autre
+          onglet est vide. */}
+      {onlyUserCreated && (
+        <div className="flex flex-wrap gap-2 mb-3">
+          {[
+            { cle: "manches", label: `Manches (${mesManches.length})` },
+            { cle: "ambassadeurs", label: `Ambassadeurs (${parties.length})` },
+          ].map((v) => (
+            <button
+              key={v.cle}
+              onClick={() => setVueProfil(v.cle)}
+              className="px-3 py-1 rounded-full text-xs"
+              style={{
+                fontFamily: FONT_BODY,
+                background: vueProfil === v.cle ? COLORS.brass : "transparent",
+                color: vueProfil === v.cle ? COLORS.ink : COLORS.textSoft,
+                border: `1px solid ${COLORS.cardEdge}`,
+              }}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {!onlyUserCreated && !catalogue && (
         <IndexCard
@@ -6793,7 +6828,11 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
         />
       )}
 
-      {parties.length > 0 && (
+      {onlyUserCreated && vueProfil === "ambassadeurs" && parties.length === 0 && (
+        <Empty text="Tu n'as pas encore monté d'ambassadeur." />
+      )}
+
+      {parties.length > 0 && (!onlyUserCreated || vueProfil === "ambassadeurs") && (
         <>
           {/* Sur le profil, la liste contient aussi les archivés : le titre ne peut plus promettre
               qu'ils sont tous prêts à jouer. */}
@@ -6840,8 +6879,7 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
         </>
       )}
 
-      {/* Sur le catalogue, la liste n'apparaît qu'une fois entré dans un rayon (ou en cherchant). */}
-      {(onlyUserCreated || (catalogue && (filtreTheme || rechercheCatalogue.trim()))) && mesManches.length === 0 && (
+      {montreLesManches && mesManches.length === 0 && (
         <Empty text={
           onlyUserCreated ? "Tu n'as pas encore créé de manche d'ambassadeur."
             // Distinguer les deux vides : un catalogue encore vide n'est pas un filtre trop étroit.
@@ -6850,7 +6888,7 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
         } />
       )}
 
-      {(onlyUserCreated || (catalogue && (filtreTheme || rechercheCatalogue.trim()))) && mesManches.map((m) => (
+      {montreLesManches && mesManches.map((m) => (
         editingId === m.id ? (
           <AmbassadeurMancheForm
             key={m.id}
@@ -10041,11 +10079,15 @@ function ValidesTab({ data, isAdmin, setTab }) {
   const validExercises = data.exercises.filter((e) => !e.pending && !e.rejected && e.creatorUsername);
   const validCategories = data.categories.filter((c) => !c.pending && !c.rejected && c.creatorUsername);
   const validConcepts = data.showConcepts.filter((sc) => !sc.pending && !sc.rejected);
+  // Une manche gardée pour soi (`prive`) ne passe jamais par la modération : elle n'a rien à faire
+  // dans un suivi des propositions validées, et ses mots ne regardent que son auteur.
+  const validManches = (data.ambassadeurManches || []).filter((m) => !m.pending && !m.rejected && !m.prive && m.creatorUsername);
 
   const q = query.trim();
   const shownExercises = q ? validExercises.filter((e) => matchesKeywords(q, e.title)) : validExercises;
   const shownCategories = q ? validCategories.filter((c) => matchesKeywords(q, c.name)) : validCategories;
   const shownConcepts = q ? validConcepts.filter((sc) => matchesKeywords(q, sc.theme)) : validConcepts;
+  const shownManches = q ? validManches.filter((m) => matchesKeywords(q, titreManche(m), m.themeGeneral)) : validManches;
 
   const creatorLabel = (item) => `${item.creatorUsername} — ${item.creatorTroupe ? `Troupe ${item.creatorTroupe}` : "Sans troupe renseignée"}`;
 
@@ -10065,7 +10107,7 @@ function ValidesTab({ data, isAdmin, setTab }) {
       <SectionHeader
         icon={Check}
         title="Validés"
-        subtitle="Exercices, catégories et concepts de spectacle proposés par les troupes et validés par la modération."
+        subtitle="Exercices, catégories, concepts de spectacle et manches d'ambassadeur proposés par les troupes et validés par la modération."
       />
       <Field label="Chercher parmi les fiches validées">
         <input className={inputClass} style={inputStyle} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Nom de la fiche…" />
@@ -10093,6 +10135,16 @@ function ValidesTab({ data, isAdmin, setTab }) {
       <IndexCard>
         {shownConcepts.length === 0 && <Empty text="Aucun concept de spectacle ne correspond." />}
         {shownConcepts.map((sc) => <Row key={sc.id} label={sc.theme} sub={sc.type} creator={sc.creatorUsername ? creatorLabel(sc) : null} />)}
+      </IndexCard>
+
+      {/* Le titre d'une manche est un secret de jeu, mais cette page est réservée à l'Admin — c'est
+          la même règle que la file de modération, où il le lit déjà pour valider. */}
+      <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs uppercase block mt-4 mb-1">
+        Manches d'ambassadeur ({shownManches.length}{q ? ` / ${validManches.length}` : ""})
+      </span>
+      <IndexCard>
+        {shownManches.length === 0 && <Empty text="Aucune manche d'ambassadeur ne correspond." />}
+        {shownManches.map((m) => <Row key={m.id} label={titreManche(m)} sub={detailManche(m)} creator={creatorLabel(m)} />)}
       </IndexCard>
     </div>
   );
