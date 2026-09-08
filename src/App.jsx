@@ -265,6 +265,11 @@ const consumeBudget = (duration, remaining) => Math.max(0, remaining - Math.min(
 // de plus une fois qu'il ne reste plus assez de budget pour lui laisser une durée correcte — mieux
 // vaut terminer un peu plus tôt que d'écraser un élément à 0 ou 1 minute.
 const MIN_CARD_DURATION = 2;
+// Les concepts de spectacle sont mis de côté le temps qu'Aude les retravaille (2026-09-06) : on
+// masque leurs points d'entrée — la carte de la bibliothèque, la tuile du profil et les deux écrans
+// — sans rien supprimer. Les fiches restent en base, la modération et la page "Validés" de l'Admin
+// continuent de les voir, et repasser cette constante à `true` remet tout en place.
+const CONCEPTS_SPECTACLE_VISIBLES = false;
 const SECTIONS_EXERCICE = ["Échauffement", "Pré-impro", "Impro"];
 const FORMATS_JEU = ["Solo simultané", "En groupe simultané", "Tour à tour avec spectateur", "En cercle", "Déambulation"];
 
@@ -2330,8 +2335,10 @@ export default function ImproApp() {
         {tab === "exercices-crees" && <ExercicesTab data={data} update={update} isAdmin={isAdmin} currentUser={currentUser} profile={auth.profile} onlyUserCreated setTab={setTab} />}
         {tab === "categories" && <CategoriesTab data={data} update={update} isAdmin={isAdmin} currentUser={currentUser} profile={auth.profile} initialSearchQuery={librarySearchSeed} setTab={setTab} />}
         {tab === "categories-crees" && <CategoriesTab data={data} update={update} isAdmin={isAdmin} currentUser={currentUser} profile={auth.profile} onlyUserCreated setTab={setTab} />}
-        {tab === "spectacles" && <SpectaclesTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} />}
-        {tab === "spectacles-crees" && <SpectaclesTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} onlyUserCreated />}
+        {/* Écrans masqués tant que CONCEPTS_SPECTACLE_VISIBLES est à false : une adresse tapée à la
+            main ne doit pas rouvrir la porte de derrière. */}
+        {CONCEPTS_SPECTACLE_VISIBLES && tab === "spectacles" && <SpectaclesTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} />}
+        {CONCEPTS_SPECTACLE_VISIBLES && tab === "spectacles-crees" && <SpectaclesTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} onlyUserCreated />}
         {tab === "ambassadeurs" && <AmbassadeursTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} brouillon={ambassadeurBrouillon} setBrouillon={setAmbassadeurBrouillon} />}
         {tab === "ambassadeurs-crees" && <AmbassadeursTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} brouillon={ambassadeurBrouillon} setBrouillon={setAmbassadeurBrouillon} onlyUserCreated />}
         {tab === "ambassadeurs-liste" && <AmbassadeursTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} brouillon={ambassadeurBrouillon} setBrouillon={setAmbassadeurBrouillon} catalogue />}
@@ -2686,7 +2693,9 @@ function BibliothequeTab({ data, update, setTab, isAdmin, currentUser, goToLibra
   const sections = [
     { label: "Exercices", desc: `${data.exercises.length} fiche(s)`, tab: "exercices", icon: Users },
     { label: "Catégories", desc: `${data.categories.length} fiche(s) — types de scène, thématiques, archétypes`, tab: "categories", icon: Tag },
-    { label: "Concepts de spectacle", desc: `${data.showConcepts.length} fiche(s)`, tab: "spectacles", icon: Theater },
+    ...(CONCEPTS_SPECTACLE_VISIBLES
+      ? [{ label: "Concepts de spectacle", desc: `${data.showConcepts.length} fiche(s)`, tab: "spectacles", icon: Theater }]
+      : []),
     { label: "Ambassadeurs", desc: `${(data.ambassadeurManches || []).length} manche(s) de 5 mots à faire deviner en mimant`, tab: "ambassadeurs-liste", icon: Hand },
   ];
 
@@ -3078,7 +3087,9 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
     { label: "Spectacles enregistrés", n: data.spectaclePlans.length, icon: Theater, tab: "plans" },
     { label: "Catégories créées", n: data.categories.filter((c) => c.creatorUsername === currentUser).length, icon: Tag, tab: "categories-crees" },
     { label: "Exercices créés", n: data.exercises.filter((e) => e.creatorUsername === currentUser).length, icon: Users, tab: "exercices-crees" },
-    { label: "Concepts de spectacle créés", n: data.showConcepts.filter((sc) => sc.creatorUsername === currentUser).length, icon: Theater, tab: "spectacles-crees" },
+    ...(CONCEPTS_SPECTACLE_VISIBLES
+      ? [{ label: "Concepts de spectacle créés", n: data.showConcepts.filter((sc) => sc.creatorUsername === currentUser).length, icon: Theater, tab: "spectacles-crees" }]
+      : []),
     // Cet écran réunit les manches ET les assemblages, archivés compris : le compte doit donc porter
     // sur les deux, sinon un ambassadeur archivé sans manche à soi se retrouve derrière un « 0 ».
     { label: "Manches et ambassadeurs créés", n: (data.ambassadeurManches || []).filter((m) => m.creatorUsername === currentUser).length + (data.ambassadeurs || []).filter((a) => a.creatorUsername === currentUser).length, icon: Hand, tab: "ambassadeurs-crees" },
