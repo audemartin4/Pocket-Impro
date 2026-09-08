@@ -1885,10 +1885,16 @@ function SearchableMultiSelect({ allOptions, selected, onChange, placeholder = "
 }
 
 /* Menu déroulant avec recherche, sélection UNIQUE (pas de tags) — ex. filtre thématique. */
-function SearchableSingleSelect({ allOptions, value, onChange, placeholder = "Chercher…", allowCreate = false, onCreate, createLabel, maxLength }) {
+/**
+ * `maxOptions` limite le nombre de propositions affichées (le reste se trouve en tapant quelques
+ * lettres de plus) ; `resetLabel` à `null` retire la ligne « Tous », qui n'a de sens que là où le
+ * champ sert de filtre.
+ */
+function SearchableSingleSelect({ allOptions, value, onChange, placeholder = "Chercher…", allowCreate = false, onCreate, createLabel, maxLength, maxOptions, resetLabel = "Tous" }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
-  const filtered = [...allOptions].sort((a, b) => a.localeCompare(b, "fr")).filter((o) => matchesKeywords(query, o));
+  const trouvees = [...allOptions].sort((a, b) => a.localeCompare(b, "fr")).filter((o) => matchesKeywords(query, o));
+  const filtered = maxOptions ? trouvees.slice(0, maxOptions) : trouvees;
   const trimmedQuery = query.trim();
   // Insensible casse/accents/pluriel (voir tagOverlap) : évite de proposer "+ Ajouter" pour une
   // variante d'une option déjà existante.
@@ -1911,14 +1917,16 @@ function SearchableSingleSelect({ allOptions, value, onChange, placeholder = "Ch
           className="absolute z-20 left-0 right-0 mt-1 rounded-sm max-h-48 overflow-y-auto"
           style={{ background: "#fff", border: `1px solid ${COLORS.cardEdge}`, boxShadow: "0 6px 14px rgba(0,0,0,0.12)" }}
         >
-          <button
-            type="button"
-            onMouseDown={() => { onChange(""); setQuery(""); setOpen(false); }}
-            className="block w-full text-left px-3 py-1.5 text-sm border-b"
-            style={{ fontFamily: FONT_MONO, color: COLORS.textSoft, borderColor: COLORS.cardEdge }}
-          >
-            Tous
-          </button>
+          {resetLabel && (
+            <button
+              type="button"
+              onMouseDown={() => { onChange(""); setQuery(""); setOpen(false); }}
+              className="block w-full text-left px-3 py-1.5 text-sm border-b"
+              style={{ fontFamily: FONT_MONO, color: COLORS.textSoft, borderColor: COLORS.cardEdge }}
+            >
+              {resetLabel}
+            </button>
+          )}
           {filtered.map((o) => (
             <button
               key={o}
@@ -5992,7 +6000,8 @@ function AmbassadeurMancheForm({ initial, data, onSave, onCancel, saveLabel = "E
       </div>
       {/* Le titre, lui, s'écrit librement — c'est ce que les équipes doivent deviner en fin de
           manche. Le sélecteur sert surtout à voir ce qui existe déjà et à ne pas refaire deux fois
-          la même manche. */}
+          la même manche : trois propositions suffisent pour ça, et la ligne « Tous » n'a aucun sens
+          quand on écrit un titre. */}
       <Field label="Titre de la manche">
         <SearchableSingleSelect
           allOptions={themesExistants}
@@ -6003,6 +6012,8 @@ function AmbassadeurMancheForm({ initial, data, onSave, onCancel, saveLabel = "E
           createLabel={(q) => `+ Créer le titre "${q}"`}
           placeholder="Chercher un titre existant ou en écrire un…"
           maxLength={AMBASSADEUR_LONGUEUR_MAX}
+          maxOptions={3}
+          resetLabel={null}
         />
       </Field>
       <div className="grid grid-cols-2 gap-2">
