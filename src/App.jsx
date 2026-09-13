@@ -7545,10 +7545,10 @@ function useDragReorder(onReorder) {
    la page des plans enregistrés n'en met qu'une partie. Toute retouche de style se fait donc ici,
    une seule fois. */
 
-/* Résumé tronqué à deux lignes tant que la carte n'est pas dépliée, avec la hauteur de deux lignes
-   toujours réservée : sans ça, une carte qui se replie décale les suivantes et le clic suivant
-   atterrit sur le mauvais bouton. */
-const RESUME_DEUX_LIGNES = { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", minHeight: "2.6em" };
+/* Résumé tronqué à deux lignes tant que la carte n'est pas dépliée. La hauteur de deux lignes
+   était réservée même pour un résumé d'une seule ligne, ce qui laissait un blanc au milieu de la
+   carte ; le repli/dépli change de toute façon la hauteur, et la réserve n'y changeait rien. */
+const RESUME_DEUX_LIGNES = { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" };
 
 /* Libellé de bandeau : "Échauffement 2 / 4". Le compteur disparaît quand la section n'a qu'une
    carte — "Exercice 1 / 1" n'apprend rien à personne. */
@@ -7560,7 +7560,7 @@ const rangSection = (nom, index, total) => (total > 1 ? `${nom} ${index + 1} / $
 function BandeauProgramme({ label, right }) {
   return (
     <div
-      className="-mx-4 -mt-4 mb-3 px-4 py-2 rounded-t-xl flex items-center justify-between gap-2"
+      className="-mx-4 -mt-4 mb-2 px-4 py-2 rounded-t-xl flex items-center justify-between gap-2"
       style={{ background: COLORS.ink, minHeight: 36 }}
     >
       <span className="text-xs uppercase" style={{ fontFamily: FONT_MONO, color: COLORS.paper, letterSpacing: "0.08em" }}>
@@ -7591,7 +7591,7 @@ function EtoileFavori({ actif, onToggle }) {
 function SousTitreCarte({ children }) {
   if (!children) return null;
   return (
-    <div className="flex items-stretch gap-2 mt-1 mb-2">
+    <div className="flex items-stretch gap-2 mt-0.5 mb-1.5">
       <span className="w-[3px] rounded-full shrink-0" style={{ background: COLORS.brass }} />
       <span className="text-sm" style={{ fontFamily: FONT_DISPLAY, color: COLORS.inkSoft }}>{children}</span>
     </div>
@@ -7603,7 +7603,7 @@ function SousTitreCarte({ children }) {
 function MetaCarte({ children }) {
   const morceaux = React.Children.toArray(children).filter(Boolean);
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs mt-2" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs mt-1.5" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
       {morceaux.map((m, i) => (
         <React.Fragment key={i}>
           {i > 0 && <span style={{ color: COLORS.cardEdge }}>|</span>}
@@ -7645,7 +7645,7 @@ function BoutonCorbeille({ onClick }) {
 function PiedProgramme({ actions, footerRight }) {
   if (!actions && !footerRight) return null;
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 mt-3">
+    <div className="flex flex-wrap items-center justify-between gap-2 mt-2">
       <div className="flex flex-wrap items-center gap-2">{actions}</div>
       <div className="flex items-center gap-3">{footerRight}</div>
     </div>
