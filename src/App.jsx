@@ -1590,9 +1590,7 @@ function TagPill({ label, color, onRemove }) {
   );
 }
 
-/* `perforation` : la bande de pointillés qui fait la fiche bristol. On la coupe sur les cartes de
-   programme, dont le bandeau sombre occupe déjà le haut — deux repères superposés se gêneraient. */
-function IndexCard({ children, style, className = "", onClick, perforation = true }) {
+function IndexCard({ children, style, className = "", onClick }) {
   return (
     <div
       className={`relative rounded-xl p-4 mb-3 ${className}`}
@@ -1604,15 +1602,13 @@ function IndexCard({ children, style, className = "", onClick, perforation = tru
         ...style,
       }}
     >
-      {perforation && (
-        <div
-          className="absolute -top-1 left-3 right-3 h-2 opacity-[0.35]"
-          style={{
-            backgroundImage: `radial-gradient(circle, ${COLORS.ink} 1px, transparent 1.3px)`,
-            backgroundSize: "8px 8px",
-          }}
-        />
-      )}
+      <div
+        className="absolute -top-1 left-3 right-3 h-2 opacity-[0.35]"
+        style={{
+          backgroundImage: `radial-gradient(circle, ${COLORS.ink} 1px, transparent 1.3px)`,
+          backgroundSize: "8px 8px",
+        }}
+      />
       {children}
     </div>
   );
@@ -7566,38 +7562,50 @@ function useDragReorder(onReorder) {
    carte ; le repli/dépli change de toute façon la hauteur, et la réserve n'y changeait rien. */
 const RESUME_DEUX_LIGNES = { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" };
 
-/* Libellé de bandeau : "Échauffement 2 / 4". Le compteur disparaît quand la section n'a qu'une
-   carte — "Exercice 1 / 1" n'apprend rien à personne. */
-const rangSection = (nom, index, total) => (total > 1 ? `${nom} ${index + 1} / ${total}` : nom);
+/* "2 / 4", posé à droite du titre. Disparaît quand la section n'a qu'une carte — "1 / 1" n'apprend
+   rien à personne. Le nom de la section n'est plus répété sur chaque carte : il est écrit une seule
+   fois en tête de groupe (voir EnteteSection), ce qui rend 34 px par carte. */
+const compteurSection = (index, total) => (total > 1 ? `${index + 1} / ${total}` : null);
 
-/* Bandeau sombre en tête de carte : il porte le rang de la carte dans le programme
-   ("Échauffement 1 / 4") et, à droite, l'étoile de favori. Il déborde du padding de l'IndexCard
-   pour aller bord à bord, et arrondit ses deux coins hauts comme la carte. */
-function BandeauProgramme({ label, right }) {
+/* Nom du groupe de cartes, écrit une seule fois au-dessus de lui : "Échauffements", "Exercices",
+   "Catégories d'impro". Même graphie que les autres repères du programme (Introduction, Entracte) :
+   petites capitales monospace, couleur d'accent. */
+function EnteteSection({ children }) {
   return (
     <div
-      className="-mx-4 -mt-4 mb-2 px-4 py-2 rounded-t-xl flex items-center justify-between gap-2"
-      style={{ background: COLORS.ink, minHeight: 36 }}
+      className="text-xs uppercase mb-1.5 mt-1"
+      style={{ fontFamily: FONT_MONO, color: COLORS.accent, letterSpacing: "0.08em" }}
     >
-      <span className="text-xs uppercase" style={{ fontFamily: FONT_MONO, color: COLORS.paper, letterSpacing: "0.08em" }}>
-        {label}
-      </span>
-      {right}
+      {children}
     </div>
   );
 }
 
-/* Étoile de favori, posée sur le bandeau sombre. Toujours en laiton : le gris des textes discrets,
-   utilisé avant sur fond papier, disparaissait complètement sur l'encre. */
+/* Coin droit du titre : le compteur, puis l'étoile de favori. Léger décalage vers le bas pour
+   s'aligner sur la première ligne du titre, qui monte plus haut que le chiffre. */
+function CoinTitre({ compteur, star }) {
+  if (!compteur && !star) return null;
+  return (
+    <div className="flex items-center gap-2 shrink-0" style={{ marginTop: 3 }}>
+      {compteur && (
+        <span className="text-xs" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>{compteur}</span>
+      )}
+      {star}
+    </div>
+  );
+}
+
+/* Étoile de favori, à droite du titre. La marge négative annule le padding pour la mise en page :
+   la zone touchable fait 26 px là où l'étoile n'en occupe que 18, sans décaler le titre. */
 function EtoileFavori({ actif, onToggle }) {
   return (
     <button
       type="button"
       onClick={(e) => { e.stopPropagation(); onToggle(); }}
       title={actif ? "Retirer des favoris" : "Ajouter aux favoris"}
-      className="shrink-0 leading-none"
+      className="shrink-0 leading-none p-1 -m-1"
     >
-      <Star size={18} color={COLORS.brass} fill={actif ? COLORS.brass : "none"} />
+      <Star size={18} color={actif ? COLORS.brass : COLORS.textSoft} fill={actif ? COLORS.brass : "none"} />
     </button>
   );
 }
@@ -7686,7 +7694,7 @@ const FORMAT_JEU = {
 /* `mention` : une précision qui se lit comme la famille d'objectifs (ex. « Exercice pré-impro »)
    et prend sa place quand la fiche n'en a pas. Elle partage la même ligne : deux filets laiton
    l'un sous l'autre donneraient deux sous-titres concurrents. */
-function ProgrammeExerciseCard({ ex, label, duree, participants, expanded, onToggle, star, badges, mention, actions, footerRight }) {
+function ProgrammeExerciseCard({ ex, compteur, duree, participants, expanded, onToggle, star, badges, mention, actions, footerRight }) {
   const wait = computeWaitMinutes(ex, participants);
   const format = FORMAT_JEU[ex.format] || FORMAT_JEU["Solo simultané"];
   // Toutes les fiches n'ont pas de famille d'objectifs. Plutôt que de laisser la ligne vide — ce
@@ -7696,12 +7704,14 @@ function ProgrammeExerciseCard({ ex, label, duree, participants, expanded, onTog
   const famille = ex.groupe || (mention ? "" : ex.phase || "Impro");
   // Le clic est porté par la carte entière, pas seulement par son texte : viser un titre au pouce,
   // debout dans une salle, demandait trop de précision. Les zones qui font autre chose (l'étoile,
-  // le sélecteur du bandeau, les boutons du pied) arrêtent le clic chacune de leur côté.
+  // les boutons du pied) arrêtent le clic chacune de leur côté.
   return (
-    <IndexCard perforation={false} onClick={onToggle} style={{ cursor: "pointer" }}>
-      <BandeauProgramme label={label} right={star} />
+    <IndexCard onClick={onToggle} style={{ cursor: "pointer" }}>
       <div>
-        <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-xl font-semibold leading-snug">{ex.title}</h3>
+        <div className="flex items-start justify-between gap-2">
+          <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-xl font-semibold leading-snug">{ex.title}</h3>
+          <CoinTitre compteur={compteur} star={star} />
+        </div>
         <SousTitreCarte>{[famille, mention].filter(Boolean).join(" · ")}</SousTitreCarte>
         {/* Les badges de correspondance du générateur gardent leur ligne, sous le sous-titre. */}
         {badges && <div className="flex flex-wrap items-center gap-1 mb-2">{badges}</div>}
@@ -7732,7 +7742,7 @@ function ProgrammeExerciseCard({ ex, label, duree, participants, expanded, onTog
    nom, genres, description, puis la ligne durée/énergie/joueurs. Le déroulé de spectacle faisait
    exception et remontait cette ligne au-dessus de la description, ce qui séparait le nom de la
    catégorie de ce qu'elle raconte. */
-function ProgrammeCategoryCard({ cat, label, duree, expanded, onToggle, star, headerRight, badges, badgesFallback, actions, footerRight }) {
+function ProgrammeCategoryCard({ cat, compteur, duree, expanded, onToggle, star, headerRight, badges, badgesFallback, actions, footerRight }) {
   const meta = (
     <MetaCarte>
       <span>{duree} min</span>
@@ -7741,15 +7751,17 @@ function ProgrammeCategoryCard({ cat, label, duree, expanded, onToggle, star, he
     </MetaCarte>
   );
   return (
-    <IndexCard perforation={false} onClick={onToggle} style={{ cursor: "pointer" }}>
-      {/* Le bandeau ne porte le sélecteur Mixte/Comparé (déroulé de spectacle) que là où l'écran
-          l'envoie ; ailleurs, l'étoile de favori occupe seule la droite. */}
-      <BandeauProgramme
-        label={label}
-        right={(headerRight || star) && <div className="flex items-center gap-2">{headerRight}{star}</div>}
-      />
+    <IndexCard onClick={onToggle} style={{ cursor: "pointer" }}>
       <div>
-        <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-xl font-semibold leading-snug">{cat.name}</h3>
+        {/* `headerRight` est le sélecteur Mixte/Comparé du déroulé de spectacle : il se range avec
+            le compteur et l'étoile, à droite du nom de la catégorie. */}
+        <div className="flex items-start justify-between gap-2">
+          <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-xl font-semibold leading-snug">{cat.name}</h3>
+          <div className="flex items-center gap-2 shrink-0">
+            {headerRight}
+            <CoinTitre compteur={compteur} star={star} />
+          </div>
+        </div>
         {(cat.tags || []).length > 0 ? <SousTitreCarte>{cat.tags.join(" · ")}</SousTitreCarte> : badgesFallback}
         {badges && <div className="flex flex-wrap items-center gap-1 mb-2">{badges}</div>}
         <ResumeCarte expanded={expanded}>{cat.summary}</ResumeCarte>
@@ -8529,9 +8541,9 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
   const items = plan ? [
     // Le bandeau annonce le rang ET le total de la section ("Échauffement 2 / 4") : sur téléphone,
     // où une seule carte tient à l'écran, c'est le seul repère qui dise combien il en reste.
-    ...plan.warmups.map((ex, i) => ({ kind: "exercise", label: rangSection("Échauffement", i, plan.warmups.length), ex, slot: "warmup", idx: i })),
-    ...plan.middle.map((ex, i) => ({ kind: "exercise", label: rangSection("Exercice", i, plan.middle.length), ex, slot: "middle", idx: i })),
-    ...plan.impro.map((cat, i) => ({ kind: "category", label: rangSection("Catégorie d'impro", i, plan.impro.length), cat, idx: i })),
+    ...plan.warmups.map((ex, i) => ({ kind: "exercise", compteur: compteurSection(i, plan.warmups.length), ex, slot: "warmup", idx: i })),
+    ...plan.middle.map((ex, i) => ({ kind: "exercise", compteur: compteurSection(i, plan.middle.length), ex, slot: "middle", idx: i })),
+    ...plan.impro.map((cat, i) => ({ kind: "category", compteur: compteurSection(i, plan.impro.length), cat, idx: i })),
   ] : [];
   // Positions (dans le tableau "items" ci-dessus) juste après le dernier échauffement / dernier
   // exercice, pour insérer les boutons "Ajouter…" au bon endroit même si la section est vide.
@@ -8654,10 +8666,15 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
         <>
           <AstuceGlisser>Maintiens ton doigt sur une carte et fais-la glisser pour réorganiser ton cours</AstuceGlisser>
           {items.map((it, itemIndex) => {
+            // Le nom de la section est écrit une fois, devant sa première carte ; les boutons
+            // "Ajouter…" ferment la section précédente et se placent donc avant.
             const prefixButtons = (
               <>
                 {itemIndex === warmupCount && addWarmupBlock}
                 {itemIndex === warmupCount + middleCount && addExerciseBlock}
+                {itemIndex === 0 && warmupCount > 0 && <EnteteSection>Échauffements</EnteteSection>}
+                {itemIndex === warmupCount && middleCount > 0 && <EnteteSection>Exercices</EnteteSection>}
+                {itemIndex === warmupCount + middleCount && <EnteteSection>Catégories d'impro</EnteteSection>}
               </>
             );
             if (it.kind === "category") {
@@ -8667,7 +8684,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
               const card = (
                 <ProgrammeCategoryCard
                   cat={c}
-                  label={it.label}
+                  compteur={it.compteur}
                   duree={c.actualDuration ?? c.duration ?? 5}
                   expanded={isExpanded}
                   onToggle={() => handleCardTap(c.id)}
@@ -8754,7 +8771,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
             const card = (
               <ProgrammeExerciseCard
                 ex={it.ex}
-                label={it.label}
+                compteur={it.compteur}
                 duree={it.ex.actualDuration ?? it.ex.duration}
                 participants={participants}
                 expanded={isExpanded}
@@ -9342,7 +9359,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
           {/* Le rang du bandeau est compté par mi-temps : après l'entracte, on repart de 1. */}
           <ProgrammeCategoryCard
             cat={c}
-            label={rangSection("Catégorie", i, liste.length)}
+            compteur={compteurSection(i, liste.length)}
             duree={c.actualDuration ?? c.duration ?? 5}
             expanded={expandedId === c.id}
             onToggle={() => handleCardTap(c.id)}
@@ -9471,11 +9488,11 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                   🕐 {minutesToTime(schedule.stageWarmupStart)}
                 </div>
               )}
-              {/* Même carte que les autres numéros du spectacle : son rôle ("Échauffement de scène")
-                  tient dans le bandeau, là où les catégories affichent leur rang. */}
+              {/* Carte seule dans sa section : son rôle est écrit au-dessus d'elle, comme le nom
+                  des groupes de catégories. */}
+              <EnteteSection>Échauffement de scène</EnteteSection>
               <ProgrammeExerciseCard
                 ex={result.stageWarmup}
-                label="Échauffement de scène"
                 duree={result.stageWarmup.duration}
                 participants={0}
                 expanded={expandedId === result.stageWarmup.id}
@@ -9498,6 +9515,9 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
               )}
             </>
           )}
+          {/* Le compteur des cartes repart de 1 après l'entracte : chaque mi-temps annonce donc le
+              sien. Sans entracte, il n'y a qu'un seul groupe et « Catégories » suffit. */}
+          {result.first.length > 0 && <EnteteSection>{entracteOn ? "Catégories — 1re partie" : "Catégories"}</EnteteSection>}
           {result.first.map((c, i) => carteCategorieSpectacle(c, "first", i))}
           {/* Ce bouton n'a d'utilité que lorsqu'il y a un entracte : sans entracte, le second bouton
               "Ajouter une catégorie" (part="first" aussi dans ce cas) suffit déjà en bas de page. */}
@@ -9513,6 +9533,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
               </span>
             </IndexCard>
           )}
+          {result.second.length > 0 && <EnteteSection>Catégories — 2e partie</EnteteSection>}
           {result.second.map((c, i) => carteCategorieSpectacle(c, "second", i))}
           <div className="mb-2">
             <Btn small variant="accent" onClick={() => setCatPicker({ mode: "add", part: entracteOn ? "second" : "first" })}><Plus size={13} /> Ajouter une catégorie</Btn>
@@ -9763,6 +9784,7 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
         <Empty text="Aucun exercice d'échauffement ne correspond — élargis les filtres ou ajoutes-en dans la bibliothèque." />
       ) : (
         <>
+          <EnteteSection>Échauffements</EnteteSection>
           {list.map((e, idx) => {
             const isExpanded = expandedId === e.id;
             return (
@@ -9771,7 +9793,7 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
                   dessin, il utilise maintenant le composant partagé. */}
               <ProgrammeExerciseCard
                 ex={e}
-                label={rangSection("Échauffement", idx, list.length)}
+                compteur={compteurSection(idx, list.length)}
                 duree={e.actualDuration ?? e.duration}
                 participants={0}
                 expanded={isExpanded}
@@ -10925,12 +10947,13 @@ function PlanCoursDetail({ plan, data, allData, update, currentUser, isAdmin, pr
         </Field>
       )}
 
+      {echauffements.length > 0 && <EnteteSection>Échauffements</EnteteSection>}
       {echauffements.map(({ ex, idx }, i) => (
         <React.Fragment key={`ech-${idx}`}>
           {zoneDeDepot("ech", i, (
             <ProgrammeExerciseCard
               ex={ex}
-              label={rangSection("Échauffement", i, echauffements.length)}
+              compteur={compteurSection(i, echauffements.length)}
               duree={dureeDe(ex, 5)}
               participants={0}
               expanded={expandedId === `ex-${idx}`}
@@ -10976,12 +10999,13 @@ function PlanCoursDetail({ plan, data, allData, update, currentUser, isAdmin, pr
         </div>
       )}
 
+      {corps.length > 0 && <EnteteSection>Exercices</EnteteSection>}
       {corps.map(({ ex, idx }, i) => (
         <React.Fragment key={`ex-${idx}`}>
           {zoneDeDepot("corps", i, (
             <ProgrammeExerciseCard
               ex={ex}
-              label={rangSection("Exercice", i, corps.length)}
+              compteur={compteurSection(i, corps.length)}
               duree={dureeDe(ex, 5)}
               participants={0}
               expanded={expandedId === `ex-${idx}`}
@@ -11014,12 +11038,13 @@ function PlanCoursDetail({ plan, data, allData, update, currentUser, isAdmin, pr
         </div>
       )}
 
+      {categories.length > 0 && <EnteteSection>Catégories d'impro</EnteteSection>}
       {categories.map(({ cat, idx }, i) => (
         <React.Fragment key={`cat-${idx}`}>
           {zoneDeDepot("cat", i, (
             <ProgrammeCategoryCard
               cat={cat}
-              label={rangSection("Catégorie d'impro", i, categories.length)}
+              compteur={compteurSection(i, categories.length)}
               duree={dureeDe(cat, 5)}
               expanded={expandedId === `cat-${idx}`}
               onToggle={() => setExpandedId(expandedId === `cat-${idx}` ? null : `cat-${idx}`)}
@@ -11178,7 +11203,7 @@ function PlanSpectacleDetail({ plan, data, update }) {
       {enveloppe(listKey, i, (
         <ProgrammeCategoryCard
           cat={cat}
-          label={`Catégorie ${offset + i + 1}${times ? heure(times[i]) : ""}`}
+          compteur={`${offset + i + 1}${times ? heure(times[i]) : ""}`}
           duree={dureeDe(cat)}
           expanded={expandedId === idx}
           onToggle={() => setExpandedId(expandedId === idx ? null : idx)}
@@ -11250,6 +11275,7 @@ function PlanSpectacleDetail({ plan, data, update }) {
         </IndexCard>
       )}
 
+      {premiere.length > 0 && <EnteteSection>Catégories</EnteteSection>}
       {bloc(premiere, "first", 0, schedule?.firstTimes)}
       {carte("add", "first") && (
         <CategoryPicker
