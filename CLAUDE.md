@@ -175,6 +175,12 @@ Distinctions à respecter, elles pilotent les générateurs :
   l'utilisateur. La table est indexée par titre (pas un champ de fiche) : elle est symétrique par
   construction, n'exige aucune migration, et un titre encore absent de la bibliothèque est ignoré.
   Renommer une fiche, en revanche, casse le lien sans rien signaler.
+- **Fiche d'ouverture** (`EXERCICE_OUVERTURE`, « Les 2 chaises ») : quand le générateur de cours la
+  retient, elle passe **en premier exercice**, juste après les échauffements — elle sert à poser la
+  théorie selon laquelle la simplicité du jeu se suffit à elle-même, ce qui ne vaut qu'avant les
+  autres. La remontée se fait au tirage (`unshift`), jamais par un tri après coup : les cartes déjà
+  retenues gardent leurs voisines, donc la règle des fiches proches reste vérifiée. Sa probabilité
+  d'être tirée ne change pas ; seule sa place change. Repérée par son titre, comme « Ambassadeur ».
 - **`publics`** : tranches d'âge d'une fiche d'exercice (`"Enfants" | "Ados" | "Adultes" | "Senior"`,
   même vocabulaire que `TRANCHES_AGE`). Renseigné sur le lot importé en septembre 2026 et **lu par
   aucun écran pour l'instant** : il attend le « choix par tranche d'âge » annoncé sur l'accueil.
