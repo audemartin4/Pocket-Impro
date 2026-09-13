@@ -2332,9 +2332,14 @@ export default function ImproApp() {
     <div style={{ background: COLORS.paper, minHeight: "100vh" }}>
       {/* Top bar */}
       <div style={{ background: COLORS.ink }} className="px-4 py-3 sticky top-0 z-20">
-        <div className="flex items-center gap-2">
-          <Sparkles size={18} color={COLORS.brass} />
-          <span style={{ fontFamily: FONT_DISPLAY, color: COLORS.paper }} className="text-lg font-semibold">
+        {/* Le titre doit tenir sur une seule ligne. À 18 px il mesure 330 px pour 343 px de barre
+            sur un écran de 375 px : ça passe, mais de justesse. En dessous, la taille suit la
+            largeur de l'écran (≈ 15 px sur un 320 px) plutôt que de repasser à la ligne. */}
+        <div className="flex items-center">
+          <span
+            style={{ fontFamily: FONT_DISPLAY, color: COLORS.paper, fontSize: "min(1.125rem, calc(5.3vw - 2px))" }}
+            className="font-semibold whitespace-nowrap"
+          >
             Pocket impro, l'assistant des Idéphiles
           </span>
         </div>
