@@ -2439,6 +2439,29 @@ const IDEES_METIERS = [
   "Bibliothécaire", "Archéologue", "Explorateur", "Alpiniste", "Dresseur d'animaux", "Dompteur de cirque", "Clown",
   "Magicien", "Voyante", "Sorcier", "Chevalier", "Roi"
 ];
+// Mots de départ pour la page « Générer des idées » : liste fournie par Aude (200 entrées,
+// PDF « Liste Mots 01 »). Rangés par familles dans le fichier, mais tirés au hasard à l'écran.
+const IDEES_MOTS = [
+  "Chaise", "Table", "Porte", "Fenêtre", "Valise", "Parapluie", "Radio", "Voiture", "Vélo", "Train", "Avion",
+  "Bateau", "Pont", "Rue", "Maison", "Jardin", "Forêt", "Montagne", "Plage", "Mer", "Rivière", "Neige",
+  "Pluie", "Soleil", "Vent", "Feu", "Eau", "Terre", "Pain", "Café", "Chocolat", "Gâteau", "Fromage", "Vin",
+  "Lait", "Pomme", "Orange", "Fleur", "Arbre", "Chien", "Chat", "Oiseau", "Poisson", "Cheval", "Lion",
+  "Éléphant", "Souris", "Serpent", "Papillon", "Bébé", "Enfant", "Mère", "Père", "Frère", "Sœur", "Ami",
+  "Voisin", "Docteur", "Policier", "Facteur", "Boulanger", "Roi", "Reine", "Pirate", "Robot", "Fantôme",
+  "Sorcière", "Ange", "Diable", "Miroir", "Horloge", "Clé", "Boîte", "Lettre", "Cadeau", "Photo", "Livre",
+  "Journal", "Musique", "Danse", "Chanson", "Rire", "Larme", "Rêve", "Cri", "Sourire", "Chance", "Peur",
+  "Joie", "Amour", "Argent", "Or", "Diamant", "Couronne", "Épée", "Bouclier", "Cage", "Échelle", "Corde",
+  "Ballon", "Lampe", "Bougie", "Couteau", "Fourchette", "Assiette", "Verre", "Tasse", "Théière", "Coussin",
+  "Tapis", "Rideau", "Balai", "Seau", "Marteau", "Clou", "Vis", "Tournevis", "Pinceau", "Papier", "Crayon",
+  "Stylo", "Gomme", "Ciseaux", "Colle", "Ficelle", "Sac", "Panier", "Malle", "Coffre", "Cadenas", "Chapeau",
+  "Manteau", "Chaussure", "Botte", "Gant", "Écharpe", "Ceinture", "Robe", "Costume", "Masque", "Lunettes",
+  "Montre", "Bijou", "Bague", "Collier", "Main", "Pied", "Œil", "Oreille", "Nez", "Bouche", "Cœur", "Tête",
+  "Cheveux", "Dent", "Lune", "Étoile", "Ciel", "Nuage", "Orage", "Éclair", "Tonnerre", "Glace", "Sable",
+  "Roche", "Île", "Lac", "Vallée", "Colline", "Volcan", "Désert", "Jungle", "Prairie", "Château", "Tour",
+  "Église", "École", "Hôpital", "Prison", "Usine", "Ferme", "Marché", "Magasin", "Restaurant", "Hôtel",
+  "Cinéma", "Théâtre", "Musée", "Gare", "Aéroport", "Port", "Pêcheur", "Chasseur", "Cuisinier", "Chauffeur",
+  "Pilote", "Marin", "Soldat", "Juge", "Chevalier"
+];
 // Thèmes de départ pour la page « Générer des idées » : liste fournie par Aude (188 entrées,
 // PDF « Liste Thèmes 01 »). Rangés par familles dans le fichier, mais tirés au hasard à l'écran.
 const IDEES_THEMES = [
@@ -2479,13 +2502,16 @@ const IDEES_THEMES = [
   "La grotte", "L'écho", "La rivière", "Le pont", "Le radeau", "La chute d'eau", "Le naufrage", "Le phare",
   "La bouteille à la mer", "L'île déserte", "Le trésor du pirate", "Le capitaine", "La carte au trésor"
 ];
+// Les six boutons de l'onglet « Normal ». Une catégorie sans `list` mais avec `underConstruction`
+// s'affiche grisée et « (en travaux) » ; plus aucune n'est dans ce cas depuis que Thèmes et Mots
+// ont reçu leur liste, mais le rendu sait toujours le faire pour la prochaine qui arriverait.
 const IDEE_CATEGORIES = [
   { key: "themes", label: "Thèmes", list: IDEES_THEMES },
   { key: "lieux", label: "Lieux", list: IDEES_LIEUX },
   { key: "relations", label: "Relations", list: IDEES_RELATIONS },
   { key: "emotions", label: "Émotions", list: IDEES_EMOTIONS },
   { key: "metiers", label: "Métiers", list: IDEES_METIERS },
-  { key: "mots", label: "Mots", underConstruction: true },
+  { key: "mots", label: "Mots", list: IDEES_MOTS },
 ];
 
 function GenererIdeesTab({ setTab, data }) {
