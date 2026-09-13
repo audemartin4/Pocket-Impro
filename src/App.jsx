@@ -1590,7 +1590,9 @@ function TagPill({ label, color, onRemove }) {
   );
 }
 
-function IndexCard({ children, style, className = "", onClick }) {
+/* `perforation` : la bande de pointillés qui fait la fiche bristol. On la coupe sur les cartes de
+   programme, dont le bandeau sombre occupe déjà le haut — deux repères superposés se gêneraient. */
+function IndexCard({ children, style, className = "", onClick, perforation = true }) {
   return (
     <div
       className={`relative rounded-xl p-4 mb-3 ${className}`}
@@ -1602,13 +1604,15 @@ function IndexCard({ children, style, className = "", onClick }) {
         ...style,
       }}
     >
-      <div
-        className="absolute -top-1 left-3 right-3 h-2 opacity-[0.35]"
-        style={{
-          backgroundImage: `radial-gradient(circle, ${COLORS.ink} 1px, transparent 1.3px)`,
-          backgroundSize: "8px 8px",
-        }}
-      />
+      {perforation && (
+        <div
+          className="absolute -top-1 left-3 right-3 h-2 opacity-[0.35]"
+          style={{
+            backgroundImage: `radial-gradient(circle, ${COLORS.ink} 1px, transparent 1.3px)`,
+            backgroundSize: "8px 8px",
+          }}
+        />
+      )}
       {children}
     </div>
   );
@@ -7338,6 +7342,9 @@ const truncate = (s, n = 90) => (s && s.length > n ? s.slice(0, n).trim() + "…
 // Pastille de couleur pour l'énergie d'une catégorie (Créer un spectacle) : bleu = Faible,
 // vert = Modérée, rouge = Forte.
 const ENERGY_DOT = { Faible: "🔵", Modérée: "🟢", Forte: "🔴" };
+/* Mêmes trois niveaux que ENERGY_DOT, en couleurs de l'appli : les cartes de programme dessinent
+   leur pastille plutôt que d'afficher un emoji, dont le rendu change d'un téléphone à l'autre. */
+const ENERGY_COULEUR = { Faible: "#3D6C8F", Modérée: "#3B6E5E", Forte: COLORS.accent };
 // Affiche "illimité" plutôt qu'une plage numérique quand la fiche a été renseignée comme telle :
 // la conversion des données d'origine ("illimité", "illimité minimum N"…) utilise systématiquement
 // playersMax=8 comme convention interne pour "pas de maximum précisé".
@@ -7352,6 +7359,12 @@ const playersCountText = (c) => {
   if (!c.playersMin) return "Illimité";
   if (c.playersMax === 8) return c.playersMin > 2 ? `Illimité (minimum ${c.playersMin})` : "Illimité";
   return c.playersMin === c.playersMax ? `${c.playersMin}` : `${c.playersMin} à ${c.playersMax}`;
+};
+/* Même information que playersCountText, mais rédigée pour tenir seule dans la ligne de méta des
+   cartes de programme : "joueurs illimités" plutôt que "Illimité joueurs". */
+const texteJoueursCategorie = (c) => {
+  const n = playersCountText(c);
+  return n.startsWith("Illimité") ? `joueurs illimités${n.slice("Illimité".length)}` : `${n} joueurs`;
 };
 
 function reorderArray(arr, fromIndex, insertAt) {
@@ -7532,68 +7545,150 @@ function useDragReorder(onReorder) {
    atterrit sur le mauvais bouton. */
 const RESUME_DEUX_LIGNES = { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", minHeight: "2.6em" };
 
+/* Libellé de bandeau : "Échauffement 2 / 4". Le compteur disparaît quand la section n'a qu'une
+   carte — "Exercice 1 / 1" n'apprend rien à personne. */
+const rangSection = (nom, index, total) => (total > 1 ? `${nom} ${index + 1} / ${total}` : nom);
+
+/* Bandeau sombre en tête de carte : il porte le rang de la carte dans le programme
+   ("Échauffement 1 / 4") et, à droite, l'étoile de favori. Il déborde du padding de l'IndexCard
+   pour aller bord à bord, et arrondit ses deux coins hauts comme la carte. */
+function BandeauProgramme({ label, right }) {
+  return (
+    <div
+      className="-mx-4 -mt-4 mb-3 px-4 py-2 rounded-t-xl flex items-center justify-between gap-2"
+      style={{ background: COLORS.ink, minHeight: 36 }}
+    >
+      <span className="text-xs uppercase" style={{ fontFamily: FONT_MONO, color: COLORS.paper, letterSpacing: "0.08em" }}>
+        {label}
+      </span>
+      {right}
+    </div>
+  );
+}
+
+/* Étoile de favori, posée sur le bandeau sombre. Toujours en laiton : le gris des textes discrets,
+   utilisé avant sur fond papier, disparaissait complètement sur l'encre. */
+function EtoileFavori({ actif, onToggle }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onToggle(); }}
+      title={actif ? "Retirer des favoris" : "Ajouter aux favoris"}
+      className="shrink-0 leading-none"
+    >
+      <Star size={18} color={COLORS.brass} fill={actif ? COLORS.brass : "none"} />
+    </button>
+  );
+}
+
+/* Sous-titre d'une carte de programme (famille d'objectifs d'un exercice, genres d'une catégorie) :
+   un filet laiton puis le texte, là où une pastille rouge pleine tirait l'œil avant le titre. */
+function SousTitreCarte({ children }) {
+  if (!children) return null;
+  return (
+    <div className="flex items-stretch gap-2 mt-1 mb-2">
+      <span className="w-[3px] rounded-full shrink-0" style={{ background: COLORS.brass }} />
+      <span className="text-sm" style={{ fontFamily: FONT_DISPLAY, color: COLORS.inkSoft }}>{children}</span>
+    </div>
+  );
+}
+
+/* Ligne d'informations sous le résumé : « 7 min | joueurs illimités | ● bruyant ». Les éléments
+   arrivent déjà composés, le composant ne pose que les séparateurs. */
+function MetaCarte({ children }) {
+  const morceaux = React.Children.toArray(children).filter(Boolean);
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs mt-2" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
+      {morceaux.map((m, i) => (
+        <React.Fragment key={i}>
+          {i > 0 && <span style={{ color: COLORS.cardEdge }}>|</span>}
+          {m}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
+/* Pastille de couleur des lignes de méta (format de jeu, énergie) : un simple rond, là où un emoji
+   changeait de dessin d'un téléphone à l'autre. */
+function Pastille({ couleur, children }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className="inline-block rounded-full" style={{ width: 7, height: 7, background: couleur }} />
+      {children}
+    </span>
+  );
+}
+
+/* Corbeille du pied de carte : encadrée comme les boutons voisins, pour qu'elle se lise comme une
+   action et non comme une icône décorative posée dans le vide. */
+function BoutonCorbeille({ onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title="Supprimer"
+      className="inline-flex items-center justify-center rounded-sm"
+      style={{ width: 34, height: 32, border: `1px solid ${COLORS.accent}55`, color: COLORS.accent }}
+    >
+      <Trash2 size={16} color={COLORS.accent} />
+    </button>
+  );
+}
+
+/* Pied de carte : les actions à gauche, la corbeille (et la poignée de déplacement) à droite. */
+function PiedProgramme({ actions, footerRight }) {
+  if (!actions && !footerRight) return null;
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 mt-3">
+      <div className="flex flex-wrap items-center gap-2">{actions}</div>
+      <div className="flex items-center gap-3">{footerRight}</div>
+    </div>
+  );
+}
+
+/* Couleur et libellé court du format de jeu, partagés par la carte et son bandeau de méta. */
+const FORMAT_JEU = {
+  "Tour à tour avec spectateur": { couleur: COLORS.brass, texte: "chacun son tour" },
+  "En groupe simultané": { couleur: COLORS.accent, texte: "bruyant" },
+  "Solo simultané": { couleur: "#3B6E5E", texte: "tout le monde actif" },
+};
+
 function ProgrammeExerciseCard({ ex, label, duree, participants, expanded, onToggle, star, badges, actions, footerRight }) {
   const wait = computeWaitMinutes(ex, participants);
-  const format = ex.format || "Solo simultané";
+  const format = FORMAT_JEU[ex.format] || FORMAT_JEU["Solo simultané"];
   return (
-    <IndexCard>
-      <div className="flex justify-between items-start">
-        <div className="flex-1" onClick={onToggle} style={{ cursor: "pointer" }}>
-          <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">{label}</span>
-          <div className="flex items-center gap-1.5">
-            <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{ex.title}</h3>
-            {star}
+    <IndexCard perforation={false}>
+      <BandeauProgramme label={label} right={star} />
+      <div onClick={onToggle} style={{ cursor: "pointer" }}>
+        <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-xl font-semibold leading-snug">{ex.title}</h3>
+        <SousTitreCarte>{ex.groupe}</SousTitreCarte>
+        {/* Les badges de correspondance du générateur gardent leur ligne, sous le sous-titre. */}
+        {badges && <div className="flex flex-wrap items-center gap-1 mb-2">{badges}</div>}
+        <p
+          style={{ fontFamily: FONT_BODY, color: COLORS.inkSoft, ...(expanded ? {} : RESUME_DEUX_LIGNES) }}
+          className="text-sm"
+        >
+          {ex.summary}
+        </p>
+        {expanded && (
+          <div className="mt-1 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+            <div>{ex.level || "Niveau non précisé"}</div>
+            {ex.objectives?.length > 0 && <div>Objectifs : {ex.objectives.join(", ")}</div>}
+            {ex.energy && <div>Énergie : {ex.energy}</div>}
+            {ex.material && ex.material !== "Aucun" && <div>Matériel : {ex.material}</div>}
           </div>
-          {/* Hauteur toujours réservée, même sans badge (voir RESUME_DEUX_LIGNES). */}
-          <div className="flex flex-wrap items-center mt-1 mb-1" style={{ minHeight: 22 }}>
-            {ex.groupe && (
-              <span
-                className="inline-block text-xs px-2 py-0.5 rounded-full"
-                style={{ fontFamily: FONT_MONO, background: COLORS.accent, color: "#fff" }}
-              >
-                {ex.groupe}
-              </span>
-            )}
-            {badges}
-          </div>
-          <p
-            style={{ fontFamily: FONT_BODY, color: COLORS.textSoft, ...(expanded ? {} : RESUME_DEUX_LIGNES) }}
-            className="text-sm"
-          >
-            {ex.summary}
-          </p>
-          {expanded && (
-            <div className="mt-1 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-              <div>{ex.level || "Niveau non précisé"}</div>
-              {ex.objectives?.length > 0 && <div>Objectifs : {ex.objectives.join(", ")}</div>}
-              {ex.energy && <div>Énergie : {ex.energy}</div>}
-              {ex.material && ex.material !== "Aucun" && <div>Matériel : {ex.material}</div>}
-            </div>
-          )}
-        </div>
-        {actions}
+        )}
       </div>
-      <div className="flex justify-between items-center mt-2">
-        <div className="flex items-center gap-2">
-          <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
-            {duree} min · Nombre de joueurs : {ex.players > 0 ? ex.players : "Illimité"}
-          </span>
-          {format === "Tour à tour avec spectateur" ? (
-            <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ fontFamily: FONT_MONO, background: COLORS.brass + "33", color: COLORS.brass }}>
-              🟠 chacun son tour{wait > 0 ? ` · ~${wait} min d'attente/élève` : ""}
-            </span>
-          ) : format === "En groupe simultané" ? (
-            <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ fontFamily: FONT_MONO, background: COLORS.accent + "33", color: COLORS.accent }}>
-              🔴 groupe simultané (bruyant)
-            </span>
-          ) : (
-            <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ fontFamily: FONT_MONO, background: "#3B6E5E33", color: "#3B6E5E" }}>
-              🟢 tout le monde actif
-            </span>
-          )}
-        </div>
-        {footerRight}
-      </div>
+      <MetaCarte>
+        <span>{duree} min</span>
+        <span>{ex.players > 0 ? `${ex.players} joueurs` : "joueurs illimités"}</span>
+        <Pastille couleur={format.couleur}>
+          {format.texte}
+          {wait > 0 && format.texte === "chacun son tour" ? ` · ~${wait} min d'attente/élève` : ""}
+        </Pastille>
+      </MetaCarte>
+      <PiedProgramme actions={actions} footerRight={footerRight} />
     </IndexCard>
   );
 }
@@ -7601,66 +7696,42 @@ function ProgrammeExerciseCard({ ex, label, duree, participants, expanded, onTog
 /* Même principe pour une catégorie. `metaInline` place la ligne durée/énergie/joueurs au-dessus du
    résumé (déroulé de spectacle) plutôt qu'en pied de carte (cours) : c'est la seule différence de
    structure entre les deux écrans. */
-function ProgrammeCategoryCard({ cat, label, duree, expanded, onToggle, star, headerRight, badges, badgesFallback, metaInline, actions, footerLeft, footerRight }) {
+function ProgrammeCategoryCard({ cat, label, duree, expanded, onToggle, star, headerRight, badges, badgesFallback, metaInline, actions, footerRight }) {
   const meta = (
-    <div className="flex flex-wrap items-center gap-2 text-xs mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
+    <MetaCarte>
       <span>{duree} min</span>
-      {cat.energy && <span>· {ENERGY_DOT[cat.energy] || ""} énergie {cat.energy}</span>}
-      <span>· Nombre de joueurs : {playersCountText(cat)}</span>
-    </div>
+      {cat.energy ? <Pastille couleur={ENERGY_COULEUR[cat.energy] || COLORS.textSoft}>énergie {cat.energy}</Pastille> : null}
+      <span>{texteJoueursCategorie(cat)}</span>
+    </MetaCarte>
   );
   return (
-    <IndexCard>
-      <div className="flex justify-between items-start">
-        <div className="flex-1" onClick={onToggle} style={{ cursor: "pointer" }}>
-          {label && <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">{label}</span>}
-          {/* Le bandeau de titre ne s'enveloppe que s'il a quelque chose à aligner à droite
-              (le sélecteur Mixte/Comparé du déroulé de spectacle). */}
-          {headerRight ? (
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5">
-                <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{cat.name}</h3>
-                {star}
-              </div>
-              {headerRight}
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5">
-              <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{cat.name}</h3>
-              {star}
-            </div>
-          )}
-          <div className="flex flex-wrap items-center mt-1 mb-1" style={{ minHeight: 22 }}>
-            {(cat.tags || []).length > 0 ? (
-              <span
-                className="inline-block text-xs px-2 py-0.5 rounded-full"
-                style={{ fontFamily: FONT_MONO, background: "#B3382C", color: "#fff" }}
-              >
-                {cat.tags.join(" · ")}
-              </span>
-            ) : badgesFallback}
-            {badges}
+    <IndexCard perforation={false}>
+      {/* Le bandeau ne porte le sélecteur Mixte/Comparé (déroulé de spectacle) que là où l'écran
+          l'envoie ; ailleurs, l'étoile de favori occupe seule la droite. */}
+      <BandeauProgramme
+        label={label}
+        right={(headerRight || star) && <div className="flex items-center gap-2">{headerRight}{star}</div>}
+      />
+      <div onClick={onToggle} style={{ cursor: "pointer" }}>
+        <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-xl font-semibold leading-snug">{cat.name}</h3>
+        {(cat.tags || []).length > 0 ? <SousTitreCarte>{cat.tags.join(" · ")}</SousTitreCarte> : badgesFallback}
+        {badges && <div className="flex flex-wrap items-center gap-1 mb-2">{badges}</div>}
+        {metaInline && meta}
+        <p
+          style={{ fontFamily: FONT_BODY, color: COLORS.inkSoft, ...(expanded ? {} : RESUME_DEUX_LIGNES) }}
+          className="text-sm"
+        >
+          {cat.summary}
+        </p>
+        {expanded && (
+          <div className="mt-1 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+            <div>{cat.level || "Niveau non précisé"}</div>
+            {cat.archetypes?.length > 0 && <div>Archétypes : {cat.archetypes.map((a) => a.name).join(", ")}</div>}
           </div>
-          {metaInline && meta}
-          <p
-            style={{ fontFamily: FONT_BODY, color: COLORS.textSoft, ...(expanded ? {} : RESUME_DEUX_LIGNES) }}
-            className="text-sm"
-          >
-            {cat.summary}
-          </p>
-          {expanded && (
-            <div className="mt-1 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-              <div>{cat.level || "Niveau non précisé"}</div>
-              {cat.archetypes?.length > 0 && <div>Archétypes : {cat.archetypes.map((a) => a.name).join(", ")}</div>}
-            </div>
-          )}
-        </div>
-        {actions}
+        )}
       </div>
-      <div className="flex justify-between items-center mt-2">
-        {footerLeft || <span />}
-        {footerRight}
-      </div>
+      {!metaInline && meta}
+      <PiedProgramme actions={actions} footerRight={footerRight} />
     </IndexCard>
   );
 }
@@ -8426,9 +8497,11 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
   const draggedTitle = draggedItem ? (dragged.listKey === "impro" ? draggedItem.name : draggedItem.title) : null;
 
   const items = plan ? [
-    ...plan.warmups.map((ex, i) => ({ kind: "exercise", label: plan.warmups.length > 1 ? `Échauffement ${i + 1}` : "Échauffement", ex, slot: "warmup", idx: i })),
-    ...plan.middle.map((ex, i) => ({ kind: "exercise", label: `Exercice ${i + 1}`, ex, slot: "middle", idx: i })),
-    ...plan.impro.map((cat, i) => ({ kind: "category", label: plan.impro.length > 1 ? `Catégorie d'impro ${i + 1}` : "Catégorie d'impro", cat, idx: i })),
+    // Le bandeau annonce le rang ET le total de la section ("Échauffement 2 / 4") : sur téléphone,
+    // où une seule carte tient à l'écran, c'est le seul repère qui dise combien il en reste.
+    ...plan.warmups.map((ex, i) => ({ kind: "exercise", label: rangSection("Échauffement", i, plan.warmups.length), ex, slot: "warmup", idx: i })),
+    ...plan.middle.map((ex, i) => ({ kind: "exercise", label: rangSection("Exercice", i, plan.middle.length), ex, slot: "middle", idx: i })),
+    ...plan.impro.map((cat, i) => ({ kind: "category", label: rangSection("Catégorie d'impro", i, plan.impro.length), cat, idx: i })),
   ] : [];
   // Positions (dans le tableau "items" ci-dessus) juste après le dernier échauffement / dernier
   // exercice, pour insérer les boutons "Ajouter…" au bon endroit même si la section est vide.
@@ -8569,9 +8642,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                   expanded={isExpanded}
                   onToggle={() => handleCardTap(c.id)}
                   star={
-                    <button onClick={(e) => { e.stopPropagation(); toggleFavCat(c.id); }} title="Favori">
-                      <Star size={18} color={c.favorite ? COLORS.brass : COLORS.textSoft} fill={c.favorite ? COLORS.brass : "none"} />
-                    </button>
+                    <EtoileFavori actif={c.favorite} onToggle={() => toggleFavCat(c.id)} />
                   }
                   badges={
                     <>
@@ -8610,20 +8681,15 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                     </>
                   }
                   actions={
-                    <div className="flex flex-col gap-1 items-end">
+                    <div className="flex flex-wrap items-center gap-2">
                       <Btn small variant="ghost" onClick={() => replaceCat(it.idx)}>Aléatoire</Btn>
                       <Btn small variant="ghost" onClick={() => setCatPicker({ mode: "replace", idx: it.idx })}>Changer</Btn>
                     </div>
                   }
-                  footerLeft={
-                    <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
-                      {c.actualDuration ?? c.duration ?? 5} min · Nombre de joueurs : {playersCountText(c)}
-                    </span>
-                  }
                   footerRight={
                     <div className="flex items-center gap-3">
                       <DragHandleLabel />
-                      <button onClick={() => removeCat(it.idx)} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
+                      <BoutonCorbeille onClick={() => removeCat(it.idx)} />
                     </div>
                   }
                 />
@@ -8664,9 +8730,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                 expanded={isExpanded}
                 onToggle={() => handleCardTap(it.ex.id)}
                 star={
-                  <button onClick={(e) => { e.stopPropagation(); toggleFavEx(it.ex.id); }} title="Favori">
-                    <Star size={18} color={it.ex.favorite ? COLORS.brass : COLORS.textSoft} fill={it.ex.favorite ? COLORS.brass : "none"} />
-                  </button>
+                  <EtoileFavori actif={it.ex.favorite} onToggle={() => toggleFavEx(it.ex.id)} />
                 }
                 badges={
                   <>
@@ -8697,7 +8761,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                   </>
                 }
                 actions={
-                  <div className="flex flex-col gap-1 items-end">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Btn small variant="ghost" onClick={() => replace(it.slot, it.idx)}>Aléatoire</Btn>
                     <Btn small variant="ghost" onClick={() => setPicker({ mode: "replace", slot: it.slot, idx: it.idx, groupe: it.ex.groupe })}>Changer</Btn>
                   </div>
@@ -8705,7 +8769,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                 footerRight={
                   <div className="flex items-center gap-3">
                     <DragHandleLabel />
-                    <button onClick={() => remove(it.slot, it.idx)} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
+                    <BoutonCorbeille onClick={() => remove(it.slot, it.idx)} />
                   </div>
                 }
               />
@@ -9256,16 +9320,16 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
               🕐 {minutesToTime(times[i])}
             </div>
           )}
+          {/* Le rang du bandeau est compté par mi-temps : après l'entracte, on repart de 1. */}
           <ProgrammeCategoryCard
             cat={c}
+            label={rangSection("Catégorie", i, liste.length)}
             duree={c.actualDuration ?? c.duration ?? 5}
             metaInline
             expanded={expandedId === c.id}
             onToggle={() => handleCardTap(c.id)}
             star={
-              <button onClick={(e) => { e.stopPropagation(); toggleFavCat(c.id); }} title="Favori">
-                <Star size={18} color={c.favorite ? COLORS.brass : COLORS.textSoft} fill={c.favorite ? COLORS.brass : "none"} />
-              </button>
+              <EtoileFavori actif={c.favorite} onToggle={() => toggleFavCat(c.id)} />
             }
             headerRight={format === "Match" ? (
               <div className="flex rounded-sm overflow-hidden shrink-0" style={{ border: `1px solid ${COLORS.accent}` }} onClick={(e) => e.stopPropagation()}>
@@ -9281,16 +9345,9 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                 ))}
               </div>
             ) : null}
-            badgesFallback={c.name === "Libre" ? (
-              <span
-                className="inline-block text-xs px-2 py-0.5 rounded-full"
-                style={{ fontFamily: FONT_MONO, background: COLORS.brass, color: "#fff" }}
-              >
-                Libre
-              </span>
-            ) : null}
+            badgesFallback={c.name === "Libre" ? <SousTitreCarte>Libre</SousTitreCarte> : null}
             actions={
-              <div className="flex flex-col gap-1 items-end">
+              <div className="flex flex-wrap items-center gap-2">
                 <Btn small variant="ghost" onClick={() => replaceCat(part, i)}>Aléatoire</Btn>
                 <Btn small variant="ghost" onClick={() => setCatPicker({ part, idx: i })}>Modifier</Btn>
               </div>
@@ -9298,7 +9355,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
             footerRight={
               <div className="flex items-center gap-3">
                 <DragHandleLabel />
-                <button onClick={() => removeCat(part, i)} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
+                <BoutonCorbeille onClick={() => removeCat(part, i)} />
               </div>
             }
           />
@@ -10875,7 +10932,7 @@ function PlanCoursDetail({ plan, data, allData, update, currentUser, isAdmin, pr
   const piedDeCarte = (onRemove) => (modeEdition ? (
     <div className="flex items-center gap-3">
       <DragHandleLabel />
-      <button onClick={onRemove} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
+      <BoutonCorbeille onClick={onRemove} />
     </div>
   ) : null);
   const boutonChanger = (onReplace) => (modeEdition ? (
@@ -10907,7 +10964,7 @@ function PlanCoursDetail({ plan, data, allData, update, currentUser, isAdmin, pr
           {zoneDeDepot("ech", i, (
             <ProgrammeExerciseCard
               ex={ex}
-              label={echauffements.length > 1 ? `Échauffement ${i + 1}` : "Échauffement"}
+              label={rangSection("Échauffement", i, echauffements.length)}
               duree={dureeDe(ex, 5)}
               participants={0}
               expanded={expandedId === `ex-${idx}`}
@@ -10958,7 +11015,7 @@ function PlanCoursDetail({ plan, data, allData, update, currentUser, isAdmin, pr
           {zoneDeDepot("corps", i, (
             <ProgrammeExerciseCard
               ex={ex}
-              label={`Exercice ${i + 1}`}
+              label={rangSection("Exercice", i, corps.length)}
               duree={dureeDe(ex, 5)}
               participants={0}
               expanded={expandedId === `ex-${idx}`}
@@ -10996,16 +11053,11 @@ function PlanCoursDetail({ plan, data, allData, update, currentUser, isAdmin, pr
           {zoneDeDepot("cat", i, (
             <ProgrammeCategoryCard
               cat={cat}
-              label={categories.length > 1 ? `Catégorie d'impro ${i + 1}` : "Catégorie d'impro"}
+              label={rangSection("Catégorie d'impro", i, categories.length)}
               duree={dureeDe(cat, 5)}
               expanded={expandedId === `cat-${idx}`}
               onToggle={() => setExpandedId(expandedId === `cat-${idx}` ? null : `cat-${idx}`)}
               actions={boutonChanger(() => setPicker({ kind: "category", mode: "replace", id: idx }))}
-              footerLeft={
-                <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
-                  {dureeDe(cat, 5)} min · Nombre de joueurs : {playersCountText(cat)}
-                </span>
-              }
               footerRight={piedDeCarte(() => supprimerCategorie(idx))}
             />
           ))}
@@ -11183,7 +11235,7 @@ function PlanSpectacleDetail({ plan, data, update }) {
           footerRight={modeEdition ? (
             <div className="flex items-center gap-3">
               <DragHandleLabel />
-              <button onClick={() => supprimerCategorie(idx)} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
+              <BoutonCorbeille onClick={() => supprimerCategorie(idx)} />
             </div>
           ) : null}
         />
