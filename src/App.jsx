@@ -1637,8 +1637,12 @@ function SectionHeader({ icon: Icon, title, subtitle, action }) {
 
 /* Rappel du geste de glisser-déposer, posé entre le bloc de création et les cartes du programme.
    Volontairement hors carte et en petites capitales monospace : c'est une indication de lecture,
-   pas un contenu du programme — elle ne doit pas se confondre avec les fiches qu'elle décrit. */
+   pas un contenu du programme — elle ne doit pas se confondre avec les fiches qu'elle décrit.
+   Réservé au tactile : c'est le miroir exact de DragHandleLabel, qui n'affiche le bouton
+   "Déplacer" que sur ordinateur. À la souris, la carte ne se saisit QUE par ce bouton, donc
+   « maintiens ton doigt sur une carte » y serait faux autant qu'inutile. */
 function AstuceGlisser({ children }) {
+  if (useIsFinePointer()) return null;
   return (
     <div className="flex items-center gap-2 mb-3" style={{ color: COLORS.inkSoft }}>
       <MoveVertical size={16} className="shrink-0" />
