@@ -1682,7 +1682,7 @@ function Btn({ children, onClick, variant = "solid", small, type = "button", dis
    seul au bout de quelques secondes. Les données sont partagées par toute la troupe : un pouce égaré
    sur une corbeille effaçait une fiche pour tout le monde, sans retour possible. Pas de fenêtre du
    navigateur, qui s'affiche mal sur certains téléphones et sort du style de l'appli. */
-function BoutonSupprimer({ onDelete, titre = "Supprimer", texte = false, taille = 22 }) {
+function BoutonSupprimer({ onDelete, titre = "Supprimer", texte = false, taille = 22, cadre = false }) {
   const [arme, setArme] = useState(false);
   useEffect(() => {
     if (!arme) return undefined;
@@ -1699,6 +1699,21 @@ function BoutonSupprimer({ onDelete, titre = "Supprimer", texte = false, taille 
         title="Confirmer la suppression"
       >
         <Trash2 size={13} color="#fff" /> Confirmer
+      </button>
+    );
+  }
+  if (cadre) {
+    // Corbeille encadrée du pied des cartes de programme : elle se lit comme une action, au même
+    // titre que les boutons "Aléatoire" et "Changer" qui la précèdent.
+    return (
+      <button
+        type="button"
+        onClick={() => setArme(true)}
+        title={titre}
+        className="inline-flex items-center justify-center rounded-sm"
+        style={{ width: 34, height: 32, border: `1px solid ${COLORS.accent}55` }}
+      >
+        <Trash2 size={16} color={COLORS.accent} />
       </button>
     );
   }
@@ -7648,32 +7663,18 @@ function Pastille({ couleur, children }) {
   );
 }
 
-/* Corbeille du pied de carte : encadrée comme les boutons voisins, pour qu'elle se lise comme une
-   action et non comme une icône décorative posée dans le vide. */
-function BoutonCorbeille({ onClick }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title="Supprimer"
-      className="inline-flex items-center justify-center rounded-sm"
-      style={{ width: 34, height: 32, border: `1px solid ${COLORS.accent}55`, color: COLORS.accent }}
-    >
-      <Trash2 size={16} color={COLORS.accent} />
-    </button>
-  );
-}
-
 /* Pied de carte : les actions à gauche, la corbeille (et la poignée de déplacement) à droite. */
 function PiedProgramme({ actions, footerRight }) {
   if (!actions && !footerRight) return null;
+  // Le pied arrête le clic : toute la carte déplie sa description, sauf ses boutons.
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 mt-2">
+    <div className="flex flex-wrap items-center justify-between gap-2 mt-2" onClick={(e) => e.stopPropagation()}>
       <div className="flex flex-wrap items-center gap-2">{actions}</div>
       <div className="flex items-center gap-3">{footerRight}</div>
     </div>
   );
 }
+
 
 /* Couleur et libellé court du format de jeu, partagés par la carte et son bandeau de méta. */
 const FORMAT_JEU = {
@@ -7693,10 +7694,13 @@ function ProgrammeExerciseCard({ ex, label, duree, participants, expanded, onTog
   // section de bibliothèque, le seul classement plus large et toujours renseigné. La `mention`
   // dit déjà la section quand elle est là : inutile de l'écrire deux fois.
   const famille = ex.groupe || (mention ? "" : ex.phase || "Impro");
+  // Le clic est porté par la carte entière, pas seulement par son texte : viser un titre au pouce,
+  // debout dans une salle, demandait trop de précision. Les zones qui font autre chose (l'étoile,
+  // le sélecteur du bandeau, les boutons du pied) arrêtent le clic chacune de leur côté.
   return (
-    <IndexCard perforation={false}>
+    <IndexCard perforation={false} onClick={onToggle} style={{ cursor: "pointer" }}>
       <BandeauProgramme label={label} right={star} />
-      <div onClick={onToggle} style={{ cursor: "pointer" }}>
+      <div>
         <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-xl font-semibold leading-snug">{ex.title}</h3>
         <SousTitreCarte>{[famille, mention].filter(Boolean).join(" · ")}</SousTitreCarte>
         {/* Les badges de correspondance du générateur gardent leur ligne, sous le sous-titre. */}
@@ -7737,14 +7741,14 @@ function ProgrammeCategoryCard({ cat, label, duree, expanded, onToggle, star, he
     </MetaCarte>
   );
   return (
-    <IndexCard perforation={false}>
+    <IndexCard perforation={false} onClick={onToggle} style={{ cursor: "pointer" }}>
       {/* Le bandeau ne porte le sélecteur Mixte/Comparé (déroulé de spectacle) que là où l'écran
           l'envoie ; ailleurs, l'étoile de favori occupe seule la droite. */}
       <BandeauProgramme
         label={label}
         right={(headerRight || star) && <div className="flex items-center gap-2">{headerRight}{star}</div>}
       />
-      <div onClick={onToggle} style={{ cursor: "pointer" }}>
+      <div>
         <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-xl font-semibold leading-snug">{cat.name}</h3>
         {(cat.tags || []).length > 0 ? <SousTitreCarte>{cat.tags.join(" · ")}</SousTitreCarte> : badgesFallback}
         {badges && <div className="flex flex-wrap items-center gap-1 mb-2">{badges}</div>}
@@ -8715,7 +8719,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                   footerRight={
                     <div className="flex items-center gap-3">
                       <DragHandleLabel />
-                      <BoutonCorbeille onClick={() => removeCat(it.idx)} />
+                      <BoutonSupprimer cadre onDelete={() => removeCat(it.idx)} />
                     </div>
                   }
                 />
@@ -8788,7 +8792,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                 footerRight={
                   <div className="flex items-center gap-3">
                     <DragHandleLabel />
-                    <BoutonCorbeille onClick={() => remove(it.slot, it.idx)} />
+                    <BoutonSupprimer cadre onDelete={() => remove(it.slot, it.idx)} />
                   </div>
                 }
               />
@@ -9157,10 +9161,6 @@ function buildSpectacle(categories, { format, niveau, duree, entracteOn, integre
   return { first, second, budget1, budget2 };
 }
 
-function DropZone() {
-  return <div style={{ height: 10 }} />;
-}
-
 function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentUser, setTab }) {
   // Catégories en attente/refusées du créateur courant : jamais proposées par le tirage automatique,
   // mais ajoutées au pool de recherche manuelle du picker pour qu'il puisse quand même les ajouter
@@ -9373,7 +9373,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
             footerRight={
               <div className="flex items-center gap-3">
                 <DragHandleLabel />
-                <BoutonCorbeille onClick={() => removeCat(part, i)} />
+                <BoutonSupprimer cadre onDelete={() => removeCat(part, i)} />
               </div>
             }
           />
@@ -9386,7 +9386,6 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
             onCancel={() => setCatPicker(null)}
           />
         )}
-        <DropZone />
       </React.Fragment>
     );
   };
@@ -9465,7 +9464,6 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
               scène) n'est jamais placée avant elle. L'échauffement de scène, s'il est activé, passe en
               tout premier juste après. */}
           <IndexCard><span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">Introduction — {SPECTACLE_INTRO_MIN} min{schedule ? ` — ${minutesToTime(schedule.introStart)}` : ""}</span></IndexCard>
-          <DropZone />
           {result.stageWarmup && (
             <>
               {schedule && (
@@ -9488,7 +9486,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                     <Btn small variant="ghost" onClick={() => setStageWarmupPicker(true)}>Modifier</Btn>
                   </div>
                 }
-                footerRight={<BoutonCorbeille onClick={removeStageWarmup} />}
+                footerRight={<BoutonSupprimer cadre onDelete={removeStageWarmup} />}
               />
               {stageWarmupPicker && (
                 <ExercisePicker
@@ -9498,7 +9496,6 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                   onCancel={() => setStageWarmupPicker(false)}
                 />
               )}
-              <DropZone />
             </>
           )}
           {result.first.map((c, i) => carteCategorieSpectacle(c, "first", i))}
@@ -9516,7 +9513,6 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
               </span>
             </IndexCard>
           )}
-          <DropZone />
           {result.second.map((c, i) => carteCategorieSpectacle(c, "second", i))}
           <div className="mb-2">
             <Btn small variant="accent" onClick={() => setCatPicker({ mode: "add", part: entracteOn ? "second" : "first" })}><Plus size={13} /> Ajouter une catégorie</Btn>
@@ -9787,7 +9783,7 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
                     <Btn small variant="ghost" onClick={() => setPicker({ mode: "replace", idx })}>Changer</Btn>
                   </div>
                 }
-                footerRight={<BoutonCorbeille onClick={() => remove(idx)} />}
+                footerRight={<BoutonSupprimer cadre onDelete={() => remove(idx)} />}
               />
               {picker?.mode === "replace" && picker.idx === idx && (
                 <ExercisePicker
@@ -10902,7 +10898,7 @@ function PlanCoursDetail({ plan, data, allData, update, currentUser, isAdmin, pr
   const piedDeCarte = (onRemove) => (modeEdition ? (
     <div className="flex items-center gap-3">
       <DragHandleLabel />
-      <BoutonCorbeille onClick={onRemove} />
+      <BoutonSupprimer cadre onDelete={onRemove} />
     </div>
   ) : null);
   const boutonChanger = (onReplace) => (modeEdition ? (
@@ -11204,7 +11200,7 @@ function PlanSpectacleDetail({ plan, data, update }) {
           footerRight={modeEdition ? (
             <div className="flex items-center gap-3">
               <DragHandleLabel />
-              <BoutonCorbeille onClick={() => supprimerCategorie(idx)} />
+              <BoutonSupprimer cadre onDelete={() => supprimerCategorie(idx)} />
             </div>
           ) : null}
         />
