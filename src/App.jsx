@@ -7346,9 +7346,10 @@ function pickRandomByFamily(arr) {
 const truncate = (s, n = 90) => (s && s.length > n ? s.slice(0, n).trim() + "…" : s);
 // Pastille de couleur pour l'énergie d'une catégorie (Créer un spectacle) : bleu = Faible,
 // vert = Modérée, rouge = Forte.
-const ENERGY_DOT = { Faible: "🔵", Modérée: "🟢", Forte: "🔴" };
-/* Mêmes trois niveaux que ENERGY_DOT, en couleurs de l'appli : les cartes de programme dessinent
-   leur pastille plutôt que d'afficher un emoji, dont le rendu change d'un téléphone à l'autre. */
+/* Les trois niveaux d'énergie, en couleurs de l'appli : les cartes dessinent leur pastille plutôt
+   que d'afficher un emoji, dont le rendu change d'un téléphone à l'autre. (L'ancienne table
+   d'emojis ENERGY_DOT n'avait plus de lecteur une fois toutes les cartes passées au modèle
+   commun.) */
 const ENERGY_COULEUR = { Faible: "#3D6C8F", Modérée: "#3B6E5E", Forte: COLORS.accent };
 // Affiche "illimité" plutôt qu'une plage numérique quand la fiche a été renseignée comme telle :
 // la conversion des données d'origine ("illimité", "illimité minimum N"…) utilise systématiquement
@@ -9455,37 +9456,23 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                   🕐 {minutesToTime(schedule.stageWarmupStart)}
                 </div>
               )}
-              <IndexCard>
-                <div className="flex justify-between items-start gap-2">
-                  <div className="flex-1">
-                    <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{result.stageWarmup.title}</h3>
-                    <div className="flex flex-wrap items-center mt-1 mb-1" style={{ minHeight: 22 }}>
-                      <span className="inline-block text-xs px-2 py-0.5 rounded-full" style={{ fontFamily: FONT_MONO, background: COLORS.brass, color: "#fff" }}>
-                        Échauffement de scène
-                      </span>
-                      {result.stageWarmup.groupe && (
-                        <span className="inline-block text-xs px-2 py-0.5 rounded-full ml-1" style={{ fontFamily: FONT_MONO, background: COLORS.accent, color: "#fff" }}>
-                          {result.stageWarmup.groupe}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 text-xs mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
-                      <span>{result.stageWarmup.duration} min</span>
-                      {result.stageWarmup.energy && <span>· {ENERGY_DOT[result.stageWarmup.energy] || ""} énergie {result.stageWarmup.energy}</span>}
-                    </div>
-                    <p style={{ fontFamily: FONT_BODY, color: COLORS.textSoft, minHeight: "2.6em" }} className="text-sm">
-                      {result.stageWarmup.summary}
-                    </p>
-                  </div>
-                  <div className="flex flex-col gap-1 items-end">
+              {/* Même carte que les autres numéros du spectacle : son rôle ("Échauffement de scène")
+                  tient dans le bandeau, là où les catégories affichent leur rang. */}
+              <ProgrammeExerciseCard
+                ex={result.stageWarmup}
+                label="Échauffement de scène"
+                duree={result.stageWarmup.duration}
+                participants={0}
+                expanded={expandedId === result.stageWarmup.id}
+                onToggle={() => handleCardTap(result.stageWarmup.id)}
+                actions={
+                  <div className="flex flex-wrap items-center gap-2">
                     <Btn small variant="ghost" onClick={replaceStageWarmup}>Aléatoire</Btn>
                     <Btn small variant="ghost" onClick={() => setStageWarmupPicker(true)}>Modifier</Btn>
                   </div>
-                </div>
-                <div className="flex justify-end items-center mt-2">
-                  <button onClick={removeStageWarmup} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
-                </div>
-              </IndexCard>
+                }
+                footerRight={<BoutonCorbeille onClick={removeStageWarmup} />}
+              />
               {stageWarmupPicker && (
                 <ExercisePicker
                   exercises={data.exercises}
@@ -9767,58 +9754,24 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
             const isExpanded = expandedId === e.id;
             return (
               <React.Fragment key={e.id}>
-              <IndexCard>
-                <div className="flex justify-between items-start">
-                  <div className="flex-1" onClick={() => handleCardTap(e.id)} style={{ cursor: "pointer" }}>
-                    <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{e.title}</h3>
-                    {/* Hauteur toujours réservée (même sans badge) pour éviter que la carte suivante ne
-                        se décale et que le clic sur "Aléatoire" d'une carte voisine n'atterrisse par
-                        erreur sur un autre bouton après le remplacement. */}
-                    <div className="mt-1 mb-1" style={{ minHeight: 22 }}>
-                      {e.groupe && (
-                        <span
-                          className="inline-block text-xs px-2 py-0.5 rounded-full"
-                          style={{ fontFamily: FONT_MONO, background: COLORS.accent, color: "#fff" }}
-                        >
-                          {e.groupe}
-                        </span>
-                      )}
-                    </div>
-                    <p
-                      style={{
-                        fontFamily: FONT_BODY, color: COLORS.textSoft,
-                        ...(isExpanded ? {} : { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", minHeight: "2.6em" }),
-                      }}
-                      className="text-sm"
-                    >
-                      {e.summary}
-                    </p>
-                    {isExpanded && (
-                      <div className="mt-1 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-                        <div>{e.level || "Niveau non précisé"}</div>
-                        {e.objectives?.length > 0 && <div>Objectifs : {e.objectives.join(", ")}</div>}
-                        {e.energy && <div>Énergie : {e.energy}</div>}
-                        {e.material && e.material !== "Aucun" && <div>Matériel : {e.material}</div>}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-col gap-1 items-end">
+              {/* Même carte que les programmes de cours et de spectacle : ce bloc en dupliquait le
+                  dessin, il utilise maintenant le composant partagé. */}
+              <ProgrammeExerciseCard
+                ex={e}
+                label={rangSection("Échauffement", idx, list.length)}
+                duree={e.actualDuration ?? e.duration}
+                participants={0}
+                expanded={isExpanded}
+                onToggle={() => handleCardTap(e.id)}
+                star={<EtoileFavori actif={e.favorite} onToggle={() => toggleFavorite(e.id)} />}
+                actions={
+                  <div className="flex flex-wrap items-center gap-2">
                     <Btn small variant="ghost" onClick={() => replace(idx)}>Aléatoire</Btn>
                     <Btn small variant="ghost" onClick={() => setPicker({ mode: "replace", idx })}>Changer</Btn>
                   </div>
-                </div>
-                <div className="flex justify-between items-center mt-2">
-                  <div className="flex items-center gap-2">
-                    <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
-                      {e.actualDuration ?? e.duration} min · Nombre de joueurs : {e.players > 0 ? e.players : "Illimité"}
-                    </span>
-                    <button onClick={() => toggleFavorite(e.id)} title="Favori">
-                      <Star size={22} color={e.favorite ? COLORS.brass : COLORS.textSoft} fill={e.favorite ? COLORS.brass : "none"} />
-                    </button>
-                  </div>
-                  <button onClick={() => remove(idx)} title="Supprimer"><Trash2 size={22} color={COLORS.accent} /></button>
-                </div>
-              </IndexCard>
+                }
+                footerRight={<BoutonCorbeille onClick={() => remove(idx)} />}
+              />
               {picker?.mode === "replace" && picker.idx === idx && (
                 <ExercisePicker
                   exercises={data.exercises.filter((e) => e.warmup)}
