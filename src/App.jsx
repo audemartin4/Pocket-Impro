@@ -7615,6 +7615,28 @@ function MetaCarte({ children }) {
   );
 }
 
+/* Résumé d'une carte de programme, avec le chevron qui dit que la suite se déplie. Sans lui, rien
+   n'indiquait qu'un appui sur la carte ouvre la fiche entière : les points de suspension de la
+   troncature passaient pour une fin de texte. Il pivote une fois la carte ouverte. */
+function ResumeCarte({ children, expanded }) {
+  return (
+    <div className="flex items-center gap-2">
+      <p
+        style={{ fontFamily: FONT_BODY, color: COLORS.inkSoft, ...(expanded ? {} : RESUME_DEUX_LIGNES) }}
+        className="text-sm flex-1"
+      >
+        {children}
+      </p>
+      <ChevronDown
+        size={18}
+        color={COLORS.inkSoft}
+        className="shrink-0"
+        style={{ transform: expanded ? "rotate(180deg)" : "none", transition: "transform 150ms" }}
+      />
+    </div>
+  );
+}
+
 /* Pastille de couleur des lignes de méta (format de jeu, énergie) : un simple rond, là où un emoji
    changeait de dessin d'un téléphone à l'autre. */
 function Pastille({ couleur, children }) {
@@ -7666,20 +7688,20 @@ const FORMAT_JEU = {
 function ProgrammeExerciseCard({ ex, label, duree, participants, expanded, onToggle, star, badges, mention, actions, footerRight }) {
   const wait = computeWaitMinutes(ex, participants);
   const format = FORMAT_JEU[ex.format] || FORMAT_JEU["Solo simultané"];
+  // Toutes les fiches n'ont pas de famille d'objectifs. Plutôt que de laisser la ligne vide — ce
+  // qui donnait des cartes de deux hauteurs différentes dans la même liste — on retombe sur la
+  // section de bibliothèque, le seul classement plus large et toujours renseigné. La `mention`
+  // dit déjà la section quand elle est là : inutile de l'écrire deux fois.
+  const famille = ex.groupe || (mention ? "" : ex.phase || "Impro");
   return (
     <IndexCard perforation={false}>
       <BandeauProgramme label={label} right={star} />
       <div onClick={onToggle} style={{ cursor: "pointer" }}>
         <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-xl font-semibold leading-snug">{ex.title}</h3>
-        <SousTitreCarte>{[ex.groupe, mention].filter(Boolean).join(" · ")}</SousTitreCarte>
+        <SousTitreCarte>{[famille, mention].filter(Boolean).join(" · ")}</SousTitreCarte>
         {/* Les badges de correspondance du générateur gardent leur ligne, sous le sous-titre. */}
         {badges && <div className="flex flex-wrap items-center gap-1 mb-2">{badges}</div>}
-        <p
-          style={{ fontFamily: FONT_BODY, color: COLORS.inkSoft, ...(expanded ? {} : RESUME_DEUX_LIGNES) }}
-          className="text-sm"
-        >
-          {ex.summary}
-        </p>
+        <ResumeCarte expanded={expanded}>{ex.summary}</ResumeCarte>
         {expanded && (
           <div className="mt-1 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
             <div>{ex.level || "Niveau non précisé"}</div>
@@ -7726,12 +7748,7 @@ function ProgrammeCategoryCard({ cat, label, duree, expanded, onToggle, star, he
         <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-xl font-semibold leading-snug">{cat.name}</h3>
         {(cat.tags || []).length > 0 ? <SousTitreCarte>{cat.tags.join(" · ")}</SousTitreCarte> : badgesFallback}
         {badges && <div className="flex flex-wrap items-center gap-1 mb-2">{badges}</div>}
-        <p
-          style={{ fontFamily: FONT_BODY, color: COLORS.inkSoft, ...(expanded ? {} : RESUME_DEUX_LIGNES) }}
-          className="text-sm"
-        >
-          {cat.summary}
-        </p>
+        <ResumeCarte expanded={expanded}>{cat.summary}</ResumeCarte>
         {expanded && (
           <div className="mt-1 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
             <div>{cat.level || "Niveau non précisé"}</div>
