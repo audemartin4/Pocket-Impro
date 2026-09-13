@@ -3,7 +3,7 @@ import {
   Sparkles, Shuffle, Clock, BookOpen, Users, Flame, ClipboardList,
   Plus, Trash2, Tag, ChevronRight, ChevronUp, ChevronDown, ChevronLeft, Download,
   Save, X, Check, Home, Theater, Pencil, Library, UserCircle, Pointer, Star, LogIn, LogOut, AlertTriangle, Mail, Eye, EyeOff, Contact,
-  Facebook, Instagram, Play, Hand
+  Facebook, Instagram, Play, Hand, MoveVertical
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
 import { APP_DATA_ROW_ID } from "./appDataRow.js";
@@ -1631,6 +1631,20 @@ function SectionHeader({ icon: Icon, title, subtitle, action }) {
         )}
       </div>
       {action}
+    </div>
+  );
+}
+
+/* Rappel du geste de glisser-déposer, posé entre le bloc de création et les cartes du programme.
+   Volontairement hors carte et en petites capitales monospace : c'est une indication de lecture,
+   pas un contenu du programme — elle ne doit pas se confondre avec les fiches qu'elle décrit. */
+function AstuceGlisser({ children }) {
+  return (
+    <div className="flex items-center gap-2 mb-3" style={{ color: COLORS.inkSoft }}>
+      <MoveVertical size={16} className="shrink-0" />
+      <p className="text-xs uppercase leading-relaxed" style={{ fontFamily: FONT_MONO, letterSpacing: "0.06em" }}>
+        {children}
+      </p>
     </div>
   );
 }
@@ -8531,6 +8545,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
 
       {plan && (
         <>
+          <AstuceGlisser>Maintiens ton doigt sur une carte et fais-la glisser pour réorganiser ton cours</AstuceGlisser>
           {items.map((it, itemIndex) => {
             const prefixButtons = (
               <>
@@ -9366,6 +9381,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
 
       {result && (
         <>
+          <AstuceGlisser>Maintiens ton doigt sur une carte et fais-la glisser pour réorganiser ton spectacle</AstuceGlisser>
           {/* Le spectacle commence toujours par l'introduction : aucune catégorie (ni l'échauffement de
               scène) n'est jamais placée avant elle. L'échauffement de scène, s'il est activé, passe en
               tout premier juste après. */}
