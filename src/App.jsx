@@ -2439,13 +2439,53 @@ const IDEES_METIERS = [
   "Bibliothécaire", "Archéologue", "Explorateur", "Alpiniste", "Dresseur d'animaux", "Dompteur de cirque", "Clown",
   "Magicien", "Voyante", "Sorcier", "Chevalier", "Roi"
 ];
+// Thèmes de départ pour la page « Générer des idées » : liste fournie par Aude (188 entrées,
+// PDF « Liste Thèmes 01 »). Rangés par familles dans le fichier, mais tirés au hasard à l'écran.
+const IDEES_THEMES = [
+  "Le dernier au revoir", "La lettre oubliée", "Le secret de famille", "L'héritage", "Un mariage annulé",
+  "Jalousie", "Le pardon", "Retrouvailles", "Le remplaçant", "L'anniversaire de trop", "Le souvenir d'enfance",
+  "Le cadeau était nul", "Trahison", "Le mensonge", "Le divorce à l'amiable", "Le témoin", "La dette impayée",
+  "Le pacte secret", "La photo interdite", "L'ami d'enfance", "Le groupe", "La rumeur",
+  "Celui qu'on a oublié d'inviter", "Le pari", "La dispute", "La panne d'ascenseur", "La salle d'attente",
+  "Le dernier train", "Entre deux étages", "Le voisin trop curieux", "La maison vide", "Le bureau",
+  "La cave des secrets", "Le grenier", "La station-service déserte", "Le vieux carnet retrouvé",
+  "La valise oubliée", "La clé sans porte", "Le miroir cassé", "L'enveloppe scellée", "Le téléphone",
+  "Le tiroir fermé à clé", "La montre arrêtée", "Le testament", "L'objet maudit", "Nostalgie",
+  "Un air de déjà-vu", "Le premier jour d'école", "Le dernier jour de vacances", "L'oubli",
+  "Le jour où tout a changé", "Vingt ans après", "Le compte à rebours", "La photo de classe",
+  "Le temps qui passe", "L'inconnu à la porte", "L'imposteur", "La fausse identité", "Le silence",
+  "L'accident", "La panne d'électricité", "Le message anonyme", "On n'est plus seuls", "Le bruit",
+  "La disparition", "Ils se sont échappés", "La panne", "L'extraterrestre", "Le robot",
+  "La malédiction familiale", "Le régime", "Le karaoké du dimanche", "La machine à remonter le temps",
+  "Duel de voisins", "La démission", "Le nouveau travail", "La réunion", "Le licenciement",
+  "L'entretien d'embauche", "Le patron", "Un collègue trop parfait", "Le pot de départ", "Solitude",
+  "La peur de vieillir", "Une crise existentielle", "Le lundi matin", "L'ennui", "La dernière chance",
+  "Le doute", "L'orage qui approche", "La neige", "La sécheresse", "Le brouillard", "La marée",
+  "Le dernier bagage", "À l'aéroport", "Le retour au pays", "Le vol raté", "La frontière fermée",
+  "Le premier amour", "La demande en mariage", "C'est mon ex", "Le repas de famille", "Le jumeau",
+  "Le beau-parent", "Le coup de foudre", "La colocation", "Le voisin de palier", "L'inconnu du train",
+  "La rencontre au marché", "L'ami imaginaire", "L'élève doué", "Le professeur remplaçant", "La cour de récré",
+  "Le déguisement", "Le jeu de cache-cache", "La cabane dans les arbres", "Le trésor enterré",
+  "Le club secret", "La boîte à souvenirs", "Le carnet de notes", "La classe de rattrapage", "Le mot croisé",
+  "Le concours de talents", "L'audition", "Les coulisses", "Le rideau qui se lève", "Le trac",
+  "La dernière répétition", "L'orchestre", "Le poète", "Le sculpteur", "La galerie d'art", "La bibliothèque",
+  "Le livre interdit", "La page manquante", "Le jeu de société", "La partie de cartes", "Le tirage au sort",
+  "Le ticket gagnant", "La roue de la fortune", "Le casino", "Le portefeuille perdu", "La monnaie étrangère",
+  "Le vide-grenier", "Le sapin de Noël", "Le réveillon", "La galette des rois", "Le carnaval",
+  "Le feu d'artifice", "La fête foraine", "Le manège", "La grande roue", "Le train fantôme", "Le magicien",
+  "Le tour de cartes", "L'illusionniste", "Le numéro de cirque", "Le funambule", "L'aquarium", "Le zoo",
+  "La cage ouverte", "Le vétérinaire", "Le refuge", "Le corbeau", "L'abeille", "La ruche", "Le jardin secret",
+  "La serre", "Le potager", "Le grain de sable", "Le désert", "Le mirage", "La caravane", "Le glacier",
+  "La grotte", "L'écho", "La rivière", "Le pont", "Le radeau", "La chute d'eau", "Le naufrage", "Le phare",
+  "La bouteille à la mer", "L'île déserte", "Le trésor du pirate", "Le capitaine", "La carte au trésor"
+];
 const IDEE_CATEGORIES = [
+  { key: "themes", label: "Thèmes", list: IDEES_THEMES },
   { key: "lieux", label: "Lieux", list: IDEES_LIEUX },
   { key: "relations", label: "Relations", list: IDEES_RELATIONS },
   { key: "emotions", label: "Émotions", list: IDEES_EMOTIONS },
   { key: "metiers", label: "Métiers", list: IDEES_METIERS },
   { key: "mots", label: "Mots", underConstruction: true },
-  { key: "themes", label: "Thèmes", underConstruction: true },
 ];
 
 function GenererIdeesTab({ setTab, data }) {
@@ -2460,7 +2500,24 @@ function GenererIdeesTab({ setTab, data }) {
   // "picked" ci-dessus : chacun reste affiché sous son propre bouton jusqu'à sa croix.
   const [universResults, setUniversResults] = useState({}); // { [type]: value }
 
-  const draw = (cat) => setPicked((prev) => ({ ...prev, [cat.key]: cat.list[Math.floor(Math.random() * cat.list.length)] }));
+  // Idées déjà sorties, par catégorie : une proposition ne revient qu'une fois toutes les autres
+  // vues. Sans cet historique, le hasard pur ramène la même idée au bout de quelques clics, ce qui
+  // donne l'impression que le tirage tourne en rond. Il vit dans le navigateur de chacun — rien
+  // n'est enregistré ni partagé, donc deux personnes qui cliquent en même temps n'obtiennent pas la
+  // même idée, et chacune repart d'une ardoise neuve à la visite suivante. Même principe que
+  // `universUsed` plus bas, pour le mode Univers.
+  const [ideesVues, setIdeesVues] = useState({}); // { [cat.key]: Set<string> }
+  const draw = (cat) => {
+    const liste = cat.list || [];
+    if (liste.length === 0) return;
+    const vues = ideesVues[cat.key] || new Set();
+    const restantes = liste.filter((v) => !vues.has(v));
+    // Liste épuisée : on repart d'une ardoise neuve plutôt que de bloquer sur les dernières idées.
+    const pool = restantes.length > 0 ? restantes : liste;
+    const value = pool[Math.floor(Math.random() * pool.length)];
+    setIdeesVues((prev) => ({ ...prev, [cat.key]: new Set(restantes.length > 0 ? vues : []).add(value) }));
+    setPicked((prev) => ({ ...prev, [cat.key]: value }));
+  };
   const dismiss = (key) => setPicked((prev) => { const next = { ...prev }; delete next[key]; return next; });
 
   // Catégories de la famille "Univers" (Western, Fantasy, Polar…), triées alphabétiquement pour le menu.
