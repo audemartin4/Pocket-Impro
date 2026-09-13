@@ -319,6 +319,10 @@ const sansLesProchesDe = (pool, precedente) => {
   const restant = pool.filter((e) => !sontProches(e, precedente));
   return restant.length > 0 ? restant : pool;
 };
+// Fiche qui, lorsque le tirage la retient, ouvre le corps du cours (juste après les échauffements) :
+// elle sert à poser devant le groupe la théorie selon laquelle la simplicité du jeu se suffit à
+// elle-même, ce qui ne vaut qu'avant les autres exercices. Voir le tirage des exercices principaux.
+const EXERCICE_OUVERTURE = "Les 2 chaises";
 const CONTEXTES_ECHAUFFEMENT = ["Match", "Cabaret", "Format Long", "Spectacle personnalisé"];
 const DUREES_ECHAUFFEMENT = [5, 10, 15, 30];
 const PALIERS_TEMPS_COURS = [0, 5, 10, 15, 20, 25, 30, 35, 40];
@@ -7894,7 +7898,18 @@ function buildCours(exercises, categories, { niveau, tempsTotal, nbEchauffements
     const pick = pickFromPool(familyCandidates) || pickFromPool(tagCandidates) || pickFromPool(otherCandidates);
     if (!pick) break; // plus aucun exercice, quel qu'il soit, ne tient dans le temps restant
 
-    middle.push(withActual(pick, budget));
+    // EXERCICE_OUVERTURE remonte en tête du corps du cours. On le remonte au moment du tirage,
+    // et non par un tri après coup : les cartes déjà retenues gardent leurs voisines et les
+    // enchaînements déjà vérifiés restent valables. Les deux seuls nouveaux voisinages qu'il crée
+    // — le dernier échauffement devant lui, l'ancienne première carte derrière — sont vérifiés ici,
+    // pour que la règle des fiches proches tienne aussi dans ce cas.
+    const carte = withActual(pick, budget);
+    const ouvreLeCours =
+      pick.title === EXERCICE_OUVERTURE &&
+      !sontProches(pick, middle[0]) &&
+      !sontProches(pick, warmups[warmups.length - 1]);
+    if (ouvreLeCours) middle.unshift(carte);
+    else middle.push(carte);
     used.add(pick.id);
     budget = consumeBudget(pick.duration, budget);
     lastFormat = pick.format || "Solo simultané";
