@@ -7591,7 +7591,7 @@ function EtoileFavori({ actif, onToggle }) {
 function SousTitreCarte({ children }) {
   if (!children) return null;
   return (
-    <div className="flex items-stretch gap-2 mt-0.5 mb-1.5">
+    <div className="flex items-stretch gap-2 mt-0.5 mb-1">
       <span className="w-[3px] rounded-full shrink-0" style={{ background: COLORS.brass }} />
       <span className="text-sm" style={{ fontFamily: FONT_DISPLAY, color: COLORS.inkSoft }}>{children}</span>
     </div>
@@ -7659,7 +7659,10 @@ const FORMAT_JEU = {
   "Solo simultané": { couleur: "#3B6E5E", texte: "tout le monde actif" },
 };
 
-function ProgrammeExerciseCard({ ex, label, duree, participants, expanded, onToggle, star, badges, actions, footerRight }) {
+/* `mention` : une précision qui se lit comme la famille d'objectifs (ex. « Exercice pré-impro »)
+   et prend sa place quand la fiche n'en a pas. Elle partage la même ligne : deux filets laiton
+   l'un sous l'autre donneraient deux sous-titres concurrents. */
+function ProgrammeExerciseCard({ ex, label, duree, participants, expanded, onToggle, star, badges, mention, actions, footerRight }) {
   const wait = computeWaitMinutes(ex, participants);
   const format = FORMAT_JEU[ex.format] || FORMAT_JEU["Solo simultané"];
   return (
@@ -7667,7 +7670,7 @@ function ProgrammeExerciseCard({ ex, label, duree, participants, expanded, onTog
       <BandeauProgramme label={label} right={star} />
       <div onClick={onToggle} style={{ cursor: "pointer" }}>
         <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-xl font-semibold leading-snug">{ex.title}</h3>
-        <SousTitreCarte>{ex.groupe}</SousTitreCarte>
+        <SousTitreCarte>{[ex.groupe, mention].filter(Boolean).join(" · ")}</SousTitreCarte>
         {/* Les badges de correspondance du générateur gardent leur ligne, sous le sous-titre. */}
         {badges && <div className="flex flex-wrap items-center gap-1 mb-2">{badges}</div>}
         <p
@@ -7698,10 +7701,11 @@ function ProgrammeExerciseCard({ ex, label, duree, participants, expanded, onTog
   );
 }
 
-/* Même principe pour une catégorie. `metaInline` place la ligne durée/énergie/joueurs au-dessus du
-   résumé (déroulé de spectacle) plutôt qu'en pied de carte (cours) : c'est la seule différence de
-   structure entre les deux écrans. */
-function ProgrammeCategoryCard({ cat, label, duree, expanded, onToggle, star, headerRight, badges, badgesFallback, metaInline, actions, footerRight }) {
+/* Même principe pour une catégorie, et désormais le même ordre de lecture que pour un exercice :
+   nom, genres, description, puis la ligne durée/énergie/joueurs. Le déroulé de spectacle faisait
+   exception et remontait cette ligne au-dessus de la description, ce qui séparait le nom de la
+   catégorie de ce qu'elle raconte. */
+function ProgrammeCategoryCard({ cat, label, duree, expanded, onToggle, star, headerRight, badges, badgesFallback, actions, footerRight }) {
   const meta = (
     <MetaCarte>
       <span>{duree} min</span>
@@ -7721,7 +7725,6 @@ function ProgrammeCategoryCard({ cat, label, duree, expanded, onToggle, star, he
         <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-xl font-semibold leading-snug">{cat.name}</h3>
         {(cat.tags || []).length > 0 ? <SousTitreCarte>{cat.tags.join(" · ")}</SousTitreCarte> : badgesFallback}
         {badges && <div className="flex flex-wrap items-center gap-1 mb-2">{badges}</div>}
-        {metaInline && meta}
         <p
           style={{ fontFamily: FONT_BODY, color: COLORS.inkSoft, ...(expanded ? {} : RESUME_DEUX_LIGNES) }}
           className="text-sm"
@@ -7735,7 +7738,7 @@ function ProgrammeCategoryCard({ cat, label, duree, expanded, onToggle, star, he
           </div>
         )}
       </div>
-      {!metaInline && meta}
+      {meta}
       <PiedProgramme actions={actions} footerRight={footerRight} />
     </IndexCard>
   );
@@ -8755,16 +8758,9 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                         tags correspondants épuisés
                       </span>
                     )}
-                    {it.slot !== "warmup" && it.ex.phase === "Pré-impro" && (
-                      <span
-                        className="inline-block text-xs px-2 py-0.5 rounded-full ml-1"
-                        style={{ fontFamily: FONT_MONO, background: "#B3382C", color: "#fff" }}
-                      >
-                        Exercice pré-impro
-                      </span>
-                    )}
                   </>
                 }
+                mention={it.slot !== "warmup" && it.ex.phase === "Pré-impro" ? "Exercice pré-impro" : null}
                 actions={
                   <div className="flex flex-wrap items-center gap-2">
                     <Btn small variant="ghost" onClick={() => replace(it.slot, it.idx)}>Aléatoire</Btn>
@@ -9330,7 +9326,6 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
             cat={c}
             label={rangSection("Catégorie", i, liste.length)}
             duree={c.actualDuration ?? c.duration ?? 5}
-            metaInline
             expanded={expandedId === c.id}
             onToggle={() => handleCardTap(c.id)}
             star={
@@ -11219,7 +11214,6 @@ function PlanSpectacleDetail({ plan, data, update }) {
           cat={cat}
           label={`Catégorie ${offset + i + 1}${times ? heure(times[i]) : ""}`}
           duree={dureeDe(cat)}
-          metaInline
           expanded={expandedId === idx}
           onToggle={() => setExpandedId(expandedId === idx ? null : idx)}
           headerRight={plan.format === "Match" ? (
