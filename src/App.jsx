@@ -127,6 +127,9 @@ const detectNiveauQuery = (query) => {
   if (!nq) return null;
   return NIVEAUX.find((n) => normalize(n).includes(nq) || nq.includes(normalize(n))) || null;
 };
+// Genre des catégories que l'arbitre impose en match (sans caucus, caucus inversé, défi…) : le
+// générateur de spectacle en pose un nombre voulu par mi-temps (voir buildSpectacle).
+const TAG_SPECIALES_MATCH = "Spéciales match";
 const CATEGORY_TAGS = ["Univers", "Narration", "Contrainte d'espace", "Contrainte vocale", "Contrainte physique", "Contrainte de style", "Conduite par le MC", "De groupe", "Solo/duo et début/fin de spectacle", "Public", "Répétition", "Débile", "Spéciales match", "Devinettes", "Musicales"];
 // Classement résumé des objectifs pédagogiques, utilisé pour l'instant uniquement sur le champ
 // de recherche de "Créer un cours" — pas encore relié aux tags des fiches d'exercices.
@@ -1447,6 +1450,21 @@ function mergeMissingCategories(data) {
     ambassadeursResetV1 = true;
   }
 
+  // Les catégories du genre "Univers" se jouent aussi bien en cabaret qu'en match : leurs types de
+  // spectacle étaient pourtant restés vides ou sur le seul "Concept original", ce qui les écartait
+  // des deux formats que le générateur sait monter. On coche les deux, sans toucher aux types déjà
+  // choisis à la main.
+  let universFormatsV1 = data._universFormatsV1;
+  if (!universFormatsV1 && categories) {
+    categories = categories.map((c) => {
+      if (!(c.tags || []).includes("Univers")) return c;
+      const types = c.showTypes || [];
+      const manquants = FORMATS_SPECTACLE.filter((t) => !types.includes(t));
+      return manquants.length > 0 ? { ...c, showTypes: [...types, ...manquants] } : c;
+    });
+    universFormatsV1 = true;
+  }
+
   // Le niveau "Expert" est retiré de l'appli : on convertit les fiches déjà enregistrées vers "Avancé".
   if (exercises?.some((e) => e.level === "Expert")) {
     exercises = exercises.map((e) => (e.level === "Expert" ? { ...e, level: "Avancé" } : e));
@@ -1475,6 +1493,7 @@ function mergeMissingCategories(data) {
     comedieMusicaleLieuxV1 === data._comedieMusicaleLieuxV1 &&
     universArchetypesV2 === data._universArchetypesV2 &&
     universArchetypesV3 === data._universArchetypesV3 &&
+    universFormatsV1 === data._universFormatsV1 &&
     universLexiqueV1 === data._universLexiqueV1 &&
     removedAmourConceptV1 === data._removedAmourConceptV1 &&
     ambassadeurThemes === data.ambassadeurThemes &&
@@ -1484,7 +1503,7 @@ function mergeMissingCategories(data) {
     ambassadeurBarsMontpellierV1 === data._ambassadeurBarsMontpellierV1 &&
     ambassadeursResetV1 === data._ambassadeursResetV1
   ) return data;
-  return { ...data, ambassadeurThemes, ambassadeurManches, ambassadeurs, _ambassadeursV1: ambassadeursV1, _ambassadeurBarsMontpellierV1: ambassadeurBarsMontpellierV1, _ambassadeursResetV1: ambassadeursResetV1, categories, showTypes, showConcepts, exercises, objectifs, thematiques, _cercleTagV1: cercleTagV1, _musiqueTagV1: musiqueTagV1, _materialMusiqueV1: materialMusiqueV1, _tagCaseAccentMergeV1: tagCaseAccentMergeV1, _stageWarmupMachineV1: stageWarmupMachineV1, _stageWarmupBatch2V1: stageWarmupBatch2V1, _devinettesEnergyV1: devinettesEnergyV1, _canOpenShowDefaultsV1: canOpenShowDefaultsV1, _canCloseShowDefaultsV1: canCloseShowDefaultsV1, _universLieuxV1: universLieuxV1, _comedieMusicaleLieuxV1: comedieMusicaleLieuxV1, _universArchetypesV2: universArchetypesV2, _universArchetypesV3: universArchetypesV3, _universLexiqueV1: universLexiqueV1, _removedAmourConceptV1: removedAmourConceptV1 };
+  return { ...data, ambassadeurThemes, ambassadeurManches, ambassadeurs, _ambassadeursV1: ambassadeursV1, _ambassadeurBarsMontpellierV1: ambassadeurBarsMontpellierV1, _ambassadeursResetV1: ambassadeursResetV1, categories, showTypes, showConcepts, exercises, objectifs, thematiques, _cercleTagV1: cercleTagV1, _musiqueTagV1: musiqueTagV1, _materialMusiqueV1: materialMusiqueV1, _tagCaseAccentMergeV1: tagCaseAccentMergeV1, _stageWarmupMachineV1: stageWarmupMachineV1, _stageWarmupBatch2V1: stageWarmupBatch2V1, _devinettesEnergyV1: devinettesEnergyV1, _canOpenShowDefaultsV1: canOpenShowDefaultsV1, _canCloseShowDefaultsV1: canCloseShowDefaultsV1, _universLieuxV1: universLieuxV1, _comedieMusicaleLieuxV1: comedieMusicaleLieuxV1, _universArchetypesV2: universArchetypesV2, _universArchetypesV3: universArchetypesV3, _universFormatsV1: universFormatsV1, _universLexiqueV1: universLexiqueV1, _removedAmourConceptV1: removedAmourConceptV1 };
 }
 
 /* ---------- Persistence ---------- */
@@ -2031,6 +2050,7 @@ function MultiTagPicker({ allOptions, selected, onChange, color = COLORS.brass, 
     onChange([...selected, v]);
     setDraft("");
   };
+  const restantes = allOptions.filter((o) => !selected.includes(o));
   return (
     <div>
       <div className="flex flex-wrap mb-1">
@@ -2038,19 +2058,20 @@ function MultiTagPicker({ allOptions, selected, onChange, color = COLORS.brass, 
           <TagPill key={s} label={s} color={color} onRemove={() => onChange(selected.filter((x) => x !== s))} />
         ))}
       </div>
-      <div className="flex flex-wrap gap-1 mb-1">
-        {allOptions.filter((o) => !selected.includes(o)).map((o) => (
-          <button
-            key={o}
-            type="button"
-            onClick={() => add(o)}
-            className="text-xs px-2 py-0.5 rounded-full border"
-            style={{ fontFamily: FONT_MONO, borderColor: COLORS.cardEdge, color: COLORS.textSoft }}
-          >
-            + {o}
-          </button>
-        ))}
-      </div>
+      {/* Menu déroulant plutôt que la liste entière en pastilles « + … » : quinze genres dépliés
+          poussaient le reste du formulaire deux écrans plus bas. Le champ libre reste en dessous,
+          c'est le seul moyen de créer une valeur qui n'existe pas encore. */}
+      {restantes.length > 0 && (
+        <select
+          value=""
+          onChange={(e) => add(e.target.value)}
+          className={inputClass}
+          style={{ ...inputStyle, marginBottom: 4 }}
+        >
+          <option value="">Choisir dans la liste…</option>
+          {restantes.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+      )}
       <div className="flex gap-1">
         <input
           value={draft}
@@ -5186,7 +5207,10 @@ function CategoryForm({ initial, thematiquesList, objectifsList, showTypesList, 
   );
 }
 
-function CategoriesTab({ data, update, isAdmin, currentUser, onlyUserCreated, initialSearchQuery, setTab }) {
+// `profile` sert à proposer la troupe de l'auteur sur la fiche : il était passé par ImproApp mais
+// jamais recueilli ici, si bien qu'ouvrir « Ajouter une catégorie » plantait l'écran (page blanche,
+// ReferenceError). Son pendant ExercicesTab, lui, l'avait bien.
+function CategoriesTab({ data, update, isAdmin, currentUser, profile, onlyUserCreated, initialSearchQuery, setTab }) {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(null);
   const [searchQuery, setSearchQuery] = useState(initialSearchQuery || "");
@@ -5325,12 +5349,8 @@ function CategoriesTab({ data, update, isAdmin, currentUser, onlyUserCreated, in
             {c.advice}
           </div>
         )}
-        {c.archetypes.length > 0 && (
-          <div className="mt-2 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-            <span style={{ fontFamily: FONT_MONO }}>Archétypes : </span>
-            {c.archetypes.map((a) => a.name).join(" · ")}
-          </div>
-        )}
+        {/* Pas de liste résumée des archétypes ici : la fiche complète, juste en dessous, les
+            redonne un par un avec leur description. */}
         {fullSheetId === c.id && (
           <div className="mt-2 text-sm" style={{ fontFamily: FONT_BODY, color: COLORS.text }}>
             {c.themesFrequents && (
@@ -7931,7 +7951,30 @@ function ProgrammeExerciseCard({ ex, compteur, duree, participants, expanded, on
    nom, genres, description, puis la ligne durée/énergie/joueurs. Le déroulé de spectacle faisait
    exception et remontait cette ligne au-dessus de la description, ce qui séparait le nom de la
    catégorie de ce qu'elle raconte. */
-function ProgrammeCategoryCard({ cat, compteur, duree, expanded, onToggle, star, headerRight, badges, badgesFallback, actions, footerRight }) {
+/* Mixte ou Comparé : en match, une catégorie se joue équipes mélangées ou l'une après l'autre. Vit
+   au pied de la carte, avec les autres réglages de la catégorie. */
+function SelecteurMatchMode({ value, onChange }) {
+  return (
+    <div className="flex rounded-sm overflow-hidden shrink-0" style={{ border: `1px solid ${COLORS.accent}` }}>
+      {["Mixte", "Comparé"].map((mode) => {
+        const actif = (value || "Mixte") === mode;
+        return (
+          <button
+            key={mode}
+            type="button"
+            onClick={() => onChange(mode)}
+            className="text-xs px-2 py-1"
+            style={{ fontFamily: FONT_MONO, background: actif ? COLORS.accent : "transparent", color: actif ? "#fff" : COLORS.accent }}
+          >
+            {mode}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ProgrammeCategoryCard({ cat, compteur, duree, expanded, onToggle, star, badges, badgesFallback, actions, footerRight }) {
   const meta = (
     <MetaCarte>
       <span>{duree} min</span>
@@ -7942,14 +7985,9 @@ function ProgrammeCategoryCard({ cat, compteur, duree, expanded, onToggle, star,
   return (
     <IndexCard onClick={onToggle} style={{ cursor: "pointer" }}>
       <div>
-        {/* `headerRight` est le sélecteur Mixte/Comparé du déroulé de spectacle : il se range avec
-            le compteur et l'étoile, à droite du nom de la catégorie. */}
         <div className="flex items-start justify-between gap-2">
           <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-lg font-semibold leading-snug">{cat.name}</h3>
-          <div className="flex items-center gap-2 shrink-0">
-            {headerRight}
-            <CoinTitre compteur={compteur} star={star} />
-          </div>
+          <CoinTitre compteur={compteur} star={star} />
         </div>
         {(cat.tags || []).length > 0 ? <SousTitreCarte>{cat.tags.join(" · ")}</SousTitreCarte> : badgesFallback}
         {badges && <div className="flex flex-wrap items-center gap-1 mb-2 empty:hidden">{badges}</div>}
@@ -9268,7 +9306,13 @@ function buildSpectacle(categories, { format, niveau, duree, entracteOn, integre
   // "Best-of" est retirée des pools normaux au même titre que "Libre" : l'appli ne doit jamais la
   // proposer ailleurs qu'en clôture de spectacle ou d'entracte (voir pickCloser plus bas).
   const bestOf = categories.find((c) => c.name === "Best-of");
-  const categoriesSansLibre = categoriesNiveau.filter((c) => c.id !== libre?.id && c.id !== bestOf?.id);
+  // En match, les catégories du genre "Spéciales match" (sans caucus, caucus inversé, défi…) sont
+  // posées à un nombre voulu par mi-temps plutôt que laissées au hasard : elles sortent donc des
+  // pools normaux, exactement comme "Libre". Hors match, elles y restent, l'appli n'ayant pas à
+  // décider qu'une spéciale n'a pas sa place dans un cabaret.
+  const specialesPool = format === "Match" ? categoriesNiveau.filter((c) => (c.tags || []).includes(TAG_SPECIALES_MATCH)) : [];
+  const specialesIds = new Set(specialesPool.map((c) => c.id));
+  const categoriesSansLibre = categoriesNiveau.filter((c) => c.id !== libre?.id && c.id !== bestOf?.id && !specialesIds.has(c.id));
   // Priorité aux catégories classées pour ce type de spectacle (champ showTypes, à renseigner sur
   // les fiches catégorie) ; le reste de la bibliothèque comble ensuite le temps restant.
   const familyPool = format ? categoriesSansLibre.filter((c) => c.showTypes?.includes(format)) : [];
@@ -9306,9 +9350,22 @@ function buildSpectacle(categories, { format, niveau, duree, entracteOn, integre
     maxCount2 = Math.min(maxCount2, 8);
   }
 
-  const pickFor = (budget, exclude, maxCount, wantsCloser) => {
+  // Places des spéciales dans une mi-temps : réparties régulièrement, jamais en ouverture — une
+  // spéciale n'a de sel qu'une fois le public installé dans le match.
+  const placesSpeciales = (combien, maxCount) => {
+    const places = new Set();
+    for (let k = 1; k <= combien; k++) {
+      let p = Math.max(2, Math.round((k * (maxCount + 1)) / (combien + 1)));
+      while (places.has(p)) p += 1;
+      places.add(p);
+    }
+    return places;
+  };
+
+  const pickFor = (budget, exclude, maxCount, wantsCloser, nbSpeciales = 0) => {
     let b = budget, picked = [];
     const localUsed = new Set(exclude);
+    const places = placesSpeciales(nbSpeciales, maxCount);
     // Budget/transition tels qu'ils étaient juste avant la dernière catégorie effectivement
     // piochée par la boucle ci-dessous — utilisés pour éventuellement la remplacer par une
     // catégorie de clôture (voir wantsCloser après la boucle).
@@ -9381,6 +9438,20 @@ function buildSpectacle(categories, { format, niveau, duree, entracteOn, integre
       };
       return tryPool(closerFamilyPool) || tryPool(closerOtherPool);
     };
+    // Pioche une spéciale de match encore inutilisée qui tient dans le budget restant.
+    const pickSpeciale = (transition) => {
+      const remaining = specialesPool.filter((c) => !localUsed.has(c.id));
+      let prioritized = remaining.filter(byLevel);
+      if (prioritized.length === 0) prioritized = remaining;
+      const ordered = integrerFavoris
+        ? [...prioritized].sort((a, b2) => (a.favorite ? 0 : 1) - (b2.favorite ? 0 : 1))
+        : shuffleArray(prioritized);
+      for (const c of ordered) {
+        const dur = c.duration || 5;
+        if (fitsBudget(dur + transition, b)) return c;
+      }
+      return null;
+    };
     while (b > 0 && picked.length < maxCount) {
       // Chaque catégorie après la première consomme aussi ~2 min de transition (présentation de
       // la catégorie suivante), en plus de sa propre durée.
@@ -9391,10 +9462,13 @@ function buildSpectacle(categories, { format, niveau, duree, entracteOn, integre
       // Une catégorie générée sur 3 (positions 3, 6, 9…) est la catégorie "Libre" — pour toutes
       // les durées de spectacle. Si elle ne rentre pas dans le budget restant à ce moment-là, on
       // retombe simplement sur une catégorie normale plutôt que de casser le rythme.
-      const wantsLibre = libre && (picked.length + 1) % 3 === 0 && fitsBudget((libre.duration || 5) + transition, b);
-      const chosen = picked.length === 0
+      // La spéciale passe avant "Libre" quand les deux tombent sur la même place : son nombre est
+      // demandé par mi-temps, alors que "Libre" a d'autres positions pour revenir.
+      const speciale = places.has(picked.length + 1) ? pickSpeciale(transition) : null;
+      const wantsLibre = !speciale && libre && (picked.length + 1) % 3 === 0 && fitsBudget((libre.duration || 5) + transition, b);
+      const chosen = speciale || (picked.length === 0
         ? pickOpener() || (wantsLibre ? libre : pickNormal(transition))
-        : (wantsLibre ? libre : pickNormal(transition));
+        : (wantsLibre ? libre : pickNormal(transition)));
       if (!chosen) break;
       const dur = chosen.duration || 5;
       // Durée réellement affichée : celle de la fiche (typiquement 3-4 min, jusqu'à 6 pour les
@@ -9435,8 +9509,11 @@ function buildSpectacle(categories, { format, niveau, duree, entracteOn, integre
   // La catégorie de clôture est priorisée sur la 2e partie s'il y a un entracte (fin de spectacle),
   // ou sur la partie unique sinon — jamais sur la 1re partie quand il y a un entracte (elle se
   // termine juste par l'entracte, pas par le spectacle).
-  const first = pickFor(budget1, exclude, maxCount1, !entracteOn);
-  const second = entracteOn ? pickFor(budget2, exclude, maxCount2, true) : [];
+  // Une spéciale par mi-temps quand il y a un entracte ; deux dans la partie unique sinon, pour que
+  // le match en propose toujours deux au total. Règle demandée par Aude, propre au format match.
+  const nbSpeciales = format === "Match" ? (entracteOn ? 1 : 2) : 0;
+  const first = pickFor(budget1, exclude, maxCount1, !entracteOn, nbSpeciales);
+  const second = entracteOn ? pickFor(budget2, exclude, maxCount2, true, nbSpeciales) : [];
   return { first, second, budget1, budget2 };
 }
 
@@ -9628,25 +9705,15 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
             star={
               <EtoileFavori actif={c.favorite} onToggle={() => toggleFavCat(c.id)} />
             }
-            headerRight={format === "Match" ? (
-              <div className="flex rounded-sm overflow-hidden shrink-0" style={{ border: `1px solid ${COLORS.accent}` }} onClick={(e) => e.stopPropagation()}>
-                {["Mixte", "Comparé"].map((mode) => (
-                  <button
-                    key={mode}
-                    onClick={() => setMatchMode(part, i, mode)}
-                    className="text-xs px-2 py-1"
-                    style={{ fontFamily: FONT_MONO, background: (c.matchMode || "Mixte") === mode ? COLORS.accent : "transparent", color: (c.matchMode || "Mixte") === mode ? "#fff" : COLORS.accent }}
-                  >
-                    {mode}
-                  </button>
-                ))}
-              </div>
-            ) : null}
             badgesFallback={c.name === "Libre" ? <SousTitreCarte>Libre</SousTitreCarte> : null}
             actions={
+              // Le sélecteur Mixte/Comparé est descendu du titre au pied : c'est un réglage de la
+              // catégorie, comme "Aléatoire" et "Modifier", et en haut il disputait la ligne du
+              // titre au compteur et à l'étoile. Il ne concerne que le match.
               <div className="flex flex-wrap items-center gap-2">
                 <Btn small variant="ghost" onClick={() => replaceCat(part, i)}>Aléatoire</Btn>
                 <Btn small variant="ghost" onClick={() => setCatPicker({ part, idx: i })}>Modifier</Btn>
+                {format === "Match" && <SelecteurMatchMode value={c.matchMode} onChange={(mode) => setMatchMode(part, i, mode)} />}
               </div>
             }
             footerRight={
@@ -9737,7 +9804,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
             </ChampReglage>
           </div>
           <LigneOuiNon premiere label="Avec entracte" precision="(15 min réservées)" value={entracteOn} onChange={setEntracteOn} />
-          <LigneOuiNon label="Commencer par un échauffement de scène" value={commencerEchauffementScene} onChange={setCommencerEchauffementScene} />
+          <LigneOuiNon label="Débuter par un échauffement de scène" value={commencerEchauffementScene} onChange={setCommencerEchauffementScene} />
           <LigneOuiNon label="Inclure mes favoris" value={integrerFavoris} onChange={setIntegrerFavoris} />
         </SectionReglages>
         <PiedFormulaire duree={`${duree} min`} precision={entracteOn ? "dont 15 min d'entracte" : null}>
@@ -11483,21 +11550,19 @@ function PlanSpectacleDetail({ plan, data, update }) {
           duree={dureeDe(cat)}
           expanded={expandedId === idx}
           onToggle={() => setExpandedId(expandedId === idx ? null : idx)}
-          headerRight={plan.format === "Match" ? (
-            <div className="flex rounded-sm overflow-hidden shrink-0" style={{ border: `1px solid ${COLORS.accent}` }} onClick={(e) => e.stopPropagation()}>
-              {["Mixte", "Comparé"].map((mode) => (
-                <button
-                  key={mode}
-                  onClick={() => majPlan((p) => { p.matchModeById[cat.id] = mode; })}
-                  className="text-xs px-2 py-1"
-                  style={{ fontFamily: FONT_MONO, background: (plan.matchModeById?.[cat.id] || "Mixte") === mode ? COLORS.accent : "transparent", color: (plan.matchModeById?.[cat.id] || "Mixte") === mode ? "#fff" : COLORS.accent }}
-                >
-                  {mode}
-                </button>
-              ))}
-            </div>
-          ) : null}
-          actions={modeEdition ? <Btn small variant="ghost" onClick={() => setPicker({ mode: "replace", id: idx })}>Changer</Btn> : null}
+          actions={
+            modeEdition || plan.format === "Match" ? (
+              <div className="flex flex-wrap items-center gap-2">
+                {modeEdition && <Btn small variant="ghost" onClick={() => setPicker({ mode: "replace", id: idx })}>Changer</Btn>}
+                {plan.format === "Match" && (
+                  <SelecteurMatchMode
+                    value={plan.matchModeById?.[cat.id]}
+                    onChange={(mode) => majPlan((p) => { p.matchModeById[cat.id] = mode; })}
+                  />
+                )}
+              </div>
+            ) : null
+          }
           footerRight={modeEdition ? (
             <div className="flex items-center gap-3">
               <DragHandleLabel />
