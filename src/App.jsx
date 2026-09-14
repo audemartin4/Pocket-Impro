@@ -1727,44 +1727,6 @@ function BoutonSupprimer({ onDelete, titre = "Supprimer", texte = false, taille 
   );
 }
 
-/* Question Oui/Non avec pastille verte + coche sur le choix sélectionné. */
-function OuiNonField({ label, value, onChange }) {
-  return (
-    <Field label={label}>
-      <div className="flex gap-2">
-        {[{ v: true, l: "Oui" }, { v: false, l: "Non" }].map((o) => {
-          const isSelected = value === o.v;
-          return (
-            <div key={o.l} className="relative">
-              <button
-                type="button"
-                onClick={() => onChange(o.v)}
-                className="px-3 py-1 rounded-full text-sm"
-                style={{
-                  fontFamily: FONT_BODY,
-                  background: isSelected ? "#3B6E5E" : "transparent",
-                  color: isSelected ? "#fff" : COLORS.ink,
-                  border: `1px solid ${isSelected ? "#3B6E5E" : COLORS.accent}`,
-                }}
-              >
-                {o.l}
-              </button>
-              {isSelected && (
-                <span
-                  className="absolute flex items-center justify-center rounded-full"
-                  style={{ top: -6, right: -6, width: 16, height: 16, background: "#3B6E5E", border: "1px solid #fff" }}
-                >
-                  <Check size={10} color="#fff" />
-                </span>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </Field>
-  );
-}
-
 function Field({ label, children }) {
   return (
     <label className="block mb-3">
@@ -6410,7 +6372,7 @@ function AmbassadeurMancheForm({ initial, data, onSave, onCancel, saveLabel = "E
       {/* Sans compte, la manche ne quitte pas le navigateur : la question du partage ne se pose pas. */}
       {peutPartager && (
         <>
-          <OuiNonField label="Partager cette manche avec la communauté ?" value={partage} onChange={setPartage} />
+          <LigneOuiNon premiere label="Partager cette manche avec la communauté" value={partage} onChange={setPartage} />
           <p className="text-xs mb-2 italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
             {partage
               ? `Si ta manche est validée, elle ne sera visible par la communauté qu'à partir du ${formatJour(ouvertureCommunaute)}, afin d'éviter les risques de triches, parce que les improvisateurs sont des filous !`
