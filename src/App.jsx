@@ -4420,17 +4420,21 @@ function ExercicesTab({ data, update, isAdmin, currentUser, profile, onlyUserCre
         actions={
           // Un fragment vide reste "vrai" : sans cette condition, un visiteur sans droit garderait
           // un pied de carte invisible mais haut de 8 px.
-          isAdmin || ((ex.pending || ex.rejected) && ex.creatorUsername === currentUser) ? (
+          isAdmin ? (
             <>
-              {isAdmin && ex.pending && (
+              {ex.pending && (
                 <>
                   <Btn small variant="ghost" onClick={() => approveExercise(ex.id)}><Check size={13} /> Valider</Btn>
                   <Btn small variant="ghost" onClick={() => { setRejectingId(ex.id); setRejectReason(""); }}><X size={13} /> Refuser</Btn>
                 </>
               )}
-              {isAdmin && <Btn small variant="ghost" onClick={() => setEditing(ex.id)}>Modifier</Btn>}
-              <BoutonSupprimer texte onDelete={() => update((d) => { d.exercises = d.exercises.filter((x) => x.id !== ex.id); return d; })} />
+              <Btn small variant="ghost" onClick={() => setEditing(ex.id)}>Modifier</Btn>
             </>
+          ) : null
+        }
+        footerRight={
+          isAdmin || ((ex.pending || ex.rejected) && ex.creatorUsername === currentUser) ? (
+            <BoutonSupprimer cadre onDelete={() => update((d) => { d.exercises = d.exercises.filter((x) => x.id !== ex.id); return d; })} />
           ) : null
         }
       />
@@ -5168,23 +5172,30 @@ function CategoryForm({ initial, thematiquesList, objectifsList, showTypesList, 
           createLabel={(v) => `+ Créer la famille "${v}"…`}
         />
       </Field>
-      <Field label="Archétypes liés à cette catégorie">
-        {f.archetypes.map((a) => (
-          <div key={a.id} className="flex justify-between items-start text-sm mb-1 border-b pb-1" style={{ borderColor: COLORS.cardEdge }}>
-            <div><b style={{ color: COLORS.ink }}>{a.name}</b>{a.desc && <span style={{ color: COLORS.textSoft }}> — {a.desc}</span>}</div>
-            <button onClick={() => setF({ ...f, archetypes: f.archetypes.filter((x) => x.id !== a.id) })}><X size={13} /></button>
+      {/* Les archétypes ne se remplissent que sur une catégorie d'univers (le maître, le disciple,
+          le vieux sage… d'un western ou d'une fantasy) : la question n'a pas de sens sur une
+          contrainte d'espace ou une catégorie conduite par le MC. Le bloc reste tout de même visible
+          sur une fiche qui en a déjà, quel que soit son genre, pour ne pas rendre ses archétypes
+          impossibles à corriger. */}
+      {((f.tags || []).includes("Univers") || f.archetypes.length > 0) && (
+        <Field label="Archétypes liés à cette catégorie">
+          {f.archetypes.map((a) => (
+            <div key={a.id} className="flex justify-between items-start text-sm mb-1 border-b pb-1" style={{ borderColor: COLORS.cardEdge }}>
+              <div><b style={{ color: COLORS.ink }}>{a.name}</b>{a.desc && <span style={{ color: COLORS.textSoft }}> — {a.desc}</span>}</div>
+              <button onClick={() => setF({ ...f, archetypes: f.archetypes.filter((x) => x.id !== a.id) })}><X size={13} /></button>
+            </div>
+          ))}
+          <div className="flex flex-col gap-1 mt-1">
+            <input placeholder="Nom de l'archétype" className={inputClass} style={inputStyle} value={newArch.name} onChange={(e) => setNewArch({ ...newArch, name: e.target.value })} />
+            <div className="flex gap-1">
+              <input placeholder="Description (optionnel)" className={inputClass} style={inputStyle} value={newArch.desc} onChange={(e) => setNewArch({ ...newArch, desc: e.target.value })} />
+              <Btn small onClick={() => { if (!newArch.name.trim()) return; setF({ ...f, archetypes: [...f.archetypes, { ...newArch, id: uid() }] }); setNewArch({ name: "", desc: "" }); }}>
+                <Plus size={12} />
+              </Btn>
+            </div>
           </div>
-        ))}
-        <div className="flex flex-col gap-1 mt-1">
-          <input placeholder="Nom de l'archétype" className={inputClass} style={inputStyle} value={newArch.name} onChange={(e) => setNewArch({ ...newArch, name: e.target.value })} />
-          <div className="flex gap-1">
-            <input placeholder="Description (optionnel)" className={inputClass} style={inputStyle} value={newArch.desc} onChange={(e) => setNewArch({ ...newArch, desc: e.target.value })} />
-            <Btn small onClick={() => { if (!newArch.name.trim()) return; setF({ ...f, archetypes: [...f.archetypes, { ...newArch, id: uid() }] }); setNewArch({ name: "", desc: "" }); }}>
-              <Plus size={12} />
-            </Btn>
-          </div>
-        </div>
-      </Field>
+        </Field>
+      )}
       {isCommunitySubmission && (
         <IndexCard style={{ background: COLORS.cardEdge + "33" }}>
           <p className="text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
@@ -5310,17 +5321,21 @@ function CategoriesTab({ data, update, isAdmin, currentUser, profile, onlyUserCr
         actions={
           // Un fragment vide reste "vrai" : sans cette condition, un visiteur sans droit garderait
           // un pied de carte invisible mais haut de 8 px.
-          isAdmin || ((c.pending || c.rejected) && c.creatorUsername === currentUser) ? (
+          isAdmin ? (
             <>
-              {isAdmin && c.pending && (
+              {c.pending && (
                 <>
                   <Btn small variant="ghost" onClick={() => approveCategory(c.id)}><Check size={13} /> Valider</Btn>
                   <Btn small variant="ghost" onClick={() => { setRejectingId(c.id); setRejectReason(""); }}><X size={13} /> Refuser</Btn>
                 </>
               )}
-              {isAdmin && <Btn small variant="ghost" onClick={() => setEditing(c.id)}>Modifier</Btn>}
-              <BoutonSupprimer texte onDelete={() => update((d) => { d.categories = d.categories.filter((x) => x.id !== c.id); return d; })} />
+              <Btn small variant="ghost" onClick={() => setEditing(c.id)}>Modifier</Btn>
             </>
+          ) : null
+        }
+        footerRight={
+          isAdmin || ((c.pending || c.rejected) && c.creatorUsername === currentUser) ? (
+            <BoutonSupprimer cadre onDelete={() => update((d) => { d.categories = d.categories.filter((x) => x.id !== c.id); return d; })} />
           ) : null
         }
       >
@@ -8011,7 +8026,7 @@ function ProgrammeCategoryCard({ cat, compteur, duree, expanded, onToggle, star,
    reste — niveau, joueurs, durée, énergie, matériel, objectifs, thématiques, format, auteur — dans
    une seule traînée de points médians : impossible à parcourir dans une section de 149 fiches.
    Le détail n'est pas perdu, il attend le dépli de la carte. */
-function FicheBibliothequeExercice({ ex, ouverte, onToggle, onToggleFavori, avertissement, actions }) {
+function FicheBibliothequeExercice({ ex, ouverte, onToggle, onToggleFavori, avertissement, actions, footerRight }) {
   const format = FORMAT_JEU[ex.format];
   return (
     <IndexCard onClick={onToggle} style={{ cursor: "pointer" }}>
@@ -8046,7 +8061,7 @@ function FicheBibliothequeExercice({ ex, ouverte, onToggle, onToggleFavori, aver
         {ex.energy ? <Pastille couleur={ENERGY_COULEUR[ex.energy] || COLORS.textSoft}>énergie {ex.energy}</Pastille> : null}
         {format ? <Pastille couleur={format.couleur}>{format.texte}</Pastille> : null}
       </MetaCarte>
-      <PiedProgramme actions={actions} />
+      <PiedProgramme actions={actions} footerRight={footerRight} />
     </IndexCard>
   );
 }
@@ -8054,7 +8069,7 @@ function FicheBibliothequeExercice({ ex, ouverte, onToggle, onToggleFavori, aver
 /* Pendant de la précédente pour une catégorie. `children` est tout ce que la fiche complète ajoute
    une fois dépliée (archétypes, phrases classiques, vocabulaire d'univers…) : il vit dans l'écran
    appelant, qui seul connaît la palette des thématiques. */
-function FicheBibliothequeCategorie({ cat, ouverte, onToggle, onToggleFavori, avertissement, actions, children }) {
+function FicheBibliothequeCategorie({ cat, ouverte, onToggle, onToggleFavori, avertissement, actions, footerRight, children }) {
   return (
     <IndexCard onClick={onToggle} style={{ cursor: "pointer" }}>
       <div className="flex items-start justify-between gap-2">
@@ -8076,7 +8091,7 @@ function FicheBibliothequeCategorie({ cat, ouverte, onToggle, onToggleFavori, av
         {cat.level ? <span>{cat.level}</span> : null}
         {cat.energy ? <Pastille couleur={ENERGY_COULEUR[cat.energy] || COLORS.textSoft}>énergie {cat.energy}</Pastille> : null}
       </MetaCarte>
-      <PiedProgramme actions={actions} />
+      <PiedProgramme actions={actions} footerRight={footerRight} />
     </IndexCard>
   );
 }
