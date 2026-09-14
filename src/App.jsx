@@ -7615,7 +7615,7 @@ function EtoileFavori({ actif, onToggle }) {
 function SousTitreCarte({ children }) {
   if (!children) return null;
   return (
-    <div className="flex items-stretch gap-2 mt-0.5 mb-1">
+    <div className="flex items-stretch gap-2 mt-0.5">
       <span className="w-[3px] rounded-full shrink-0" style={{ background: COLORS.brass }} />
       <span className="text-sm" style={{ fontFamily: FONT_DISPLAY, color: COLORS.inkSoft }}>{children}</span>
     </div>
@@ -7709,12 +7709,15 @@ function ProgrammeExerciseCard({ ex, compteur, duree, participants, expanded, on
     <IndexCard onClick={onToggle} style={{ cursor: "pointer" }}>
       <div>
         <div className="flex items-start justify-between gap-2">
-          <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-xl font-semibold leading-snug">{ex.title}</h3>
+          <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-lg font-semibold leading-snug">{ex.title}</h3>
           <CoinTitre compteur={compteur} star={star} />
         </div>
         <SousTitreCarte>{[famille, mention].filter(Boolean).join(" · ")}</SousTitreCarte>
-        {/* Les badges de correspondance du générateur gardent leur ligne, sous le sous-titre. */}
-        {badges && <div className="flex flex-wrap items-center gap-1 mb-2">{badges}</div>}
+        {/* Les badges de correspondance du générateur gardent leur ligne, sous le sous-titre.
+            `empty:hidden` : l'écran envoie souvent un lot de badges qui ne contient finalement
+            aucune correspondance — la ligne faisait alors 0 px de haut mais gardait sa marge, soit
+            8 px de vide entre la famille et la description. */}
+        {badges && <div className="flex flex-wrap items-center gap-1 mb-2 empty:hidden">{badges}</div>}
         <ResumeCarte expanded={expanded}>{ex.summary}</ResumeCarte>
         {expanded && (
           <div className="mt-1 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
@@ -7756,14 +7759,14 @@ function ProgrammeCategoryCard({ cat, compteur, duree, expanded, onToggle, star,
         {/* `headerRight` est le sélecteur Mixte/Comparé du déroulé de spectacle : il se range avec
             le compteur et l'étoile, à droite du nom de la catégorie. */}
         <div className="flex items-start justify-between gap-2">
-          <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-xl font-semibold leading-snug">{cat.name}</h3>
+          <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-lg font-semibold leading-snug">{cat.name}</h3>
           <div className="flex items-center gap-2 shrink-0">
             {headerRight}
             <CoinTitre compteur={compteur} star={star} />
           </div>
         </div>
         {(cat.tags || []).length > 0 ? <SousTitreCarte>{cat.tags.join(" · ")}</SousTitreCarte> : badgesFallback}
-        {badges && <div className="flex flex-wrap items-center gap-1 mb-2">{badges}</div>}
+        {badges && <div className="flex flex-wrap items-center gap-1 mb-2 empty:hidden">{badges}</div>}
         <ResumeCarte expanded={expanded}>{cat.summary}</ResumeCarte>
         {expanded && (
           <div className="mt-1 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
@@ -8538,12 +8541,13 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
   const draggedItem = dragged ? plan?.[dragged.listKey]?.[dragged.index] : null;
   const draggedTitle = draggedItem ? (dragged.listKey === "impro" ? draggedItem.name : draggedItem.title) : null;
 
+  // La carte annonce son rang ET le total de sa section ("2 / 4") : sur téléphone, où une seule
+  // carte tient à l'écran, c'est le seul repère qui dise combien il en reste. `cle` sert de clé de
+  // liste React : le compteur n'en fait pas une bonne (il disparaît sur une section d'une carte).
   const items = plan ? [
-    // Le bandeau annonce le rang ET le total de la section ("Échauffement 2 / 4") : sur téléphone,
-    // où une seule carte tient à l'écran, c'est le seul repère qui dise combien il en reste.
-    ...plan.warmups.map((ex, i) => ({ kind: "exercise", compteur: compteurSection(i, plan.warmups.length), ex, slot: "warmup", idx: i })),
-    ...plan.middle.map((ex, i) => ({ kind: "exercise", compteur: compteurSection(i, plan.middle.length), ex, slot: "middle", idx: i })),
-    ...plan.impro.map((cat, i) => ({ kind: "category", compteur: compteurSection(i, plan.impro.length), cat, idx: i })),
+    ...plan.warmups.map((ex, i) => ({ kind: "exercise", cle: `ech-${i}`, compteur: compteurSection(i, plan.warmups.length), ex, slot: "warmup", idx: i })),
+    ...plan.middle.map((ex, i) => ({ kind: "exercise", cle: `ex-${i}`, compteur: compteurSection(i, plan.middle.length), ex, slot: "middle", idx: i })),
+    ...plan.impro.map((cat, i) => ({ kind: "category", cle: `cat-${i}`, compteur: compteurSection(i, plan.impro.length), cat, idx: i })),
   ] : [];
   // Positions (dans le tableau "items" ci-dessus) juste après le dernier échauffement / dernier
   // exercice, pour insérer les boutons "Ajouter…" au bon endroit même si la section est vide.
@@ -8742,7 +8746,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                 />
               );
               return (
-                <React.Fragment key={it.label}>
+                <React.Fragment key={it.cle}>
                   {prefixButtons}
                   <div
                     data-drop-card="true"
@@ -8838,9 +8842,9 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                 niveau={niveau}
               />
             ) : null;
-            if (!listKey) return <React.Fragment key={it.label}>{prefixButtons}{card}{ambassadeurCard}{inlinePicker}</React.Fragment>;
+            if (!listKey) return <React.Fragment key={it.cle}>{prefixButtons}{card}{ambassadeurCard}{inlinePicker}</React.Fragment>;
             return (
-              <React.Fragment key={it.label}>
+              <React.Fragment key={it.cle}>
                 {prefixButtons}
                 <div
                   data-drop-card="true"
