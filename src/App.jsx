@@ -4087,6 +4087,10 @@ function ExercicesTab({ data, update, isAdmin, currentUser, profile, onlyUserCre
   const [duplicateWarning, setDuplicateWarning] = useState(null); // titre en doublon détecté
   const [searchQuery, setSearchQuery] = useState(initialSearchQuery || "");
   const [subQuery, setSubQuery] = useState(""); // recherche locale dans une sous-section (tag, pré-impro, impro)
+  // Fiche dépliée : la bibliothèque affichait le résumé entier sur chaque carte, ce qui interdisait
+  // de parcourir une section de 149 fiches du pouce. Comme dans les générateurs, le résumé est
+  // coupé à deux lignes et la carte entière ouvre la fiche complète.
+  const [ficheOuverte, setFicheOuverte] = useState(null);
   const [showAllEchauffements, setShowAllEchauffements] = useState(false);
   const [showAllPreImpro, setShowAllPreImpro] = useState(false);
   const [showAllImpro, setShowAllImpro] = useState(false);
@@ -4162,55 +4166,39 @@ function ExercicesTab({ data, update, isAdmin, currentUser, profile, onlyUserCre
         onCancel={() => setEditing(null)}
       />
     ) : (
-      <IndexCard key={ex.id}>
-        <div className="flex justify-between items-start">
-          <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-lg font-medium">{ex.title}</h3>
-          <div className="flex gap-1">
-            <button onClick={() => toggleFavorite(ex.id)} title="Favori">
-              <Star size={22} color={ex.favorite ? COLORS.brass : COLORS.textSoft} fill={ex.favorite ? COLORS.brass : "none"} />
-            </button>
-            {isAdmin && ex.pending && (
-              <>
-                <Btn small variant="ghost" onClick={() => approveExercise(ex.id)}><Check size={13} /> Valider</Btn>
-                <Btn small variant="ghost" onClick={() => { setRejectingId(ex.id); setRejectReason(""); }}><X size={13} /> Refuser</Btn>
-              </>
-            )}
-            {isAdmin && <Btn small variant="ghost" onClick={() => setEditing(ex.id)}>Modifier</Btn>}
-            {isAdmin && (
+      <FicheBibliothequeExercice
+        key={ex.id}
+        ex={ex}
+        ouverte={ficheOuverte === ex.id}
+        onToggle={() => setFicheOuverte(ficheOuverte === ex.id ? null : ex.id)}
+        onToggleFavori={() => toggleFavorite(ex.id)}
+        avertissement={
+          rejectingId === ex.id ? (
+            <RejectReasonBox
+              reason={rejectReason}
+              setReason={setRejectReason}
+              onConfirm={() => { rejectExercise(ex.id, rejectReason.trim()); setRejectingId(null); setRejectReason(""); }}
+              onCancel={() => { setRejectingId(null); setRejectReason(""); }}
+            />
+          ) : null
+        }
+        actions={
+          // Un fragment vide reste "vrai" : sans cette condition, un visiteur sans droit garderait
+          // un pied de carte invisible mais haut de 8 px.
+          isAdmin || ((ex.pending || ex.rejected) && ex.creatorUsername === currentUser) ? (
+            <>
+              {isAdmin && ex.pending && (
+                <>
+                  <Btn small variant="ghost" onClick={() => approveExercise(ex.id)}><Check size={13} /> Valider</Btn>
+                  <Btn small variant="ghost" onClick={() => { setRejectingId(ex.id); setRejectReason(""); }}><X size={13} /> Refuser</Btn>
+                </>
+              )}
+              {isAdmin && <Btn small variant="ghost" onClick={() => setEditing(ex.id)}>Modifier</Btn>}
               <BoutonSupprimer texte onDelete={() => update((d) => { d.exercises = d.exercises.filter((x) => x.id !== ex.id); return d; })} />
-            )}
-            {!isAdmin && (ex.pending || ex.rejected) && ex.creatorUsername === currentUser && (
-              <BoutonSupprimer texte onDelete={() => update((d) => { d.exercises = d.exercises.filter((x) => x.id !== ex.id); return d; })} />
-            )}
-          </div>
-        </div>
-        {ex.pending && (
-          <p className="text-xs mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.accent }}>
-            En attente de validation — pas encore visible dans la bibliothèque publique.
-          </p>
-        )}
-        {rejectingId === ex.id && (
-          <RejectReasonBox
-            reason={rejectReason}
-            setReason={setRejectReason}
-            onConfirm={() => { rejectExercise(ex.id, rejectReason.trim()); setRejectingId(null); setRejectReason(""); }}
-            onCancel={() => { setRejectingId(null); setRejectReason(""); }}
-          />
-        )}
-        <p style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }} className="text-sm my-1">{ex.summary}</p>
-        <div className="flex flex-wrap gap-1 mt-1 text-xs" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
-          <span>{ex.level}</span>·<span>{ex.players > 0 ? `${ex.players} élève${ex.players > 1 ? "s" : ""}` : "Illimité"}</span>·<span>{ex.duration} min</span>
-          {ex.energy && <span>· énergie {ex.energy}</span>}
-          {ex.material && ex.material !== "Aucun" && <span>· {ex.material}</span>}
-          {ex.objectives?.length > 0 && <>·<span>{ex.objectives.join(", ")}</span></>}
-          {ex.thematiques?.length > 0 && <>·<span>Thématique : {ex.thematiques.join(", ")}</span></>}
-          {ex.warmup && <span style={{ color: COLORS.accent }}>· Échauffement</span>}
-          {ex.format === "Tour à tour avec spectateur" && <span style={{ color: COLORS.textSoft }}>· Tour à tour avec spectateur</span>}
-          {ex.format === "En groupe simultané" && <span style={{ color: COLORS.accent }}>· En groupe simultané (bruyant)</span>}
-          {ex.format === "En cercle" && <span style={{ color: COLORS.textSoft }}>· En cercle</span>}
-          {ex.creatorTroupe && <span>· {ex.creatorUsername} — Troupe {ex.creatorTroupe}</span>}
-        </div>
-      </IndexCard>
+            </>
+          ) : null
+        }
+      />
     );
 
   const echauffements = baseExercises.filter((e) => e.phase === "Échauffement");
@@ -5065,66 +5053,46 @@ function CategoriesTab({ data, update, isAdmin, currentUser, onlyUserCreated, in
         onCancel={() => setEditing(null)}
       />
     ) : (
-      <IndexCard key={c.id} style={{ cursor: "pointer" }} onClick={() => setFullSheetId(fullSheetId === c.id ? null : c.id)}>
-        <div className="flex justify-between items-start">
-          <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-lg font-medium flex items-center gap-1">
-            {c.name}
-            <ChevronDown
-              size={15}
-              color={COLORS.textSoft}
-              style={{ transform: fullSheetId === c.id ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}
+      <FicheBibliothequeCategorie
+        key={c.id}
+        cat={c}
+        ouverte={fullSheetId === c.id}
+        onToggle={() => setFullSheetId(fullSheetId === c.id ? null : c.id)}
+        onToggleFavori={() => toggleFavorite(c.id)}
+        avertissement={
+          rejectingId === c.id ? (
+            <RejectReasonBox
+              reason={rejectReason}
+              setReason={setRejectReason}
+              onConfirm={() => { rejectCategory(c.id, rejectReason.trim()); setRejectingId(null); setRejectReason(""); }}
+              onCancel={() => { setRejectingId(null); setRejectReason(""); }}
             />
-          </h3>
-          <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => toggleFavorite(c.id)} title="Favori">
-              <Star size={22} color={c.favorite ? COLORS.brass : COLORS.textSoft} fill={c.favorite ? COLORS.brass : "none"} />
-            </button>
-            {isAdmin && c.pending && (
-              <>
-                <Btn small variant="ghost" onClick={() => approveCategory(c.id)}><Check size={13} /> Valider</Btn>
-                <Btn small variant="ghost" onClick={() => { setRejectingId(c.id); setRejectReason(""); }}><X size={13} /> Refuser</Btn>
-              </>
-            )}
-            {isAdmin && <Btn small variant="ghost" onClick={() => setEditing(c.id)}>Modifier</Btn>}
-            {isAdmin && (
+          ) : null
+        }
+        actions={
+          // Un fragment vide reste "vrai" : sans cette condition, un visiteur sans droit garderait
+          // un pied de carte invisible mais haut de 8 px.
+          isAdmin || ((c.pending || c.rejected) && c.creatorUsername === currentUser) ? (
+            <>
+              {isAdmin && c.pending && (
+                <>
+                  <Btn small variant="ghost" onClick={() => approveCategory(c.id)}><Check size={13} /> Valider</Btn>
+                  <Btn small variant="ghost" onClick={() => { setRejectingId(c.id); setRejectReason(""); }}><X size={13} /> Refuser</Btn>
+                </>
+              )}
+              {isAdmin && <Btn small variant="ghost" onClick={() => setEditing(c.id)}>Modifier</Btn>}
               <BoutonSupprimer texte onDelete={() => update((d) => { d.categories = d.categories.filter((x) => x.id !== c.id); return d; })} />
-            )}
-            {!isAdmin && (c.pending || c.rejected) && c.creatorUsername === currentUser && (
-              <BoutonSupprimer texte onDelete={() => update((d) => { d.categories = d.categories.filter((x) => x.id !== c.id); return d; })} />
-            )}
+            </>
+          ) : null
+        }
+      >
+        {(c.material && c.material !== "Aucun") || c.creatorTroupe ? (
+          <div className="mt-1 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+            {c.material && c.material !== "Aucun" && <div>Matériel : {c.material}</div>}
+            {c.creatorTroupe && <div>{c.creatorUsername} — Troupe {c.creatorTroupe}</div>}
           </div>
-        </div>
-        {c.pending && (
-          <p className="text-xs mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.accent }}>
-            En attente de validation — pas encore visible dans la bibliothèque publique.
-          </p>
-        )}
-        {rejectingId === c.id && (
-          <RejectReasonBox
-            reason={rejectReason}
-            setReason={setRejectReason}
-            onConfirm={() => { rejectCategory(c.id, rejectReason.trim()); setRejectingId(null); setRejectReason(""); }}
-            onCancel={() => { setRejectingId(null); setRejectReason(""); }}
-          />
-        )}
-        {(c.tags || []).length > 0 && (
-          <span
-            className="inline-block text-xs px-2 py-0.5 rounded-full mt-1 mb-1"
-            style={{ fontFamily: FONT_MONO, background: "#B3382C", color: "#fff" }}
-          >
-            {c.tags.join(" · ")}
-          </span>
-        )}
-        <p style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }} className="text-sm my-1">{c.summary}</p>
-        <div className="flex flex-wrap items-center gap-2 text-xs mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
-          <span>{c.durationLabel || `${c.duration || 5} min`}</span>
-          {c.level && <span>· {c.level}</span>}
-          {c.playersMin && <span>· {playersLabel(c)}</span>}
-          {c.energy && <span>· énergie {c.energy}</span>}
-          {c.material && c.material !== "Aucun" && <span>· {c.material}</span>}
-          {c.creatorTroupe && <span>· {c.creatorUsername} — Troupe {c.creatorTroupe}</span>}
-        </div>
-        <div className="flex flex-wrap">
+        ) : null}
+        <div className="flex flex-wrap mt-1 empty:hidden">
           {c.thematiques.map((t) => <TagPill key={t} label={t} color={themeColor(t, data.thematiques)} />)}
         </div>
         {(c.objectives || []).filter((o) => o !== "Univers").length > 0 && (
@@ -5203,7 +5171,7 @@ function CategoriesTab({ data, update, isAdmin, currentUser, onlyUserCreated, in
             )}
           </div>
         )}
-      </IndexCard>
+      </FicheBibliothequeCategorie>
     );
 
   const adminNotice = !isAdmin && (
@@ -7689,6 +7657,10 @@ const FORMAT_JEU = {
   "Tour à tour avec spectateur": { couleur: COLORS.brass, texte: "chacun son tour" },
   "En groupe simultané": { couleur: COLORS.accent, texte: "bruyant" },
   "Solo simultané": { couleur: "#3B6E5E", texte: "tout le monde actif" },
+  // Les deux derniers formats de FORMATS_JEU manquaient : les fiches concernées retombaient sur
+  // "tout le monde actif", exact mais moins précis que ce que la fiche dit vraiment.
+  "En cercle": { couleur: "#3B6E5E", texte: "en cercle" },
+  "Déambulation": { couleur: "#3B6E5E", texte: "en déambulation" },
 };
 
 /* `mention` : une précision qui se lit comme la famille d'objectifs (ex. « Exercice pré-impro »)
@@ -7777,6 +7749,82 @@ function ProgrammeCategoryCard({ cat, compteur, duree, expanded, onToggle, star,
       </div>
       {meta}
       <PiedProgramme actions={actions} footerRight={footerRight} />
+    </IndexCard>
+  );
+}
+
+/* Fiches de la bibliothèque, sur la même grammaire que les cartes de programme : titre, famille au
+   filet laiton, résumé coupé à deux lignes avec son chevron, ligne de méta ponctuée, actions au
+   pied. La bibliothèque affichait jusqu'ici le résumé entier sur chaque carte et empilait tout le
+   reste — niveau, joueurs, durée, énergie, matériel, objectifs, thématiques, format, auteur — dans
+   une seule traînée de points médians : impossible à parcourir dans une section de 149 fiches.
+   Le détail n'est pas perdu, il attend le dépli de la carte. */
+function FicheBibliothequeExercice({ ex, ouverte, onToggle, onToggleFavori, avertissement, actions }) {
+  const format = FORMAT_JEU[ex.format];
+  return (
+    <IndexCard onClick={onToggle} style={{ cursor: "pointer" }}>
+      <div className="flex items-start justify-between gap-2">
+        <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-lg font-semibold leading-snug">{ex.title}</h3>
+        <CoinTitre star={<EtoileFavori actif={ex.favorite} onToggle={onToggleFavori} />} />
+      </div>
+      {/* Même repli que sur les cartes de programme : sans famille d'objectifs, la section de
+          bibliothèque prend sa place, pour que toutes les cartes d'une liste aient la même hauteur. */}
+      <SousTitreCarte>{ex.groupe || ex.phase || "Impro"}</SousTitreCarte>
+      {ex.pending && (
+        <p className="text-xs mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.accent }}>
+          En attente de validation — pas encore visible dans la bibliothèque publique.
+        </p>
+      )}
+      {/* Le formulaire de refus contient des champs : il ne doit pas replier la carte sous les doigts. */}
+      {avertissement && <div onClick={(e) => e.stopPropagation()}>{avertissement}</div>}
+      <ResumeCarte expanded={ouverte}>{ex.summary}</ResumeCarte>
+      {ouverte && (
+        <div className="mt-1 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+          {ex.objectives?.length > 0 && <div>Objectifs : {ex.objectives.join(", ")}</div>}
+          {ex.thematiques?.length > 0 && <div>Thématiques : {ex.thematiques.join(", ")}</div>}
+          {ex.material && ex.material !== "Aucun" && <div>Matériel : {ex.material}</div>}
+          {ex.warmup && ex.phase !== "Échauffement" && <div>Utilisable aussi comme échauffement.</div>}
+          {ex.creatorTroupe && <div>{ex.creatorUsername} — Troupe {ex.creatorTroupe}</div>}
+        </div>
+      )}
+      <MetaCarte>
+        <span>{ex.duration} min</span>
+        <span>{ex.players > 0 ? `${ex.players} joueurs` : "joueurs illimités"}</span>
+        {ex.level ? <span>{ex.level}</span> : null}
+        {ex.energy ? <Pastille couleur={ENERGY_COULEUR[ex.energy] || COLORS.textSoft}>énergie {ex.energy}</Pastille> : null}
+        {format ? <Pastille couleur={format.couleur}>{format.texte}</Pastille> : null}
+      </MetaCarte>
+      <PiedProgramme actions={actions} />
+    </IndexCard>
+  );
+}
+
+/* Pendant de la précédente pour une catégorie. `children` est tout ce que la fiche complète ajoute
+   une fois dépliée (archétypes, phrases classiques, vocabulaire d'univers…) : il vit dans l'écran
+   appelant, qui seul connaît la palette des thématiques. */
+function FicheBibliothequeCategorie({ cat, ouverte, onToggle, onToggleFavori, avertissement, actions, children }) {
+  return (
+    <IndexCard onClick={onToggle} style={{ cursor: "pointer" }}>
+      <div className="flex items-start justify-between gap-2">
+        <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-lg font-semibold leading-snug">{cat.name}</h3>
+        <CoinTitre star={<EtoileFavori actif={cat.favorite} onToggle={onToggleFavori} />} />
+      </div>
+      <SousTitreCarte>{(cat.tags || []).join(" · ")}</SousTitreCarte>
+      {cat.pending && (
+        <p className="text-xs mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.accent }}>
+          En attente de validation — pas encore visible dans la bibliothèque publique.
+        </p>
+      )}
+      {avertissement && <div onClick={(e) => e.stopPropagation()}>{avertissement}</div>}
+      <ResumeCarte expanded={ouverte}>{cat.summary}</ResumeCarte>
+      {ouverte && children}
+      <MetaCarte>
+        <span>{cat.durationLabel || `${cat.duration || 5} min`}</span>
+        <span>{texteJoueursCategorie(cat)}</span>
+        {cat.level ? <span>{cat.level}</span> : null}
+        {cat.energy ? <Pastille couleur={ENERGY_COULEUR[cat.energy] || COLORS.textSoft}>énergie {cat.energy}</Pastille> : null}
+      </MetaCarte>
+      <PiedProgramme actions={actions} />
     </IndexCard>
   );
 }
