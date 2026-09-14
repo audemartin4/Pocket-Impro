@@ -3,7 +3,7 @@ import {
   Sparkles, Shuffle, Clock, BookOpen, Users, Flame, ClipboardList,
   Plus, Trash2, Tag, ChevronRight, ChevronUp, ChevronDown, ChevronLeft, Download,
   Save, X, Check, Home, Theater, Pencil, Library, UserCircle, Pointer, Star, LogIn, LogOut, AlertTriangle, Mail, Eye, EyeOff, Contact,
-  Facebook, Instagram, Play, Hand, MoveVertical
+  Facebook, Instagram, Play, Hand, MoveVertical, Minus
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
 import { APP_DATA_ROW_ID } from "./appDataRow.js";
@@ -323,7 +323,9 @@ const sansLesProchesDe = (pool, precedente) => {
 // elle sert à poser devant le groupe la théorie selon laquelle la simplicité du jeu se suffit à
 // elle-même, ce qui ne vaut qu'avant les autres exercices. Voir le tirage des exercices principaux.
 const EXERCICE_OUVERTURE = "Les 2 chaises";
-const CONTEXTES_ECHAUFFEMENT = ["Match", "Cabaret", "Format Long", "Spectacle personnalisé"];
+// Formats que les générateurs savent monter. Distinct de `data.showTypes`, qui sert à étiqueter les
+// fiches et contient aussi « Concept original » — un fourre-tout sans règle de montage.
+const FORMATS_SPECTACLE = ["Match", "Cabaret"];
 const DUREES_ECHAUFFEMENT = [5, 10, 15, 30];
 const PALIERS_TEMPS_COURS = [0, 5, 10, 15, 20, 25, 30, 35, 40];
 // Nom d'utilisateur "virtuel" utilisé par le bouton "Mode utilisateur" (profil Admin) : simule une
@@ -1646,7 +1648,10 @@ function AstuceGlisser({ children }) {
   return (
     <div className="flex items-center gap-2 mb-3" style={{ color: COLORS.inkSoft }}>
       <MoveVertical size={16} className="shrink-0" />
-      <p className="text-xs uppercase leading-relaxed" style={{ fontFamily: FONT_MONO, letterSpacing: "0.06em" }}>
+      {/* Taille fluide plutôt que fixe : en capitales monospace, la variante « ton spectacle »
+          (82 caractères) partait sur une troisième ligne sous 400 px. Le calage tient la phrase en
+          deux lignes jusqu'à 320 px de large, et la rend à sa taille normale au-delà de 430 px. */}
+      <p className="uppercase leading-relaxed" style={{ fontFamily: FONT_MONO, fontSize: "clamp(9.5px, 2.9vw, 12px)", letterSpacing: "0.04em" }}>
         {children}
       </p>
     </div>
@@ -1781,6 +1786,250 @@ const inputStyle = {
   color: COLORS.text,
 };
 const inputClass = "w-full rounded-sm px-2 py-1.5 text-sm outline-none focus:ring-2";
+
+/* ---------- Blocs de réglages des écrans de création ----------------------------------------
+   D'après la maquette livrée par Claude Design pour le générateur de cours. Les formulaires
+   empilaient dix étiquettes mono capitales de même poids, des menus de largeurs inégales, un vert
+   hors palette pour les Oui/Non, et un bouton « Créer » qu'on n'atteignait qu'après avoir tout fait
+   défiler. Les réglages sont maintenant groupés en sections, les booléens et les quantités
+   deviennent des pastilles à cible tactile de 44 px, et un pied sombre collant garde la durée et le
+   bouton sous les yeux. Usage visé : un téléphone tenu debout dans une salle, entre deux exercices. */
+
+// Socle commun des pastilles (Oui/Non et compteurs) : 3 px de marge autour de boutons de 38 ou
+// 44 px, soit 44 px de haut au total — le minimum confortable pour un pouce.
+const SOCLE_PASTILLE = { background: COLORS.paper, border: `1.5px solid ${COLORS.cardEdge}`, borderRadius: 99, padding: 3 };
+// Taille fluide : à trois menus par ligne, « Cabaret » se faisait rogner par la flèche du menu en
+// dessous de 350 px de large. La valeur de la maquette (15 px) est retrouvée dès 385 px.
+const CHAMP_REGLAGE = {
+  fontFamily: FONT_BODY, fontSize: "clamp(13px, 3.9vw, 15px)", color: COLORS.text, background: "#FFFDF8",
+  border: `1.5px solid ${COLORS.cardEdge}`, borderRadius: 9, minHeight: 44,
+  width: "100%", boxSizing: "border-box", padding: "0 5px",
+};
+
+/* Une section du bloc de réglages, séparée de la précédente par un filet. `encart` la pose sur un
+   fond papier : c'est ce qui fait voir, sans écrire de titre de section, où s'arrêtent les réglages
+   du groupe et où commencent ceux du cours. Les marges négatives annulent le padding de l'IndexCard
+   pour que filet et encart aillent bord à bord. */
+function SectionReglages({ encart, premiere, derniere, children }) {
+  return (
+    <div
+      className="-mx-4"
+      style={{
+        marginTop: premiere ? -16 : 0,
+        padding: `14px 16px ${derniere ? 16 : 4}px`,
+        background: encart ? "rgba(237,230,214,0.5)" : "transparent",
+        borderTop: premiere ? "none" : `1px solid ${COLORS.cardEdge}`,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/* Champ à sur-étiquette : le nom du réglage se lit au-dessus, en minuscules discrètes, au lieu des
+   capitales monospace qui mettaient les dix étiquettes du formulaire sur le même plan. */
+function ChampReglage({ label, children }) {
+  return (
+    <label className="block">
+      <span className="block" style={{ fontFamily: FONT_BODY, fontSize: 12.5, color: COLORS.textSoft, marginBottom: 5 }}>{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function SelectReglage({ value, onChange, children }) {
+  return (
+    <select className="outline-none focus:ring-2" style={CHAMP_REGLAGE} value={value} onChange={onChange}>
+      {children}
+    </select>
+  );
+}
+
+/* Réglage oui/non : le libellé à gauche, une pastille à deux moitiés à droite. Un vrai groupe radio
+   (jamais d'état vide), là où deux boutons indépendants ne disaient pas au clavier ni au lecteur
+   d'écran qu'ils s'excluent. L'encre marque le oui, la brique le non. */
+/* Ligne de réglage : le nom à gauche, le contrôle à droite. C'est la forme de toutes les lignes d'un
+   bloc — oui/non, compteur, menu, choix segmenté — pour qu'on lise une colonne de libellés et une
+   colonne de commandes, plutôt qu'une alternance d'étiquettes et de champs pleine largeur.
+   `surEncart` : sur le fond papier, le filet clair des sections de carte disparaîtrait ; on reprend
+   la nuance des filets de l'encart. */
+function LigneReglage({ label, precision, premiere, surEncart, ariaLabel, children }) {
+  return (
+    <div
+      className="flex items-center justify-between gap-2.5"
+      style={{ padding: "9px 0", borderTop: premiere ? "none" : `1px solid ${surEncart ? "#E3DAC5" : COLORS.paper}` }}
+      role={ariaLabel ? "group" : undefined}
+      aria-label={ariaLabel}
+    >
+      <span className="flex-1" style={{ fontFamily: FONT_BODY, fontSize: 14.5, color: COLORS.text }}>
+        {label}
+        {precision && <span className="block" style={{ fontSize: 12, color: COLORS.textSoft }}>{precision}</span>}
+      </span>
+      {children}
+    </div>
+  );
+}
+
+/* Menu déroulant posé à droite de son libellé, comme les compteurs. */
+function LigneSelect({ label, precision, premiere, surEncart, value, onChange, children }) {
+  return (
+    <LigneReglage label={label} precision={precision} premiere={premiere} surEncart={surEncart}>
+      <select
+        className="outline-none focus:ring-2 shrink-0"
+        style={{ ...CHAMP_REGLAGE, width: "auto", minWidth: 112 }}
+        value={value}
+        onChange={onChange}
+        aria-label={label}
+      >
+        {children}
+      </select>
+    </LigneReglage>
+  );
+}
+
+/* Réglage oui/non : un interrupteur, précédé du mot en clair. La pastille à deux moitiés de la
+   maquette prenait la moitié de la largeur de la ligne et laissait croire à deux boutons
+   indépendants ; l'interrupteur dit d'un coup d'œil ce qui est activé, et le mot lève le doute sur
+   ce que veut dire la position. Encre pour oui, brique pour non. */
+function LigneOuiNon({ label, precision, value, onChange, premiere, surEncart }) {
+  return (
+    <LigneReglage label={label} precision={precision} premiere={premiere} surEncart={surEncart}>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={value}
+        aria-label={label}
+        onClick={() => onChange(!value)}
+        className="inline-flex items-center gap-2 shrink-0"
+        style={{ minHeight: 44, background: "transparent" }}
+      >
+        <span style={{ fontFamily: FONT_BODY, fontSize: 14, color: value ? COLORS.ink : COLORS.accent }}>
+          {value ? "Oui" : "Non"}
+        </span>
+        <span
+          className="relative inline-block shrink-0"
+          style={{ width: 44, height: 24, borderRadius: 99, background: value ? COLORS.ink : COLORS.accent, transition: "background 140ms ease-out" }}
+        >
+          <span
+            className="absolute"
+            style={{
+              top: 3, left: value ? 23 : 3, width: 18, height: 18, borderRadius: "50%",
+              background: "#FFFDF8", boxShadow: "0 1px 2px rgba(30,42,56,0.3)",
+              transition: "left 140ms ease-out",
+            }}
+          />
+        </span>
+      </button>
+    </LigneReglage>
+  );
+}
+
+/* Compteur −/+ : remplace un menu déroulant de 0 à 10 qu'il fallait ouvrir, faire défiler et viser
+   pour passer de 3 à 4. Aux bornes, le bouton s'éteint plutôt que de disparaître, pour que la
+   pastille ne change pas de largeur. */
+function CompteurReglage({ label, value, onChange, min = 0, max = 10, derniere }) {
+  const bouton = (pas, Icone, titre) => {
+    const eteint = pas < 0 ? value <= min : value >= max;
+    return (
+      <button
+        type="button"
+        aria-label={titre}
+        title={titre}
+        disabled={eteint}
+        onClick={() => onChange(Math.min(max, Math.max(min, value + pas)))}
+        className="inline-flex items-center justify-center shrink-0"
+        style={{
+          width: 44, height: 44, borderRadius: "50%",
+          background: "#FFFDF8", border: `1px solid ${COLORS.cardEdge}`,
+          opacity: eteint ? 0.4 : 1,
+        }}
+      >
+        <Icone size={15} strokeWidth={2} color={COLORS.textSoft} />
+      </button>
+    );
+  };
+  return (
+    <div className="flex items-center justify-between gap-2.5" style={{ padding: derniere ? "8px 0 14px" : "8px 0", borderTop: "1px solid #E3DAC5" }}>
+      <span className="flex-1" style={{ fontFamily: FONT_BODY, fontSize: 14.5, color: COLORS.text }}>{label}</span>
+      <div className="flex items-center gap-2 shrink-0" style={SOCLE_PASTILLE}>
+        {bouton(-1, Minus, "Moins")}
+        {/* Chiffre en Plex Sans : les chiffres de Fraunces se lisent moins bien à bout de bras. */}
+        <span className="text-center" style={{ minWidth: 22, fontFamily: FONT_BODY, fontWeight: 600, fontSize: 19, color: COLORS.ink }}>{value}</span>
+        {bouton(1, Plus, "Plus")}
+      </div>
+    </div>
+  );
+}
+
+/* Pied d'action qui ferme le bloc de réglages : la durée obtenue et le bouton d'action au même
+   endroit. Deux écarts à la maquette, décidés à l'essai : le fond reste papier — l'encre pesait trop
+   sous une carte déjà dense — et le pied ne colle pas en bas de l'écran, une barre qui suit le
+   défilement masquant les réglages qu'on est en train de toucher. */
+function PiedFormulaire({ duree, precision, children }) {
+  return (
+    <div
+      className="-mx-4 -mb-4 flex items-center gap-3"
+      style={{
+        background: COLORS.paper, padding: "12px 16px",
+        borderTop: `1px solid ${COLORS.cardEdge}`,
+        borderBottomLeftRadius: 12, borderBottomRightRadius: 12,
+      }}
+    >
+      <div className="flex-1 min-w-0">
+        <div className="flex items-baseline flex-wrap gap-x-1.5">
+          <span style={{ fontFamily: FONT_MONO, fontSize: 10.5, color: COLORS.textSoft }}>Durée estimée :</span>
+          <span style={{ fontFamily: FONT_DISPLAY, fontSize: 17, color: COLORS.ink }}>{duree}</span>
+        </div>
+        {precision && <div style={{ fontFamily: FONT_MONO, fontSize: 10.5, color: COLORS.textSoft }}>{precision}</div>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/* Choix parmi quelques valeurs courtes (des durées) : même pastille que les Oui/Non, mais à n
+   moitiés de largeur égale. Évite un menu déroulant à ouvrir pour quatre valeurs. */
+function ChoixSegmente({ options, value, onChange, ariaLabel }) {
+  return (
+    <div className="flex items-center gap-1" style={{ ...SOCLE_PASTILLE, width: "100%", boxSizing: "border-box" }} role="radiogroup" aria-label={ariaLabel}>
+      {options.map((o) => {
+        const actif = value === o.value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            role="radio"
+            aria-checked={actif}
+            onClick={() => onChange(o.value)}
+            className="flex-1 inline-flex items-center justify-center"
+            style={{
+              minHeight: 38, borderRadius: 99, fontFamily: FONT_DISPLAY, fontSize: 14,
+              background: actif ? COLORS.ink : "transparent",
+              color: actif ? COLORS.card : COLORS.textSoft,
+              boxShadow: actif ? "0 1px 3px rgba(30,42,56,0.25)" : "none",
+              transition: "background 140ms ease-out, box-shadow 140ms ease-out",
+            }}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function BoutonCreation({ onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="shrink-0"
+      style={{ minHeight: 46, padding: "0 20px", fontFamily: FONT_DISPLAY, fontSize: 16, color: COLORS.card, background: COLORS.accent, borderRadius: 10 }}
+    >
+      {children}
+    </button>
+  );
+}
 
 /* Champ mot de passe avec un œil cliquable à droite pour basculer entre masqué et affiché en clair. */
 function PasswordInput({ value, onChange, onKeyDown, placeholder }) {
@@ -8667,51 +8916,47 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
       </p>
       <Toast toast={toastMsg} />
       <IndexCard>
-        <div className="grid grid-cols-2 gap-2">
-          <Field label="Niveau">
-            <select className={inputClass} style={inputStyle} value={niveau} onChange={(e) => onChangeNiveau(e.target.value)}>
-              <option value="">Tous niveaux</option>
-              {NIVEAUX.map((n) => <option key={n}>{n}</option>)}
-            </select>
-          </Field>
-          <Field label="Participants">
-            <select className={inputClass} style={inputStyle} value={participants} onChange={(e) => setParticipants(Number(e.target.value))}>
-              {STUDENTS_COUNTS.slice(0, 20).map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
-          </Field>
-        </div>
-        <OuiNonField label="Les joueurs se connaissent ?" value={joueursSeConnaissent} onChange={setJoueursSeConnaissent} />
-        <OuiNonField label="Inclure un ambassadeur (jeu de mime) ?" value={faireAmbassadeur} onChange={setFaireAmbassadeur} />
-        <OuiNonField label="Intégrer mes favoris ?" value={integrerFavoris} onChange={setIntegrerFavoris} />
-        <Field label="Temps total du cours">
-          <select className="rounded-sm px-2 py-1.5 text-sm outline-none focus:ring-2" style={{ ...inputStyle, width: "auto" }} value={tempsTotal} onChange={(e) => applyTempsTotal(Number(e.target.value))}>
+        {/* Le groupe : qui est en face, et ce qu'on met dans le cours. */}
+        <SectionReglages premiere>
+          <div className="grid grid-cols-2 gap-2.5" style={{ marginBottom: 12 }}>
+            <ChampReglage label="Niveau">
+              <SelectReglage value={niveau} onChange={(e) => onChangeNiveau(e.target.value)}>
+                <option value="">Tous</option>
+                {NIVEAUX.map((n) => <option key={n}>{n}</option>)}
+              </SelectReglage>
+            </ChampReglage>
+            <ChampReglage label="Participants">
+              <SelectReglage value={participants} onChange={(e) => setParticipants(Number(e.target.value))}>
+                {STUDENTS_COUNTS.slice(0, 20).map((n) => <option key={n} value={n}>{n}</option>)}
+              </SelectReglage>
+            </ChampReglage>
+          </div>
+          <LigneOuiNon label="Les joueurs se connaissent" value={joueursSeConnaissent} onChange={setJoueursSeConnaissent} />
+          <LigneOuiNon label="Inclure un Ambassadeur" precision="(jeu de mime)" value={faireAmbassadeur} onChange={setFaireAmbassadeur} />
+          <LigneOuiNon label="Inclure mes favoris" value={integrerFavoris} onChange={setIntegrerFavoris} />
+        </SectionReglages>
+        {/* Le cours : sa durée et son contenu, sur l'encart papier. */}
+        <SectionReglages encart>
+          <LigneSelect premiere label="Temps total" value={tempsTotal} onChange={(e) => applyTempsTotal(Number(e.target.value))}>
             {TEMPS_TOTAL_OPTIONS.map((t) => <option key={t} value={t}>{t} min</option>)}
-          </select>
-        </Field>
-        <Field label="Nombre d'échauffements">
-          <select className="rounded-sm px-2 py-1.5 text-sm outline-none focus:ring-2" style={{ ...inputStyle, width: "auto" }} value={nbEchauffements} onChange={(e) => setNbEchauffements(Number(e.target.value))}>
-            {nombresPossibles.map((n) => <option key={n} value={n}>{n}</option>)}
-          </select>
-        </Field>
-        <Field label="Nombre d'exercices">
-          <select className="rounded-sm px-2 py-1.5 text-sm outline-none focus:ring-2" style={{ ...inputStyle, width: "auto" }} value={nbExercices} onChange={(e) => setNbExercices(Number(e.target.value))}>
-            {nombresPossibles.map((n) => <option key={n} value={n}>{n}</option>)}
-          </select>
-        </Field>
-        <Field label="Nombre de catégories d'impro">
-          <select className="rounded-sm px-2 py-1.5 text-sm outline-none focus:ring-2" style={{ ...inputStyle, width: "auto" }} value={nbImpro} onChange={(e) => setNbImpro(Number(e.target.value))}>
-            {nombresPossibles.map((n) => <option key={n} value={n}>{n}</option>)}
-          </select>
-        </Field>
-        <p className="text-xs mb-2" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
-          Durée totale estimée : {tempsTotal} min (feedbacks inclus {DEBRIEF_MIN} minutes)
-        </p>
-        <Field label="Objectif pédagogique (optionnel)">
-          {/* Cinq objectifs à l'œil, le reste au défilement : la liste complète poussait le bouton
-              "Créer" hors de l'écran sur téléphone. */}
+          </LigneSelect>
+          <CompteurReglage label="Nombre d'échauffements" value={nbEchauffements} onChange={setNbEchauffements} />
+          <CompteurReglage label="Nombre d'exercices" value={nbExercices} onChange={setNbExercices} />
+          <CompteurReglage label="Nombre de catégories d'impro" value={nbImpro} onChange={setNbImpro} derniere />
+        </SectionReglages>
+        <SectionReglages derniere>
+          {/* Laiton foncé plutôt que le laiton des filets : la nuance claire ne passait pas le
+              contraste AA sur le papier de la carte. */}
+          <div className="uppercase" style={{ fontFamily: FONT_MONO, fontSize: 10, letterSpacing: "0.16em", color: "#8A6A26", marginBottom: 6 }}>
+            Objectif pédagogique <span style={{ color: COLORS.textSoft, letterSpacing: "0.1em" }}>(optionnel)</span>
+          </div>
+          {/* Cinq objectifs à l'œil, le reste au défilement : la liste complète poussait le pied
+              du formulaire hors de l'écran sur téléphone. */}
           <SearchableMultiSelect allOptions={familiesObjectifsWithCustom(data)} selected={objectifs} onChange={setObjectifs} maxVisible={5} />
-        </Field>
-        <Btn variant="accent" onClick={generate}><Sparkles size={14} /> Créer</Btn>
+        </SectionReglages>
+        <PiedFormulaire duree={`${tempsTotal} min`} precision={`dont ${DEBRIEF_MIN} min de feedbacks`}>
+          <BoutonCreation onClick={generate}>Créer le cours</BoutonCreation>
+        </PiedFormulaire>
       </IndexCard>
 
       {plan && (
@@ -9470,60 +9715,69 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
       </p>
       <Toast toast={toastMsg} />
       <IndexCard>
-        <div className="grid grid-cols-2 gap-2">
-          <Field label="Format">
-            <select
-              className={inputClass} style={inputStyle} value={format}
-              onChange={(e) => {
-                const val = e.target.value;
-                setFormat(val);
-                if (val === "Cabaret") setComediens(4);
-                else if (val === "Match") setComediens(8);
-              }}
-            >
-              <option value="">Choisir un format</option>
-              {data.showTypes.map((t) => <option key={t}>{t}</option>)}
-            </select>
-          </Field>
-          <Field label="Niveau">
-            <select className={inputClass} style={inputStyle} value={niveau} onChange={(e) => setNiveau(e.target.value)}>
-              <option value="">Tous niveaux</option>
-              {NIVEAUX.map((n) => <option key={n}>{n}</option>)}
-            </select>
-          </Field>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <Field label="Durée totale">
-            <select
-              className="rounded-sm px-2 py-1.5 text-sm outline-none focus:ring-2" style={{ ...inputStyle, width: "auto" }} value={duree}
-              onChange={(e) => {
-                const v = Number(e.target.value);
-                setDuree(v);
-                // Décoche l'entracte par défaut sur les formats courts (30/60 min) : une pause de
-                // 15 min y prend une part disproportionnée du temps disponible. L'utilisateur peut
-                // toujours la recocher manuellement.
-                if (v === 30 || v === 60) setEntracteOn(false);
-              }}
-            >
-              {[30, 60, 90, 120].map((t) => <option key={t} value={t}>{t} min</option>)}
-            </select>
-          </Field>
-          <Field label="Nombre de comédiens">
-            <select className={inputClass} style={inputStyle} value={comediens} onChange={(e) => setComediens(Number(e.target.value))}>
-              {STUDENTS_COUNTS.slice(0, 10).map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
-          </Field>
-        </div>
-        <OuiNonField label="Commencer par un échauffement de scène ?" value={commencerEchauffementScene} onChange={setCommencerEchauffementScene} />
-        <OuiNonField label="Intégrer mes favoris ?" value={integrerFavoris} onChange={setIntegrerFavoris} />
-        <OuiNonField label="Avec entracte (15 min réservées) ?" value={entracteOn} onChange={setEntracteOn} />
-        <Field label="À quelle heure commence ton spectacle ?">
-          <select className={inputClass} style={inputStyle} value={startTime} onChange={(e) => setStartTime(e.target.value)}>
-            <option value="">Heure non précisée</option>
-            {SPECTACLE_START_TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
-        </Field>
-        <Btn variant="accent" onClick={generate}><Sparkles size={14} /> Créer</Btn>
+        {/* Tout le cadre du spectacle tient en un bloc : la troupe, puis le minutage. */}
+        <SectionReglages premiere derniere>
+          <div className="grid grid-cols-3 gap-2.5" style={{ marginBottom: 12 }}>
+            <ChampReglage label="Format">
+              <SelectReglage
+                value={format}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFormat(val);
+                  if (val === "Cabaret") setComediens(4);
+                  else if (val === "Match") setComediens(8);
+                }}
+              >
+                {/* Deux formats seulement, et plus de choix vide : « Concept original », présent
+                    dans data.showTypes pour étiqueter les fiches, ne correspond à aucune règle de
+                    montage dans buildSpectacle. */}
+                {FORMATS_SPECTACLE.map((t) => <option key={t}>{t}</option>)}
+              </SelectReglage>
+            </ChampReglage>
+            <ChampReglage label="Comédiens">
+              <SelectReglage value={comediens} onChange={(e) => setComediens(Number(e.target.value))}>
+                {STUDENTS_COUNTS.slice(0, 10).map((n) => <option key={n} value={n}>{n}</option>)}
+              </SelectReglage>
+            </ChampReglage>
+            <ChampReglage label="Niveau">
+              <SelectReglage value={niveau} onChange={(e) => setNiveau(e.target.value)}>
+                <option value="">Tous</option>
+                {NIVEAUX.map((n) => <option key={n}>{n}</option>)}
+              </SelectReglage>
+            </ChampReglage>
+          </div>
+          {/* L'heure de début et la durée côte à côte : ce sont les deux bouts du même créneau, et
+              la durée commande l'entracte proposé juste en dessous. */}
+          <div className="grid grid-cols-2 gap-2.5" style={{ marginBottom: 12 }}>
+            <ChampReglage label="Heure de début">
+              <SelectReglage value={startTime} onChange={(e) => setStartTime(e.target.value)}>
+                <option value="">Non précisée</option>
+                {SPECTACLE_START_TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+              </SelectReglage>
+            </ChampReglage>
+            <ChampReglage label="Durée totale">
+              <SelectReglage
+                value={duree}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  setDuree(v);
+                  // Décoche l'entracte par défaut sur les formats courts (30/60 min) : une pause de
+                  // 15 min y prend une part disproportionnée du temps disponible. L'utilisateur peut
+                  // toujours la recocher manuellement.
+                  if (v === 30 || v === 60) setEntracteOn(false);
+                }}
+              >
+                {[30, 60, 90, 120].map((t) => <option key={t} value={t}>{t} min</option>)}
+              </SelectReglage>
+            </ChampReglage>
+          </div>
+          <LigneOuiNon premiere label="Avec entracte" precision="(15 min réservées)" value={entracteOn} onChange={setEntracteOn} />
+          <LigneOuiNon label="Commencer par un échauffement de scène" value={commencerEchauffementScene} onChange={setCommencerEchauffementScene} />
+          <LigneOuiNon label="Inclure mes favoris" value={integrerFavoris} onChange={setIntegrerFavoris} />
+        </SectionReglages>
+        <PiedFormulaire duree={`${duree} min`} precision={entracteOn ? "dont 15 min d'entracte" : null}>
+          <BoutonCreation onClick={generate}>Créer le spectacle</BoutonCreation>
+        </PiedFormulaire>
       </IndexCard>
 
       {result && (
@@ -9662,8 +9916,10 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
   const [temps, setTemps] = useState(10);
   const [participants, setParticipants] = useState(4);
   const [niveau, setNiveau] = useState("");
-  const [contexte, setContexte] = useState(CONTEXTES_ECHAUFFEMENT[0]);
-  const [spectaclePersonnaliseId, setSpectaclePersonnaliseId] = useState("");
+  // Le format du spectacle que cet échauffement prépare. Comme l'ancien « contexte » qu'il remplace,
+  // il n'entre encore dans aucun filtre du tirage : les fiches d'échauffement ont bien un champ
+  // `showTypes`, mais il est vide sur toutes, il n'y a donc rien à filtrer pour l'instant.
+  const [format, setFormat] = useState(FORMATS_SPECTACLE[0]);
   const [joueursSeConnaissent, setJoueursSeConnaissent] = useState(true);
   const [tags, setTags] = useState([]); // objectifs OU thématiques mélangés, un seul menu de recherche
   const list = plan;
@@ -9786,50 +10042,53 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
         </span>
       </IndexCard>
       <IndexCard>
-        <Field label="Temps disponible">
-          <div className="flex gap-2">
-            {DUREES_ECHAUFFEMENT.map((t) => (
-              <button key={t} onClick={() => setTemps(t)} className="px-2 py-1 rounded text-xs" style={{ fontFamily: FONT_MONO, background: temps === t ? COLORS.accent : "transparent", color: temps === t ? "#fff" : COLORS.ink, border: `1px solid ${COLORS.accent}` }}>
-                {t} min
-              </button>
-            ))}
+        {/* Même trio d'en-tête que le générateur de spectacle. Le bloc « Contexte » a disparu : il
+            faisait doublon avec le format, et son réglage n'entrait dans aucun filtre du tirage. */}
+        <SectionReglages premiere>
+          <div className="grid grid-cols-3 gap-2.5" style={{ marginBottom: 12 }}>
+            <ChampReglage label="Format">
+              <SelectReglage value={format} onChange={(e) => setFormat(e.target.value)}>
+                {FORMATS_SPECTACLE.map((t) => <option key={t}>{t}</option>)}
+              </SelectReglage>
+            </ChampReglage>
+            <ChampReglage label="Comédiens">
+              <SelectReglage value={participants} onChange={(e) => setParticipants(Number(e.target.value))}>
+                {STUDENTS_COUNTS.slice(0, 20).map((n) => <option key={n} value={n}>{n}</option>)}
+              </SelectReglage>
+            </ChampReglage>
+            <ChampReglage label="Niveau">
+              <SelectReglage value={niveau} onChange={(e) => setNiveau(e.target.value)}>
+                <option value="">Tous</option>
+                {NIVEAUX.map((n) => <option key={n}>{n}</option>)}
+              </SelectReglage>
+            </ChampReglage>
           </div>
-        </Field>
-        <div className="grid grid-cols-2 gap-2">
-          <Field label="Participants">
-            <select className={inputClass} style={inputStyle} value={participants} onChange={(e) => setParticipants(Number(e.target.value))}>
-              {STUDENTS_COUNTS.slice(0, 20).map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
-          </Field>
-          <Field label="Niveau">
-            <select className={inputClass} style={inputStyle} value={niveau} onChange={(e) => setNiveau(e.target.value)}>
-              <option value="">Tous niveaux</option>
-              {NIVEAUX.map((n) => <option key={n}>{n}</option>)}
-            </select>
-          </Field>
-        </div>
-        <OuiNonField label="Les joueurs se connaissent ?" value={joueursSeConnaissent} onChange={setJoueursSeConnaissent} />
-        <Field label="Contexte">
-          <div className="flex flex-wrap gap-2">
-            {CONTEXTES_ECHAUFFEMENT.map((c) => (
-              <button key={c} onClick={() => setContexte(c)} className="px-2 py-1 rounded-full text-xs" style={{ fontFamily: FONT_BODY, background: contexte === c ? COLORS.brass : "transparent", color: contexte === c ? COLORS.ink : COLORS.textSoft, border: `1px solid ${COLORS.cardEdge}` }}>
-                {c}
-              </button>
-            ))}
+          <LigneOuiNon label="Les joueurs se connaissent" value={joueursSeConnaissent} onChange={setJoueursSeConnaissent} />
+        </SectionReglages>
+        {/* L'échauffement lui-même : le temps dont on dispose. */}
+        <SectionReglages encart>
+          {/* Libellé au-dessus : à côté, les quatre durées n'ont plus la largeur de tenir sur une
+              ligne dès 360 px. */}
+          <div style={{ marginBottom: 10 }}>
+            <ChampReglage label="Temps disponible">
+              <ChoixSegmente
+                ariaLabel="Temps disponible"
+                value={temps}
+                onChange={setTemps}
+                options={DUREES_ECHAUFFEMENT.map((t) => ({ value: t, label: `${t} min` }))}
+              />
+            </ChampReglage>
           </div>
-        </Field>
-        {contexte === "Spectacle personnalisé" && (
-          <Field label="Quel spectacle ?">
-            <select className={inputClass} style={inputStyle} value={spectaclePersonnaliseId} onChange={(e) => setSpectaclePersonnaliseId(e.target.value)}>
-              <option value="">Choisir un spectacle enregistré…</option>
-              {data.spectaclePlans.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </Field>
-        )}
-        <Field label="Famille d'objectifs (optionnel)">
+        </SectionReglages>
+        <SectionReglages derniere>
+          <div className="uppercase" style={{ fontFamily: FONT_MONO, fontSize: 10, letterSpacing: "0.16em", color: "#8A6A26", marginBottom: 6 }}>
+            Famille d'objectifs <span style={{ color: COLORS.textSoft, letterSpacing: "0.1em" }}>(optionnel)</span>
+          </div>
           <SearchableMultiSelect allOptions={FAMILLES_ECHAUFFEMENT} selected={tags} onChange={setTags} placeholder="Chercher une famille d'objectifs…" />
-        </Field>
-        <Btn variant="accent" onClick={generate}><Sparkles size={14} /> Créer</Btn>
+        </SectionReglages>
+        <PiedFormulaire duree={`${temps} min`}>
+          <BoutonCreation onClick={generate}>Créer l'échauffement</BoutonCreation>
+        </PiedFormulaire>
       </IndexCard>
 
       {list && (list.length === 0 ? (
