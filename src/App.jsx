@@ -1901,22 +1901,25 @@ function CompteurReglage({ label, value, onChange, min = 0, max = 10, derniere }
         onClick={() => onChange(Math.min(max, Math.max(min, value + pas)))}
         className="inline-flex items-center justify-center shrink-0"
         style={{
-          width: 44, height: 44, borderRadius: "50%",
-          background: "#FFFDF8", border: `1px solid ${COLORS.cardEdge}`,
+          width: 40, height: 40, borderRadius: "50%",
+          background: "transparent", border: `1px solid ${COLORS.cardEdge}`,
           opacity: eteint ? 0.4 : 1,
         }}
       >
-        <Icone size={15} strokeWidth={2} color={COLORS.textSoft} />
+        <Icone size={15} strokeWidth={2} color={COLORS.inkSoft} />
       </button>
     );
   };
+  // Pas de socle sous le groupe, contrairement aux autres pastilles du bloc : les trois compteurs se
+  // suivent, et trois blocs beiges empilés alourdissaient la colonne de droite. Les cercles se
+  // détachent par leur seul filet, et le chiffre porte tout le contraste.
   return (
     <div className="flex items-center justify-between gap-2.5" style={{ padding: derniere ? "8px 0 14px" : "8px 0", borderTop: "1px solid #E3DAC5" }}>
       <span className="flex-1" style={{ fontFamily: FONT_BODY, fontSize: 14.5, color: COLORS.text }}>{label}</span>
-      <div className="flex items-center gap-2 shrink-0" style={SOCLE_PASTILLE}>
+      <div className="flex items-center gap-2.5 shrink-0">
         {bouton(-1, Minus, "Moins")}
         {/* Chiffre en Plex Sans : les chiffres de Fraunces se lisent moins bien à bout de bras. */}
-        <span className="text-center" style={{ minWidth: 22, fontFamily: FONT_BODY, fontWeight: 600, fontSize: 19, color: COLORS.ink }}>{value}</span>
+        <span className="text-center" style={{ minWidth: 20, fontFamily: FONT_BODY, fontWeight: 600, fontSize: 19, color: COLORS.ink }}>{value}</span>
         {bouton(1, Plus, "Plus")}
       </div>
     </div>
