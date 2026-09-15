@@ -1800,13 +1800,16 @@ const CHAMP_REGLAGE = {
    fond papier : c'est ce qui fait voir, sans écrire de titre de section, où s'arrêtent les réglages
    du groupe et où commencent ceux du cours. Les marges négatives annulent le padding de l'IndexCard
    pour que filet et encart aillent bord à bord. */
-function SectionReglages({ encart, premiere, derniere, children }) {
+function SectionReglages({ encart, premiere, children }) {
   return (
     <div
       className="-mx-4"
       style={{
         marginTop: premiere ? -16 : 0,
-        padding: `12px 16px ${derniere ? 10 : 4}px`,
+        // Autant d'air au-dessus de la première ligne d'un bloc qu'en dessous de la dernière : le
+        // 12/4 d'avant collait la fin du bloc à son filet de séparation. L'écart entre deux blocs
+        // ne bouge pas (8 + filet + 8, comme 4 + filet + 12), seule sa répartition change.
+        padding: "8px 16px",
         background: encart ? "rgba(237,230,214,0.5)" : "transparent",
         borderTop: premiere ? "none" : `1px solid ${COLORS.cardEdge}`,
       }}
@@ -1917,7 +1920,7 @@ function LigneOuiNon({ label, precision, value, onChange, premiere, surEncart })
 /* Compteur −/+ : remplace un menu déroulant de 0 à 10 qu'il fallait ouvrir, faire défiler et viser
    pour passer de 3 à 4. Aux bornes, le bouton s'éteint plutôt que de disparaître, pour que la
    pastille ne change pas de largeur. */
-function CompteurReglage({ label, value, onChange, min = 0, max = 10, derniere }) {
+function CompteurReglage({ label, value, onChange, min = 0, max = 10 }) {
   const bouton = (pas, Icone, titre) => {
     const eteint = pas < 0 ? value <= min : value >= max;
     return (
@@ -1941,8 +1944,12 @@ function CompteurReglage({ label, value, onChange, min = 0, max = 10, derniere }
   // Pas de socle sous le groupe, contrairement aux autres pastilles du bloc : les trois compteurs se
   // suivent, et trois blocs beiges empilés alourdissaient la colonne de droite. Les cercles se
   // détachent par leur seul filet, et le chiffre porte tout le contraste.
+  // 7 px de marge autour de cercles de 40, là où les interrupteurs et les menus en prennent 5 autour
+  // de commandes de 44 : à marge égale, les lignes de compteurs faisaient 4 px de moins que les
+  // autres et cassaient le rythme de la colonne. C'est la ligne entière qui doit faire la même
+  // hauteur, pas la marge.
   return (
-    <div className="flex items-center justify-between gap-2.5" style={{ padding: derniere ? "5px 0 8px" : "5px 0", borderTop: "1px solid #E3DAC5" }}>
+    <div className="flex items-center justify-between gap-2.5" style={{ padding: "7px 0", borderTop: "1px solid #E3DAC5" }}>
       <span className="flex-1" style={{ fontFamily: FONT_BODY, fontSize: 14.5, color: COLORS.text }}>{label}</span>
       <div className="flex items-center gap-2.5 shrink-0">
         {bouton(-1, Minus, "Moins")}
@@ -9005,9 +9012,9 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
           </LigneSelect>
           <CompteurReglage label="Nombre d'échauffements" value={nbEchauffements} onChange={setNbEchauffements} />
           <CompteurReglage label="Nombre d'exercices" value={nbExercices} onChange={setNbExercices} />
-          <CompteurReglage label="Nombre de catégories d'impro" value={nbImpro} onChange={setNbImpro} derniere />
+          <CompteurReglage label="Nombre de catégories d'impro" value={nbImpro} onChange={setNbImpro} />
         </SectionReglages>
-        <SectionReglages derniere>
+        <SectionReglages>
           <div className="uppercase" style={{ ...ETIQUETTE_SECTION }}>
             Objectif pédagogique <span style={{ color: COLORS.textSoft, letterSpacing: "0.06em" }}>(optionnel)</span>
           </div>
@@ -9806,7 +9813,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
       <Toast toast={toastMsg} />
       <IndexCard>
         {/* Tout le cadre du spectacle tient en un bloc : la troupe, puis le minutage. */}
-        <SectionReglages premiere derniere>
+        <SectionReglages premiere>
           <div className="grid grid-cols-3 gap-2.5" style={{ marginBottom: 8 }}>
             <ChampReglage label="Format">
               <SelectReglage
@@ -10170,7 +10177,7 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
             </ChampReglage>
           </div>
         </SectionReglages>
-        <SectionReglages derniere>
+        <SectionReglages>
           <div className="uppercase" style={{ ...ETIQUETTE_SECTION }}>
             Famille d'objectifs <span style={{ color: COLORS.textSoft, letterSpacing: "0.06em" }}>(optionnel)</span>
           </div>
