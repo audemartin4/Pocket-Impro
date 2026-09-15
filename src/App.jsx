@@ -1797,7 +1797,7 @@ function SectionReglages({ encart, premiere, derniere, children }) {
       className="-mx-4"
       style={{
         marginTop: premiere ? -16 : 0,
-        padding: `14px 16px ${derniere ? 16 : 4}px`,
+        padding: `12px 16px ${derniere ? 10 : 4}px`,
         background: encart ? "rgba(237,230,214,0.5)" : "transparent",
         borderTop: premiere ? "none" : `1px solid ${COLORS.cardEdge}`,
       }}
@@ -1838,7 +1838,7 @@ function LigneReglage({ label, precision, premiere, surEncart, ariaLabel, childr
   return (
     <div
       className="flex items-center justify-between gap-2.5"
-      style={{ padding: "9px 0", borderTop: premiere ? "none" : `1px solid ${surEncart ? "#E3DAC5" : COLORS.paper}` }}
+      style={{ padding: "5px 0", borderTop: premiere ? "none" : `1px solid ${surEncart ? "#E3DAC5" : COLORS.paper}` }}
       role={ariaLabel ? "group" : undefined}
       aria-label={ariaLabel}
     >
@@ -1933,7 +1933,7 @@ function CompteurReglage({ label, value, onChange, min = 0, max = 10, derniere }
   // suivent, et trois blocs beiges empilés alourdissaient la colonne de droite. Les cercles se
   // détachent par leur seul filet, et le chiffre porte tout le contraste.
   return (
-    <div className="flex items-center justify-between gap-2.5" style={{ padding: derniere ? "8px 0 14px" : "8px 0", borderTop: "1px solid #E3DAC5" }}>
+    <div className="flex items-center justify-between gap-2.5" style={{ padding: derniere ? "5px 0 8px" : "5px 0", borderTop: "1px solid #E3DAC5" }}>
       <span className="flex-1" style={{ fontFamily: FONT_BODY, fontSize: 14.5, color: COLORS.text }}>{label}</span>
       <div className="flex items-center gap-2.5 shrink-0">
         {bouton(-1, Minus, "Moins")}
@@ -8936,7 +8936,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
       <IndexCard>
         {/* Le groupe : qui est en face, et ce qu'on met dans le cours. */}
         <SectionReglages premiere>
-          <div className="grid grid-cols-2 gap-2.5" style={{ marginBottom: 12 }}>
+          <div className="grid grid-cols-2 gap-2.5" style={{ marginBottom: 8 }}>
             <ChampReglage label="Niveau">
               <SelectReglage value={niveau} onChange={(e) => onChangeNiveau(e.target.value)}>
                 <option value="">Tous</option>
@@ -9764,7 +9764,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
       <IndexCard>
         {/* Tout le cadre du spectacle tient en un bloc : la troupe, puis le minutage. */}
         <SectionReglages premiere derniere>
-          <div className="grid grid-cols-3 gap-2.5" style={{ marginBottom: 12 }}>
+          <div className="grid grid-cols-3 gap-2.5" style={{ marginBottom: 8 }}>
             <ChampReglage label="Format">
               <SelectReglage
                 value={format}
@@ -9795,7 +9795,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
           </div>
           {/* L'heure de début et la durée côte à côte : ce sont les deux bouts du même créneau, et
               la durée commande l'entracte proposé juste en dessous. */}
-          <div className="grid grid-cols-2 gap-2.5" style={{ marginBottom: 12 }}>
+          <div className="grid grid-cols-2 gap-2.5" style={{ marginBottom: 8 }}>
             <ChampReglage label="Heure de début">
               <SelectReglage value={startTime} onChange={(e) => setStartTime(e.target.value)}>
                 <option value="">Non précisée</option>
@@ -10092,7 +10092,7 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
         {/* Même trio d'en-tête que le générateur de spectacle. Le bloc « Contexte » a disparu : il
             faisait doublon avec le format, et son réglage n'entrait dans aucun filtre du tirage. */}
         <SectionReglages premiere>
-          <div className="grid grid-cols-3 gap-2.5" style={{ marginBottom: 12 }}>
+          <div className="grid grid-cols-3 gap-2.5" style={{ marginBottom: 8 }}>
             <ChampReglage label="Format">
               <SelectReglage value={format} onChange={(e) => setFormat(e.target.value)}>
                 {FORMATS_SPECTACLE.map((t) => <option key={t}>{t}</option>)}
