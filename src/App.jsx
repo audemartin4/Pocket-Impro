@@ -7410,21 +7410,14 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
           />
         ) : (
           <IndexCard key={m.id}>
-            <div className="flex justify-between items-start gap-2">
-              <div className="min-w-0">
-                <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{titreManche(m)}</h3>
-                <div style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
-                  {detailManche(m)}
-                  {m.creatorUsername ? ` · ${m.creatorUsername}${m.creatorTroupe ? ` — Troupe ${m.creatorTroupe}` : ""}` : ""}
-                </div>
-              </div>
-              {/* Empilés plutôt que côte à côte : le titre d'une manche est souvent long, et deux
-                  boutons en ligne le repoussaient sur trois lignes. */}
-              <div className="flex flex-col items-end gap-1 shrink-0">
-                <Btn small variant="ghost" onClick={() => setPlaying([m])}><Play size={13} /> Jouer</Btn>
-                {peutModifier(m) && (
-                  <Btn small variant="ghost" onClick={() => setEditingId(m.id)}>Modifier</Btn>
-                )}
+            {/* Le titre a toute la largeur : les deux boutons vivaient à sa droite, empilés, et une
+                manche au nom un peu long s'écrasait sur trois lignes contre eux. Ils sont descendus
+                au pied de la carte. */}
+            <div className="min-w-0">
+              <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{titreManche(m)}</h3>
+              <div style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
+                {detailManche(m)}
+                {m.creatorUsername ? ` · ${m.creatorUsername}${m.creatorTroupe ? ` — Troupe ${m.creatorTroupe}` : ""}` : ""}
               </div>
             </div>
             {/* Dire pourquoi le crayon a disparu, sinon l'auteur croit à une panne. */}
@@ -7456,8 +7449,9 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
               </p>
             )}
             {/* Les mots restent masqués par défaut : la page se consulte aussi devant les joueurs.
-                La corbeille est reléguée en bas à droite, loin des boutons qu'on touche souvent. */}
-            <div className="flex items-center justify-between gap-2 mt-1">
+                Le lien de dépli garde sa ligne, juste au-dessus des boutons : c'est lui qui commande
+                la liste qui vient en dessous, il ne se mélange pas aux actions de la manche. */}
+            <div className="mt-2">
               <button
                 onClick={() => setExpandedId(expandedId === m.id ? null : m.id)}
                 className="text-xs"
@@ -7465,15 +7459,30 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
               >
                 {expandedId === m.id ? "Masquer les mots" : `Voir les ${(m.mots || []).length} mots`}
               </button>
-              {peutModifier(m) && (
-                <BoutonSupprimer onDelete={() => supprimerManche(m.id)} titre="Supprimer cette manche" />
-              )}
             </div>
             {expandedId === m.id && (
               <ol className="text-sm mt-1 list-decimal list-inside" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
                 {(m.mots || []).map((mot, i) => <li key={i}>{mot}</li>)}
               </ol>
             )}
+            {/* Pied de carte sur la même grammaire que les fiches d'exercice et de catégorie : les
+                actions à gauche, la corbeille encadrée tout à droite, et toujours en dernier — même
+                mots dépliés, elle reste au coin bas de la carte. Encadrée parce qu'elle se lit alors
+                comme une action parmi les autres, et non comme une icône égarée.
+                C'est sa marge qui la pousse à droite et non un `justify-between` : le jour où la
+                rangée déborde sur un écran étroit, elle reste à droite de la ligne où elle tombe au
+                lieu de venir se coller sous les boutons. */}
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              <Btn small variant="ghost" onClick={() => setPlaying([m])}><Play size={13} /> Jouer</Btn>
+              {peutModifier(m) && (
+                <Btn small variant="ghost" onClick={() => setEditingId(m.id)}>Modifier</Btn>
+              )}
+              {peutModifier(m) && (
+                <div className="ml-auto">
+                  <BoutonSupprimer cadre onDelete={() => supprimerManche(m.id)} titre="Supprimer cette manche" />
+                </div>
+              )}
+            </div>
           </IndexCard>
         )
       ))}
