@@ -181,9 +181,12 @@ Distinctions à respecter, elles pilotent les générateurs :
   autres. La remontée se fait au tirage (`unshift`), jamais par un tri après coup : les cartes déjà
   retenues gardent leurs voisines, donc la règle des fiches proches reste vérifiée. Sa probabilité
   d'être tirée ne change pas ; seule sa place change. Repérée par son titre, comme « Ambassadeur ».
-- **`publics`** : tranches d'âge d'une fiche d'exercice (`"Enfants" | "Ados" | "Adultes" | "Senior"`,
-  même vocabulaire que `TRANCHES_AGE`). Renseigné sur le lot importé en septembre 2026 et **lu par
-  aucun écran pour l'instant** : il attend le « choix par tranche d'âge » annoncé sur l'accueil.
+- **`publics`** : tranches d'âge d'une fiche d'exercice **ou de catégorie**
+  (`"Enfants" | "Ados" | "Adultes" | "Senior"`, même vocabulaire que `TRANCHES_AGE`). Se saisit dans
+  les deux formulaires (`ChoixPublics`, quatre pastilles à cocher) et s'affiche sur la fiche dépliée
+  de la bibliothèque. **Liste vide = tous publics** : c'est l'état de la quasi-totalité des fiches en
+  base, aucun écran ne doit donc les traiter comme « sans public ». Aucun générateur ne s'en sert
+  encore : il attend le « choix par tranche d'âge » annoncé sur l'accueil.
 - **Ambassadeur** (jeu de mime) : une **manche** (`ambassadeurManches`) est la brique réutilisable —
   un thème général, un titre, un niveau, des tranches d'âge, 5 mots ; c'est elle qui passe par la
   modération. Classement sur deux niveaux : `themeGeneral` vient de la liste **fermée**

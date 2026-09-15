@@ -2108,6 +2108,49 @@ function MultiTagPicker({ allOptions, selected, onChange, color = COLORS.brass, 
   );
 }
 
+/* Tranches d'âge d'une fiche (champ `publics`, même vocabulaire que les manches d'ambassadeur).
+   Quatre valeurs fermées et jamais plus : quatre pastilles à cocher plutôt qu'un menu déroulant,
+   tout tient sur une ligne et on voit d'un coup d'œil ce qui est retenu — un menu aurait demandé
+   quatre ouvertures pour dire « tout le monde ».
+   Aucune pastille cochée vaut « tous publics » : c'est l'état de la quasi-totalité des fiches déjà
+   en base, elles ne doivent pas se retrouver sans public du jour au lendemain. */
+function ChoixPublics({ value, onChange }) {
+  const selection = value || [];
+  // On repart de TRANCHES_AGE pour reconstruire la sélection : l'ordre enregistré reste celui de la
+  // liste (Enfants → Senior) quel que soit l'ordre des clics, sinon deux fiches identiques
+  // s'affichent différemment.
+  const basculer = (t) =>
+    onChange(
+      selection.includes(t)
+        ? selection.filter((x) => x !== t)
+        : TRANCHES_AGE.filter((a) => a === t || selection.includes(a))
+    );
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {TRANCHES_AGE.map((t) => {
+        const actif = selection.includes(t);
+        return (
+          <button
+            key={t}
+            type="button"
+            aria-pressed={actif}
+            onClick={() => basculer(t)}
+            className="rounded-full"
+            style={{
+              fontFamily: FONT_BODY, fontSize: 13, lineHeight: 1, padding: "9px 14px",
+              background: actif ? COLORS.brass : COLORS.paper,
+              border: `1.5px solid ${actif ? COLORS.brass : COLORS.cardEdge}`,
+              color: actif ? COLORS.card : COLORS.textSoft,
+            }}
+          >
+            {t}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /* Sélecteur multiple avec recherche dans un menu déroulant (pour les objectifs des générateurs). */
 // Hauteur d'une ligne de proposition : padding vertical (2 × 6 px) + interligne du `text-sm`.
 // Sert à n'afficher qu'un nombre voulu de propositions à l'œil, le reste venant au défilement.
@@ -4193,7 +4236,7 @@ function ParametresTab({ setTab, currentUser, profile }) {
 /* ---------- Exercices ---------- */
 function ExerciseForm({ initial, showTypes, objectifsList, thematiquesList, familiesList, onCreateFamily, isAdmin, creatorTroupe, creatorUsername, onSave, onCancel }) {
   const [f, setF] = useState(
-    initial || { title: "", summary: "", level: "Débutant", objectives: [], thematiques: [], players: 2, duration: 10, format: "Solo simultané", groupSize: 2, warmup: false, stageWarmup: false, application: false, showTypes: [], phase: "Impro", favorite: false, createdByUser: true, showTroupeOnCard: false }
+    initial || { title: "", summary: "", level: "Débutant", objectives: [], thematiques: [], publics: [], players: 2, duration: 10, format: "Solo simultané", groupSize: 2, warmup: false, stageWarmup: false, application: false, showTypes: [], phase: "Impro", favorite: false, createdByUser: true, showTroupeOnCard: false }
   );
   const isCommunitySubmission = !initial && !isAdmin;
   return (
@@ -4222,6 +4265,9 @@ function ExerciseForm({ initial, showTypes, objectifsList, thematiquesList, fami
           </select>
         </Field>
       </div>
+      <Field label="Tranches d'âge (vide = tous publics)">
+        <ChoixPublics value={f.publics} onChange={(v) => setF({ ...f, publics: v })} />
+      </Field>
       <Field label="Format de jeu">
         <select className={inputClass} style={inputStyle} value={f.format || "Solo simultané"} onChange={(e) => setF({ ...f, format: e.target.value })}>
           {FORMATS_JEU.map((o) => <option key={o}>{o}</option>)}
@@ -5154,7 +5200,7 @@ function groupByLetter(items) {
 function CategoryForm({ initial, thematiquesList, objectifsList, showTypesList, familiesList, onCreateFamily, isAdmin, creatorTroupe, creatorUsername, onSave, onCancel }) {
   const [f, setF] = useState(
     initial || {
-      name: "", summary: "", rules: "", thematiques: [], tags: [], duration: 5, archetypes: [],
+      name: "", summary: "", rules: "", thematiques: [], tags: [], publics: [], duration: 5, archetypes: [],
       level: "", playersMin: 2, playersMax: 6, energy: "", material: "", codes: [], advice: "", durationLabel: "",
       objectives: [], showTypes: [], favorite: false, createdByUser: true, showTroupeOnCard: false, canOpenShow: false, canCloseShow: false,
     }
@@ -5213,6 +5259,9 @@ function CategoryForm({ initial, thematiquesList, objectifsList, showTypesList, 
           </select>
         </Field>
       </div>
+      <Field label="Tranches d'âge (vide = tous publics)">
+        <ChoixPublics value={f.publics} onChange={(v) => setF({ ...f, publics: v })} />
+      </Field>
       <Field label="Durée suggérée (minutes)">
         <input type="number" min={1} className={inputClass} style={inputStyle} value={f.duration} onChange={(e) => setF({ ...f, duration: Number(e.target.value) })} />
       </Field>
@@ -5396,8 +5445,9 @@ function CategoriesTab({ data, update, isAdmin, currentUser, profile, onlyUserCr
           ) : null
         }
       >
-        {(c.material && c.material !== "Aucun") || c.creatorTroupe ? (
+        {(c.publics || []).length > 0 || (c.material && c.material !== "Aucun") || c.creatorTroupe ? (
           <div className="mt-1 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+            {(c.publics || []).length > 0 && <div>Public : {c.publics.join(", ")}</div>}
             {c.material && c.material !== "Aucun" && <div>Matériel : {c.material}</div>}
             {c.creatorTroupe && <div>{c.creatorUsername} — Troupe {c.creatorTroupe}</div>}
           </div>
@@ -8104,6 +8154,10 @@ function FicheBibliothequeExercice({ ex, ouverte, onToggle, onToggleFavori, aver
       <ResumeCarte expanded={ouverte}>{ex.summary}</ResumeCarte>
       {ouverte && (
         <div className="mt-1 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+          {/* Rien d'affiché quand la fiche ne coche aucune tranche : elle vaut alors pour tous les
+              publics, et écrire « Public : tous » sur les neuf dixièmes de la bibliothèque ne dirait
+              rien à personne. */}
+          {ex.publics?.length > 0 && <div>Public : {ex.publics.join(", ")}</div>}
           {ex.objectives?.length > 0 && <div>Objectifs : {ex.objectives.join(", ")}</div>}
           {ex.thematiques?.length > 0 && <div>Thématiques : {ex.thematiques.join(", ")}</div>}
           {ex.material && ex.material !== "Aucun" && <div>Matériel : {ex.material}</div>}
