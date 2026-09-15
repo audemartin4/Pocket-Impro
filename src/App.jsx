@@ -1784,9 +1784,11 @@ const SOCLE_PASTILLE = { background: COLORS.paper, border: `1.5px solid ${COLORS
 // papier de la carte. Taille fluide : 12 px, la taille demandée, dès 355 px de large — en dessous,
 // « Objectif pédagogique (optionnel) » passait sur deux lignes, l'étiquette redescend donc jusqu'à
 // 10,5 px plutôt que de se couper en deux.
+// Autant d'air au-dessus qu'en dessous : son bloc n'a pas de marge propre, l'étiquette se posait
+// donc sur le filet.
 const ETIQUETTE_SECTION = {
   fontFamily: FONT_MONO, fontSize: "clamp(10.5px, 3.4vw, 12px)", letterSpacing: "0.1em",
-  color: "#8A6A26", marginBottom: 7,
+  color: "#8A6A26", marginTop: 7, marginBottom: 7,
 };
 // Taille fluide : à trois menus par ligne, « Cabaret » se faisait rogner par la flèche du menu en
 // dessous de 350 px de large. La valeur de la maquette (15 px) est retrouvée dès 385 px.
@@ -1800,17 +1802,19 @@ const CHAMP_REGLAGE = {
    fond papier : c'est ce qui fait voir, sans écrire de titre de section, où s'arrêtent les réglages
    du groupe et où commencent ceux du cours. Les marges négatives annulent le padding de l'IndexCard
    pour que filet et encart aillent bord à bord. */
-function SectionReglages({ encart, premiere, children }) {
+function SectionReglages({ encart, premiere, derniere, children }) {
   return (
     <div
       className="-mx-4"
       style={{
         marginTop: premiere ? -16 : 0,
-        // Autant d'air au-dessus de la première ligne d'un bloc qu'en dessous de la dernière, et
-        // peu : le filet et le fond de l'encart separent deja les blocs, 12 px de chaque cote en
-        // faisaient un trou dans la colonne. Le premier bloc garde 8 px en haut, c'est le bord de
-        // la carte qu'il longe, pas un filet.
-        padding: `${premiere ? 8 : 4}px 16px 4px`,
+        // Aucune marge ajoutée le long des filets : les lignes ont déjà la leur (5 px), et le filet
+        // plus le fond de l'encart séparent assez les blocs. Un filet de bloc se franchit donc
+        // exactement comme un filet de ligne, 5 px de chaque côté — la moindre marge de plus
+        // creusait un trou sous la dernière ligne du bloc et au-dessus de la première. Deux
+        // exceptions, qui longent un bord et non un filet : le premier bloc contre le bord de la
+        // carte, le dernier contre le bandeau de pied.
+        padding: `${premiere ? 8 : 0}px 16px ${derniere ? 8 : 0}px`,
         background: encart ? "rgba(237,230,214,0.5)" : "transparent",
         borderTop: premiere ? "none" : `1px solid ${COLORS.cardEdge}`,
       }}
@@ -3088,7 +3092,7 @@ function Accueil({ setTab, hasCoursPlan, hasSpectaclePlan, hasEchauffementPlan, 
         ))}
       </div>
       <p className="text-xs text-center mt-6" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-        Prochainement : Choix par tranche d'âge · Faire un don
+        Prochainement : Choix par tranche d'âge
       </p>
     </div>
   );
@@ -9015,7 +9019,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
           <CompteurReglage label="Nombre d'exercices" value={nbExercices} onChange={setNbExercices} />
           <CompteurReglage label="Nombre de catégories d'impro" value={nbImpro} onChange={setNbImpro} />
         </SectionReglages>
-        <SectionReglages>
+        <SectionReglages derniere>
           <div className="uppercase" style={{ ...ETIQUETTE_SECTION }}>
             Objectif pédagogique <span style={{ color: COLORS.textSoft, letterSpacing: "0.06em" }}>(optionnel)</span>
           </div>
@@ -9814,7 +9818,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
       <Toast toast={toastMsg} />
       <IndexCard>
         {/* Tout le cadre du spectacle tient en un bloc : la troupe, puis le minutage. */}
-        <SectionReglages premiere>
+        <SectionReglages premiere derniere>
           <div className="grid grid-cols-3 gap-2.5" style={{ marginBottom: 8 }}>
             <ChampReglage label="Format">
               <SelectReglage
@@ -10178,7 +10182,7 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
             </ChampReglage>
           </div>
         </SectionReglages>
-        <SectionReglages>
+        <SectionReglages derniere>
           <div className="uppercase" style={{ ...ETIQUETTE_SECTION }}>
             Famille d'objectifs <span style={{ color: COLORS.textSoft, letterSpacing: "0.06em" }}>(optionnel)</span>
           </div>
