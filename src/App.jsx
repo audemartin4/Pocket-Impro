@@ -1779,6 +1779,15 @@ const inputClass = "w-full rounded-sm px-2 py-1.5 text-sm outline-none focus:rin
 // Socle commun des pastilles (Oui/Non et compteurs) : 3 px de marge autour de boutons de 38 ou
 // 44 px, soit 44 px de haut au total — le minimum confortable pour un pouce.
 const SOCLE_PASTILLE = { background: COLORS.paper, border: `1.5px solid ${COLORS.cardEdge}`, borderRadius: 99, padding: 3 };
+// Étiquette d'une section de réglages (« Objectif pédagogique », « Famille d'objectifs »). Laiton
+// foncé plutôt que le laiton des filets : la nuance claire ne passait pas le contraste AA sur le
+// papier de la carte. Taille fluide : 12 px, la taille demandée, dès 355 px de large — en dessous,
+// « Objectif pédagogique (optionnel) » passait sur deux lignes, l'étiquette redescend donc jusqu'à
+// 10,5 px plutôt que de se couper en deux.
+const ETIQUETTE_SECTION = {
+  fontFamily: FONT_MONO, fontSize: "clamp(10.5px, 3.4vw, 12px)", letterSpacing: "0.1em",
+  color: "#8A6A26", marginBottom: 7,
+};
 // Taille fluide : à trois menus par ligne, « Cabaret » se faisait rogner par la flèche du menu en
 // dessous de 350 px de large. La valeur de la maquette (15 px) est retrouvée dès 385 px.
 const CHAMP_REGLAGE = {
@@ -8999,10 +9008,8 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
           <CompteurReglage label="Nombre de catégories d'impro" value={nbImpro} onChange={setNbImpro} derniere />
         </SectionReglages>
         <SectionReglages derniere>
-          {/* Laiton foncé plutôt que le laiton des filets : la nuance claire ne passait pas le
-              contraste AA sur le papier de la carte. */}
-          <div className="uppercase" style={{ fontFamily: FONT_MONO, fontSize: 10, letterSpacing: "0.16em", color: "#8A6A26", marginBottom: 6 }}>
-            Objectif pédagogique <span style={{ color: COLORS.textSoft, letterSpacing: "0.1em" }}>(optionnel)</span>
+          <div className="uppercase" style={{ ...ETIQUETTE_SECTION }}>
+            Objectif pédagogique <span style={{ color: COLORS.textSoft, letterSpacing: "0.06em" }}>(optionnel)</span>
           </div>
           {/* Cinq objectifs à l'œil, le reste au défilement : la liste complète poussait le pied
               du formulaire hors de l'écran sur téléphone. */}
@@ -10164,8 +10171,8 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
           </div>
         </SectionReglages>
         <SectionReglages derniere>
-          <div className="uppercase" style={{ fontFamily: FONT_MONO, fontSize: 10, letterSpacing: "0.16em", color: "#8A6A26", marginBottom: 6 }}>
-            Famille d'objectifs <span style={{ color: COLORS.textSoft, letterSpacing: "0.1em" }}>(optionnel)</span>
+          <div className="uppercase" style={{ ...ETIQUETTE_SECTION }}>
+            Famille d'objectifs <span style={{ color: COLORS.textSoft, letterSpacing: "0.06em" }}>(optionnel)</span>
           </div>
           <SearchableMultiSelect allOptions={FAMILLES_ECHAUFFEMENT} selected={tags} onChange={setTags} placeholder="Chercher une famille d'objectifs…" />
         </SectionReglages>
