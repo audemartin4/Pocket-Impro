@@ -273,6 +273,12 @@ const MIN_CARD_DURATION = 2;
 // — sans rien supprimer. Les fiches restent en base, la modération et la page "Validés" de l'Admin
 // continuent de les voir, et repasser cette constante à `true` remet tout en place.
 const CONCEPTS_SPECTACLE_VISIBLES = false;
+// Recherche par tranche d'âge dans le catalogue des manches d'ambassadeur : le tri et le filtre
+// existent et fonctionnent, mais ils restent cachés tant qu'Aude n'a pas renseigné les âges des
+// fiches (2026-09-15). Les montrer sur une bibliothèque à moitié remplie ferait passer pour absente
+// toute manche dont personne n'a encore coché la tranche. Repasser à `true` les remet en place ;
+// ils continuent par ailleurs de ne s'afficher que si au moins une manche porte un âge.
+const RECHERCHE_PAR_AGE_VISIBLE = false;
 const SECTIONS_EXERCICE = ["Échauffement", "Pré-impro", "Impro"];
 const FORMATS_JEU = ["Solo simultané", "En groupe simultané", "Tour à tour avec spectateur", "En cercle", "Déambulation"];
 
@@ -6987,7 +6993,7 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
   // à un filtre cassé.
   const themesDuCatalogue = AMBASSADEUR_THEMES_GENERAUX.filter((t) => manchesVisibles.some((m) => m.themeGeneral === t));
   const manchesSansTheme = manchesVisibles.filter((m) => !m.themeGeneral).length;
-  const ageRenseigne = manchesVisibles.some((m) => (m.tranchesAge || []).length > 0);
+  const ageRenseigne = RECHERCHE_PAR_AGE_VISIBLE && manchesVisibles.some((m) => (m.tranchesAge || []).length > 0);
   const dispoPourPartie = [...manchesJouables(data, currentUser, isAdmin), ...manchesLocales];
   // Un ambassadeur n'est qu'un assemblage personnel de trois manches, monté pour un cours précis :
   // il ne regarde que celui qui l'a monté, sur tous les écrans (montage, mes créations, catalogue).

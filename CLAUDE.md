@@ -187,6 +187,10 @@ Distinctions à respecter, elles pilotent les générateurs :
   de la bibliothèque. **Liste vide = tous publics** : c'est l'état de la quasi-totalité des fiches en
   base, aucun écran ne doit donc les traiter comme « sans public ». Aucun générateur ne s'en sert
   encore : il attend le « choix par tranche d'âge » annoncé sur l'accueil.
+  Côté ambassadeur, le tri et le filtre par âge du catalogue existent mais restent cachés derrière
+  `RECHERCHE_PAR_AGE_VISIBLE` (à `false` depuis le 2026-09-15), le temps que les âges soient
+  renseignés — sur une bibliothèque à moitié remplie, filtrer fait disparaître les manches qu'on n'a
+  pas encore cochées.
 - **Ambassadeur** (jeu de mime) : une **manche** (`ambassadeurManches`) est la brique réutilisable —
   un thème général, un titre, un niveau, des tranches d'âge, 5 mots ; c'est elle qui passe par la
   modération. Classement sur deux niveaux : `themeGeneral` vient de la liste **fermée**
