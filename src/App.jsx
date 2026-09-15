@@ -3,7 +3,7 @@ import {
   Sparkles, Shuffle, Clock, BookOpen, Users, Flame, ClipboardList,
   Plus, Trash2, Tag, ChevronRight, ChevronUp, ChevronDown, ChevronLeft, Download,
   Save, X, Check, Home, Theater, Pencil, Library, UserCircle, Pointer, Star, LogIn, LogOut, AlertTriangle, Mail, Eye, EyeOff, Contact,
-  Facebook, Instagram, Play, Hand, MoveVertical, Minus
+  Facebook, Instagram, Play, Hand, MoveVertical, Minus, Heart
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
 import { APP_DATA_ROW_ID } from "./appDataRow.js";
@@ -2396,6 +2396,10 @@ const openInNewTab = (url) => (e) => {
   window.open(url, "_blank", "noopener,noreferrer");
 };
 
+// Formulaire de don HelloAsso de l'association : c'est lui qui paie l'hébergement et le
+// fonctionnement de l'appli.
+const LIEN_DON = "https://www.helloasso.com/associations/les-idephiles/formulaires/1";
+
 function SocialFooter() {
   return (
     <div className="flex items-center justify-center gap-4 py-6">
@@ -2424,6 +2428,38 @@ function SocialFooter() {
         onMouseLeave={(e) => (e.currentTarget.style.opacity = 0.5)}
       >
         <Instagram size={18} color={COLORS.textSoft} />
+      </a>
+      <a
+        href={LIEN_DON}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={openInNewTab(LIEN_DON)}
+        title="Soutenir Pocket Impro (nouvel onglet)"
+        className="inline-flex items-center gap-1.5"
+        style={{
+          fontFamily: FONT_BODY,
+          fontSize: 13,
+          color: COLORS.accent,
+          background: COLORS.card,
+          border: `1.5px solid ${COLORS.cardEdge}`,
+          borderRadius: 99,
+          padding: "6px 14px",
+          lineHeight: 1,
+          whiteSpace: "nowrap",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = COLORS.accent;
+          e.currentTarget.style.borderColor = COLORS.accent;
+          e.currentTarget.style.color = COLORS.card;
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = COLORS.card;
+          e.currentTarget.style.borderColor = COLORS.cardEdge;
+          e.currentTarget.style.color = COLORS.accent;
+        }}
+      >
+        <Heart size={14} />
+        Faire un don
       </a>
     </div>
   );
