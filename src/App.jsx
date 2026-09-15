@@ -1806,10 +1806,11 @@ function SectionReglages({ encart, premiere, children }) {
       className="-mx-4"
       style={{
         marginTop: premiere ? -16 : 0,
-        // Autant d'air au-dessus de la première ligne d'un bloc qu'en dessous de la dernière : le
-        // 12/4 d'avant collait la fin du bloc à son filet de séparation. L'écart entre deux blocs
-        // ne bouge pas (8 + filet + 8, comme 4 + filet + 12), seule sa répartition change.
-        padding: "8px 16px",
+        // Autant d'air au-dessus de la première ligne d'un bloc qu'en dessous de la dernière, et
+        // peu : le filet et le fond de l'encart separent deja les blocs, 12 px de chaque cote en
+        // faisaient un trou dans la colonne. Le premier bloc garde 8 px en haut, c'est le bord de
+        // la carte qu'il longe, pas un filet.
+        padding: `${premiere ? 8 : 4}px 16px 4px`,
         background: encart ? "rgba(237,230,214,0.5)" : "transparent",
         borderTop: premiere ? "none" : `1px solid ${COLORS.cardEdge}`,
       }}
