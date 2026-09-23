@@ -6632,7 +6632,7 @@ function AmbassadeurManchePicker({ manches, excludeIds = [], onSelect, onCancel 
 
 /* Assemblage d'une partie : trois emplacements, chacun rempli par une manche existante ou par une
    manche créée à la volée (qui rejoint alors la bibliothèque commune). */
-function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditManche, peutModifierManche, onSave, onCancel, onPlay, canSave, onRattacher, slotsInitiaux, onSlotsChange, currentUser, isAdmin }) {
+function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditManche, peutModifierManche, onSave, onCancel, onPlay, canSave, onRattacher, slotsInitiaux, onSlotsChange, currentUser, isAdmin, titre = "Monter un ambassadeur", saveLabel = "Enregistrer", nomInitial = "" }) {
   const [slots, setSlots] = useState(() => {
     const base = [...(slotsInitiaux || [])];
     while (base.length < AMBASSADEUR_MANCHES_PAR_PARTIE) base.push(null);
@@ -6647,8 +6647,10 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditMa
   const [creating, setCreating] = useState(null);
   const [editing, setEditing] = useState(null);
   const [motsOuverts, setMotsOuverts] = useState(null); // emplacement dont on lit les mots
-  const [nom, setNom] = useState("");
-  const [nomModifie, setNomModifie] = useState(false);
+  // Un ambassadeur qu'on rouvre garde le nom qu'on lui a donné, même si ses manches changent : il a
+  // été nommé exprès, ce n'est pas au nom automatique de reprendre la main derrière.
+  const [nom, setNom] = useState(nomInitial);
+  const [nomModifie, setNomModifie] = useState(!!nomInitial);
   // Filtre facultatif : monter un ambassadeur entier dans un même thème général ("un ambassadeur
   // Cinéma"). Il ne s'applique qu'aux tirages et au sélecteur — rien n'oblige les trois manches
   // d'un même ambassadeur à partager leur thème.
@@ -6748,7 +6750,7 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditMa
 
   return (
     <IndexCard style={{ borderColor: COLORS.brass }}>
-      <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium mb-1">Monter un ambassadeur</h3>
+      <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium mb-1">{titre}</h3>
       <p className="text-xs mb-3" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
         Trois manches de {AMBASSADEUR_MOTS_PAR_MANCHE} mots. Pioche parmi les manches existantes ou crée les tiennes.
         {!canSave && " Sans compte, tu peux tout monter et y jouer tout de suite : ton ambassadeur t'attend tant que tu ne fermes pas l'appli, et tu le retrouves depuis l'accueil. Il faut un compte pour le garder au-delà."}
@@ -6928,7 +6930,7 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditMa
           <Play size={14} /> {manchesChoisies.length === 1 ? "Jouer cette manche" : "Jouer maintenant"}
         </Btn>
         {canSave && !onRattacher && (
-          <Btn disabled={!auMoinsUneManche || !nomEffectif.trim()} onClick={() => onSave({ nom: nomEffectif.trim(), mancheIds: slots.filter(Boolean) })}><Save size={14} /> Enregistrer</Btn>
+          <Btn disabled={!auMoinsUneManche || !nomEffectif.trim()} onClick={() => onSave({ nom: nomEffectif.trim(), mancheIds: slots.filter(Boolean) })}><Save size={14} /> {saveLabel}</Btn>
         )}
         <Btn variant="ghost" onClick={onCancel}><X size={14} /> Annuler</Btn>
       </div>
@@ -6950,6 +6952,10 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
   // l'intérêt du bouton "Reprendre l'ambassadeur en cours" de l'accueil.
   const [mode, setMode] = useState(() => ((brouillon?.slots || []).some(Boolean) ? "partie" : null)); // null | "manche" | "partie"
   const [editingId, setEditingId] = useState(null);
+  // Ambassadeur enregistré qu'on est en train de remanier. Distinct du brouillon de l'assembleur :
+  // rouvrir un ambassadeur déjà rangé ne doit pas écraser celui qu'on était peut-être en train de
+  // monter (« Reprendre l'ambassadeur en cours », sur l'accueil).
+  const [partieEnEdition, setPartieEnEdition] = useState(null);
   const [playing, setPlaying] = useState(null); // tableau de manches en cours de jeu
   const [expandedId, setExpandedId] = useState(null);
   const [reglesOuvertes, setReglesOuvertes] = useState(false);
@@ -7120,6 +7126,19 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
     setMode(null);
     setBrouillon?.(null); // il est enregistré : plus rien à reprendre
     showToast("Ambassadeur enregistré ✓");
+  };
+
+  // Remanier un ambassadeur déjà enregistré : on écrit par-dessus le même, on n'en crée pas un
+  // second. Les manches, elles, ne sont pas touchées — ce sont des briques partagées, en changer
+  // une ici ne fait que la retirer de CET assemblage.
+  const modifierPartie = (id, p) => {
+    update((d) => {
+      const i = (d.ambassadeurs || []).findIndex((a) => a.id === id);
+      if (i >= 0) d.ambassadeurs[i] = { ...d.ambassadeurs[i], ...p };
+      return d;
+    });
+    setPartieEnEdition(null);
+    showToast("Ambassadeur modifié ✓");
   };
 
   // Volontairement les manches VISIBLES et non toutes : un ambassadeur enregistré par quelqu'un
@@ -7386,6 +7405,31 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
           {parties.map((p) => {
             const manches = manchesDeLaPartie(p);
             const manquantes = (p.mancheIds || []).length - manches.length;
+            // Remanier un ambassadeur, c'est le même geste que le monter : l'assembleur prend la
+            // place de la carte, ses manches déjà en place, plutôt qu'un formulaire à part qui
+            // redirait la même chose en moins bien.
+            if (partieEnEdition === p.id) {
+              return (
+                <AmbassadeurPartieBuilder
+                  key={p.id}
+                  data={data}
+                  manchesDispo={dispoPourPartie}
+                  slotsInitiaux={p.mancheIds}
+                  nomInitial={p.nom}
+                  titre="Modifier l'ambassadeur"
+                  saveLabel="Enregistrer les modifications"
+                  onCreateManche={creerManche}
+                  onEditManche={modifierManche}
+                  peutModifierManche={peutModifierDansAssemblage}
+                  onSave={(maj) => modifierPartie(p.id, maj)}
+                  onCancel={() => setPartieEnEdition(null)}
+                  onPlay={(choisies) => setPlaying(choisies)}
+                  canSave={canCreate}
+                  currentUser={currentUser}
+                  isAdmin={isAdmin}
+                />
+              );
+            }
             return (
               <IndexCard key={p.id}>
                 <div className="flex justify-between items-start gap-2">
@@ -7406,6 +7450,9 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
                 </div>
                 {/* Chacun ne voit que ses propres assemblages : archivage et corbeille sont toujours là. */}
                 <div className="flex justify-end items-center gap-2 mt-2">
+                  {/* Seul son créateur voit cette liste : pas de condition de droits à poser ici,
+                      contrairement aux manches, qui passent par la modération et se partagent. */}
+                  <Btn small variant="ghost" onClick={() => setPartieEnEdition(p.id)}>Modifier</Btn>
                   <Btn small variant="ghost" onClick={() => archiverPartie(p, !p.archive)}>
                     {p.archive ? "Remettre dans la liste" : "Archiver"}
                   </Btn>
