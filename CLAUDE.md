@@ -131,6 +131,35 @@ policy manquante fait échouer l'opération de façon parfois silencieuse (`wind
 appelé avec `.catch(() => {})`). En cas de comportement « ça ne sauvegarde pas », vérifier
 `select * from pg_policies where tablename = '…'` avant de chercher un bug dans le code.
 
+**Le schéma vit dans `supabase/migrations`**, pas dans l'éditeur SQL du tableau de bord. Les tables
+avaient été créées à la main en août 2026 ; l'historique a été reconstruit le 2026-09-24
+(`20260815000000_etat_initial.sql`, puis les cinq migrations réelles). Toute évolution du schéma
+passe désormais par un fichier de migration — sinon la base redevient irreproductible et aucune
+branche de test n'est possible.
+
+**Règle des nouvelles tables (depuis le 30 octobre 2026).** Une table créée dans `public` ne reçoit
+plus de droits automatiques pour la Data API : sans `grant` explicite, l'API répond « permission
+denied ». Les tables déjà en production gardent les leurs — mais un reset, une branche ou un nouveau
+projet repart de zéro. Modèle à recopier, les trois blocs dans le même fichier de migration :
+
+```sql
+create table public.ma_table (...);
+
+-- On ferme d'abord, on ouvre ensuite. Sans policy, RLS activé = personne ne passe.
+alter table public.ma_table enable row level security;
+create policy "…" on public.ma_table for select using (…);
+
+-- GRANT ≠ RLS : le grant dit « ce rôle peut faire SELECT », la policy « …mais sur ces lignes-là ».
+-- Il faut les deux. Jamais d'insert/update/delete à `anon` sans raison écrite.
+grant select on public.ma_table to anon, authenticated;
+grant insert, update on public.ma_table to authenticated;
+grant all on public.ma_table to service_role;
+```
+
+Attention à l'ordre pour les droits par colonne : un `grant` au niveau de la table écrase les
+restrictions par colonne. Toujours `revoke` la table d'abord, puis `grant (colonnes)` — c'est la
+faille qu'avait corrigée `20260820234319` sur `profiles.is_admin`.
+
 ### 4. Modération : `data` vs `publicData`
 
 Les fiches créées par la communauté ont des drapeaux `pending` / `rejected`. Dans `ImproApp` :

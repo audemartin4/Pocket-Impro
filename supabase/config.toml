@@ -1,0 +1,28 @@
+# Configuration minimale du CLI Supabase.
+#
+# Elle sert à deux choses et deux seulement : relier le dépôt au projet distant
+# (`supabase link --project-ref bcdjhwzinufyknmzshfv`) et permettre de rejouer les migrations sur
+# une base neuve — `supabase db reset` en local, ou une branche de test. Le projet de production,
+# lui, n'est pas piloté d'ici : il l'est depuis le tableau de bord Supabase.
+#
+# Tout ce qui n'est pas listé garde les valeurs par défaut du CLI.
+
+project_id = "bcdjhwzinufyknmzshfv"
+
+[db]
+# Même version majeure que la production (Postgres 17), pour qu'un test local ne passe pas sur une
+# base qui ne ressemble pas à la vraie.
+major_version = 17
+
+[api]
+enabled = true
+# Le seul schéma exposé à la Data API. Les tables de l'appli n'ont aucune raison d'en sortir.
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+
+[auth]
+enabled = true
+# Les comptes sont créés par e-mail + mot de passe, avec pseudo/troupe/ville dans les métadonnées
+# (voir le trigger handle_new_user).
+[auth.email]
+enable_signup = true

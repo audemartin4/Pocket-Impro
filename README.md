@@ -43,19 +43,18 @@ exercices, catégories, comptes, messages et plans, mis à jour en direct (Supab
 Pour brancher ton propre projet Supabase :
 
 1. Créer un compte et un projet gratuit sur [supabase.com](https://supabase.com).
-2. Dans l'éditeur SQL du projet, exécuter :
+2. Appliquer les migrations du dossier [`supabase/migrations`](supabase/migrations) — elles créent
+   les trois tables, les règles de sécurité (RLS) et les droits d'accès à l'API :
 
-```sql
-create table app_data (
-  id text primary key,
-  value jsonb not null,
-  updated_at timestamptz not null default now()
-);
-alter table app_data replica identity full;
-alter table app_data enable row level security;
-create policy "public read/write" on app_data for all using (true) with check (true);
-alter publication supabase_realtime add table app_data;
+```bash
+npx supabase link --project-ref <ref-du-projet>
+npx supabase db push
 ```
+
+   Elles peuvent aussi se coller une par une, dans l'ordre des noms de fichiers, dans l'éditeur SQL
+   du tableau de bord. **Ne pas créer les tables à la main** : depuis le 30 octobre 2026, une table
+   créée sans `grant` explicite n'est pas joignable par l'API et l'appli répond « permission
+   denied » (voir la règle des nouvelles tables dans [CLAUDE.md](CLAUDE.md)).
 
 3. Dans **Project Settings → API**, récupérer l'URL du projet et la clé `anon`/`public`, et les
    coller dans `.env` :
@@ -67,17 +66,18 @@ VITE_SUPABASE_ANON_KEY=eyJ...
 
 ### Limites connues de cette version
 
-- **Pas d'authentification Supabase, pas de règles de sécurité par utilisateur** : la table
-  `app_data` est lisible/écrivable par quiconque a la clé publique — comme un document partagé sans
-  droits fins. C'est suffisant pour une petite troupe de confiance, mais pas pour un usage grand
-  public.
-- **Mots de passe des comptes toujours en clair** dans les données (`data.accounts`), comme avant —
-  ce n'était pas dans le périmètre de ce chantier.
-- **Pas de fusion en cas d'écriture simultanée** : si deux personnes modifient les données à
-  quelques secondes d'intervalle, la dernière sauvegarde écrase l'autre.
+*(Cette section décrivait l'état de l'été 2026. Les trois points d'alors — pas d'authentification,
+mots de passe en clair, pas de fusion — sont réglés depuis : les comptes passent par Supabase Auth
+(`src/auth.js`, table `profiles`), et les écritures concurrentes se fusionnent ligne par ligne
+(`src/fusionBlob.js`). Ce qui reste :)*
 
-Une vraie sécurisation (comptes Supabase Auth, mots de passe hachés, tables relationnelles avec
-permissions par ligne) resterait un chantier séparé, plus lourd, à envisager si l'usage grandit.
+- **`app_data` est lisible et modifiable par quiconque a la clé publique** — laquelle est, par
+  construction, dans le JavaScript que tout visiteur télécharge. C'est assumé : un visiteur sans
+  compte peut mettre une fiche en favori, donc écrire dans le document partagé. La suppression de
+  la ligne, elle, est fermée depuis la migration `20260924133004`. Réserver l'écriture aux comptes
+  connectés serait une décision produit, pas un réglage de droits.
+- **Tout tient dans une seule ligne** : une écriture fautive touche tout le monde à la fois. D'où
+  la sauvegarde quotidienne automatique (`app_data_sauvegardes`, 30 jours de rétention).
 
 Pour un build de production :
 
