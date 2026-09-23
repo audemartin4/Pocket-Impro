@@ -75,6 +75,23 @@ D'où deux règles à ne pas défaire : **ne jamais retomber sur le `SEED` aprè
 onglet qui n'a jamais réussi à lire** (`dernierEtatConnu === null` ⇒ on adopte la base, on ne
 l'écrase pas).
 
+**Cause connue des blocages sur « Chargement… »** (corrigée le 2026-09-23) : le client Supabase ne
+pose aucun délai maximum. Une requête partie sur une connexion qui meurt sans le dire (wifi ↔ 4G,
+sortie de veille, box qui se reconnecte) ne revient alors jamais, ni en succès ni en erreur. Le
+`await` de la lecture initiale ne rendait pas la main : les deux tentatives suivantes ne partaient
+pas, `loaded` restait faux, et l'écran « Réessayer » — qui existe pourtant — était inatteignable.
+Une coupure d'une seconde devenait un blocage définitif, jusqu'à recharger la page à la main.
+D'où une troisième règle : **toute requête `app_data` porte un `abortSignal`** (`DELAI_REQUETE_MS`,
+12 s, `main.jsx`). La boucle de reprise de `useAppData` n'a de sens que parce que `window.storage.get`
+finit toujours par répondre. Côté écran, `EcranChargement` cesse d'être muet au bout de 10 s et
+propose « Recharger ».
+
+**Poids du démarrage** (mesuré le 2026-09-23) : bundle 269 ko + jsPDF 114 ko + données 111 ko, en
+gzip. Le blob `app_data` fait 507 ko bruts mais ne pèse que 111 ko sur le fil — l'élaguer ne sert à
+rien : retirer les cinq champs toujours vides des 388 exercices enlève 35 ko bruts et **929 octets**
+une fois compressé. Le vrai levier était jsPDF, qui partait en même temps que les données ; il
+attend désormais que `loaded` soit vrai.
+
 ### 2. Les migrations de données, pas les fichiers de seed
 
 Les données de seed (`SEED`, `CATEGORIES_A_FUSIONNER`, `CATEGORIES_DETAILLEES`,

@@ -1529,6 +1529,11 @@ function useAppData() {
       // Au réveil d'un téléphone, la toute première requête part parfois avec un jeton périmé et
       // revient en 401 avant que la session ne se rafraîchisse : on réessaie deux fois avant de
       // conclure à une panne.
+      // Cette boucle ne vaut que parce que `window.storage.get` finit toujours par répondre : il
+      // coupe lui-même au bout de DELAI_REQUETE_MS (voir main.jsx). Sans ce délai, une requête
+      // partie sur une connexion morte restait en suspens pour toujours, la première tentative ne
+      // rendait jamais la main, les deux autres ne partaient pas, et l'écran « Réessayer » plus bas
+      // était inatteignable — d'où les blocages sur « Chargement… ».
       for (const attente of [0, 1000, 3000]) {
         if (attente) await pause(attente);
         try {
@@ -2572,6 +2577,38 @@ function BackToTopButton() {
   );
 }
 
+/* Écran d'attente du démarrage. Au bout de dix secondes il cesse d'être muet : les trois tentatives
+   de lecture peuvent légitimement prendre une demi-minute sur une connexion lente, et rester devant
+   « Chargement… » sans rien qui bouge donne l'impression d'une appli plantée. Le bouton donne une
+   sortie immédiate au lieu d'attendre que l'appli renonce d'elle-même.
+   Composant à part, et non un bloc dans ImproApp : le minuteur est un hook, il ne peut pas vivre
+   après les retours anticipés de la racine. */
+function EcranChargement() {
+  const [longue, setLongue] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setLongue(true), 10000);
+    return () => clearTimeout(t);
+  }, []);
+  return (
+    <div style={{ background: COLORS.paper, fontFamily: FONT_BODY }} className="min-h-screen flex items-center justify-center p-6">
+      <div className="max-w-sm text-center">
+        <p style={{ color: COLORS.textSoft }}>Chargement…</p>
+        {longue && (
+          <>
+            <p style={{ color: COLORS.textSoft }} className="text-sm mt-4">
+              C'est plus long que d'habitude. La connexion met du temps à répondre — rien n'est
+              perdu, tes fiches et tes plans sont en sécurité.
+            </p>
+            <div className="mt-3 flex justify-center">
+              <Btn variant="accent" onClick={() => window.location.reload()}>Recharger</Btn>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ---------- Main App ---------- */
 export default function ImproApp() {
   useEffect(() => {
@@ -2583,17 +2620,22 @@ export default function ImproApp() {
     return () => document.head.removeChild(link);
   }, []);
 
-  // Charge jsPDF dès le démarrage de l'appli (et pas seulement sur la page "Plans de cours") pour que
-  // le téléchargement PDF direct depuis "Créer un cours"/"Créer un spectacle" soit prêt sans attendre.
+  const [data, setData, loaded, erreurChargement] = useAppData();
+
+  // Charge jsPDF d'avance (et pas seulement sur la page "Plans de cours") pour que le téléchargement
+  // PDF direct depuis "Créer un cours"/"Créer un spectacle" soit prêt sans attendre.
+  // Mais seulement UNE FOIS LES DONNÉES ARRIVÉES : il pèse 114 ko compressés, autant que les données
+  // elles-mêmes, et il partait jusqu'ici en même temps qu'elles. Sur une connexion étroite, les deux
+  // se disputaient le tuyau et rallongeaient d'autant l'écran « Chargement… » — pour une
+  // bibliothèque qu'on vient souvent consulter sans jamais exporter le moindre PDF. Le décalage ne
+  // se voit pas : le temps d'arriver sur un bouton d'export, il est là depuis longtemps.
   useEffect(() => {
-    if (window.jspdf) return;
+    if (!loaded || window.jspdf) return;
     const script = document.createElement("script");
     script.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
     script.async = true;
     document.body.appendChild(script);
-  }, []);
-
-  const [data, setData, loaded, erreurChargement] = useAppData();
+  }, [loaded]);
   const [tab, setTabRaw] = useState(() => window.location.hash.slice(1) || "accueil");
   const tabRef = useRef(tab);
   useEffect(() => { tabRef.current = tab; }, [tab]);
@@ -2672,13 +2714,7 @@ export default function ImproApp() {
       </div>
     );
   }
-  if (!loaded || !data) {
-    return (
-      <div style={{ background: COLORS.paper, fontFamily: FONT_BODY }} className="min-h-screen flex items-center justify-center">
-        <span style={{ color: COLORS.textSoft }}>Chargement…</span>
-      </div>
-    );
-  }
+  if (!loaded || !data) return <EcranChargement />;
 
   return (
     <div style={{ background: COLORS.paper, minHeight: "100vh" }}>
