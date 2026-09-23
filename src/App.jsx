@@ -1513,7 +1513,11 @@ function mergeMissingCategories(data) {
 }
 
 /* ---------- Persistence ---------- */
-function useAppData() {
+// `peutEcrire` : faux quand personne n'est connecté dans cet onglet. Sans lui, chaque visiteur
+// anonyme renvoyait le document entier — un demi-méga — à chaque chargement de page et à chaque
+// notification temps réel, pour réécrire exactement ce qu'il venait de lire. Depuis que `anon` est
+// en lecture seule côté base, ces envois échoueraient en plus tous en 401, silencieusement.
+function useAppData(peutEcrire = true) {
   const [data, setData] = useState(null);
   const [loaded, setLoaded] = useState(false);
   // Lecture initiale impossible (réseau, jeton expiré…) : on n'affiche PAS une bibliothèque vide,
@@ -1560,7 +1564,7 @@ function useAppData() {
   }, []);
 
   useEffect(() => {
-    if (!loaded || !data) return;
+    if (!loaded || !data || !peutEcrire) return;
     const t = setTimeout(() => {
       const json = JSON.stringify(data);
       lastSentRef.current = json;
@@ -1577,7 +1581,7 @@ function useAppData() {
         .catch(() => {});
     }, 500);
     return () => clearTimeout(t);
-  }, [data, loaded]);
+  }, [data, loaded, peutEcrire]);
 
   // Synchronisation temps réel : quand un·e autre membre de la troupe modifie les données, on
   // récupère la nouvelle valeur et on met à jour l'état local (sauf si c'est l'écho de notre propre
@@ -2620,7 +2624,20 @@ export default function ImproApp() {
     return () => document.head.removeChild(link);
   }, []);
 
-  const [data, setData, loaded, erreurChargement] = useAppData();
+  // Session réelle Supabase Auth + profil (nom d'utilisateur, troupe, ville, is_admin).
+  // Déclarée avant la lecture des données : c'est elle qui dit si cet onglet a le droit d'écrire.
+  const auth = useAuthUser();
+  /* Qui a le droit d'écrire dans le document partagé : personne sans compte.
+     On ne bloque que sur un `null` franc — session résolue, personne connecté. Tant qu'elle vaut
+     `undefined` (réponse pas encore arrivée), on laisse passer : cette garde doit pouvoir se
+     tromper dans le sens permissif, jamais dans l'autre. Un verrou trop zélé ici couperait
+     l'enregistrement pour TOUTE la troupe, en silence, et c'est le genre de panne qu'on met une
+     semaine à comprendre. La fenêtre ainsi laissée ouverte dure le temps d'un aller-retour réseau,
+     avant même que l'écran soit utilisable — et la base, elle, ne s'y trompera pas : `anon` y est
+     en lecture seule. */
+  const peutEcrire = auth.session !== null;
+
+  const [data, setData, loaded, erreurChargement] = useAppData(peutEcrire);
 
   // Charge jsPDF d'avance (et pas seulement sur la page "Plans de cours") pour que le téléchargement
   // PDF direct depuis "Créer un cours"/"Créer un spectacle" soit prêt sans attendre.
@@ -2657,8 +2674,6 @@ export default function ImproApp() {
   // Remonte en haut de page à chaque changement d'onglet (Accueil/Bibliothèque/Créer un cours…) —
   // même logique que dans les pages famille, pour ne jamais arriver au milieu d'une page.
   useEffect(() => { window.scrollTo(0, 0); }, [tab]);
-  // Session réelle Supabase Auth + profil (nom d'utilisateur, troupe, ville, is_admin).
-  const auth = useAuthUser();
   // "Mode utilisateur" (bouton du profil Admin) : simule une session non-admin sans compte réel,
   // pour tester rapidement le point de vue d'un membre lambda — voir TEST_USER_NAME.
   const [simulateMember, setSimulateMember] = useState(false);
@@ -2685,20 +2700,13 @@ export default function ImproApp() {
      l'écran « Plans » n'en avait aucune, et une seule pression sur la corbeille suffisait.
      On se fie à la session Supabase plutôt qu'à `currentUser` : c'est elle qui décide du rôle vu
      par la base (`authenticated` plutôt que `anon`), et elle est là dès la connexion, sans attendre
-     que le profil soit chargé.
-     On ne bloque que sur un `null` franc — session résolue, personne connecté. Tant qu'elle vaut
-     `undefined` (réponse pas encore arrivée), on laisse passer : cette garde doit pouvoir se
-     tromper dans le sens permissif, jamais dans l'autre. Un verrou trop zélé ici couperait
-     l'enregistrement pour TOUTE la troupe, en silence, et c'est le genre de panne qu'on met une
-     semaine à comprendre. La fenêtre ainsi laissée ouverte dure le temps d'un aller-retour réseau,
-     avant même que l'écran soit utilisable — et la base, elle, ne s'y trompera pas.
+     que le profil soit chargé. Voir `peutEcrire`, plus haut, pour le détail de la condition.
      Cette garde ne suffit pas à elle seule : elle se contourne en trois lignes depuis la console du
-     navigateur, puisque la clé publique donne encore le droit d'écrire à `anon`. Le vrai verrou
-     sera le passage de `anon` en lecture seule sur `app_data`, côté base (en attente de décision).
-     Celui-ci reste utile de toute façon : il évite une requête vouée à l'échec et un écran qui ment.
+     navigateur. Le vrai verrou est côté base, où `anon` n'a plus que la lecture sur `app_data`
+     (migration 20260924140551). Celle-ci reste utile de toute façon : elle évite une requête vouée à
+     l'échec et un écran qui ment.
      Les écrans qui proposent une action d'écriture doivent de toute façon la masquer sans compte :
      si on arrive ici sans droit, c'est qu'un bouton n'aurait pas dû être affiché. */
-  const peutEcrire = auth.session !== null;
   const update = useCallback((fn) => {
     if (!peutEcrire) {
       // Trace en console : si cette ligne apparaît, c'est qu'un écran a proposé une action

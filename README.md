@@ -71,12 +71,14 @@ mots de passe en clair, pas de fusion — sont réglés depuis : les comptes pas
 (`src/auth.js`, table `profiles`), et les écritures concurrentes se fusionnent ligne par ligne
 (`src/fusionBlob.js`). Ce qui reste :)*
 
-- **`app_data` reste modifiable par quiconque a la clé publique** — laquelle est, par construction,
-  dans le JavaScript que tout visiteur télécharge. Côté appli, plus rien ne s'écrit sans compte : la
-  garde est dans `update()`, le point de passage unique des écritures. Mais une garde en JavaScript
-  se contourne depuis la console du navigateur ; tant que `anon` garde `insert`/`update` en base, le
-  verrou n'est pas complet. La suppression de la ligne, elle, est fermée depuis la migration
-  `20260924133004`.
+- **Sans compte, l'appli est en lecture seule** — consulter, générer un cours ou un spectacle,
+  télécharger un PDF, oui ; enregistrer quoi que ce soit, non. Deux verrous : la garde de `update()`
+  côté appli, et surtout les droits de la base, où `anon` n'a plus que `select` sur `app_data`
+  (migrations `20260924133004` et `20260924140551`). Le second compte seul vraiment : la clé
+  publique est dans le JavaScript que tout visiteur télécharge, et une garde en JavaScript se
+  contourne depuis la console du navigateur.
+- **Un compte connecté peut tout modifier**, y compris les fiches et les plans des autres. C'est
+  assumé pour une troupe : il n'y a pas de notion de propriétaire sur le contenu partagé.
 - **Tout tient dans une seule ligne** : une écriture fautive touche tout le monde à la fois. D'où
   la sauvegarde quotidienne automatique (`app_data_sauvegardes`, 30 jours de rétention).
 

@@ -131,8 +131,13 @@ policy manquante fait échouer l'opération de façon parfois silencieuse (`wind
 appelé avec `.catch(() => {})`). En cas de comportement « ça ne sauvegarde pas », vérifier
 `select * from pg_policies where tablename = '…'` avant de chercher un bug dans le code.
 
-**Aucune écriture sans compte.** La garde est unique, dans `update()` (`ImproApp`) : sans session
-Supabase, le document partagé n'est pas touché et un avertissement part en console. Elle ne bloque
+**Aucune écriture sans compte.** Deux verrous. Côté base, `anon` n'a plus que `select` sur
+`app_data` (migration `20260924140551`) — c'est le seul qui tienne, la clé publique étant dans le
+JavaScript téléchargé par tout visiteur. Côté appli, la garde est unique, dans `update()`
+(`ImproApp`) : sans session Supabase, le document partagé n'est pas touché et un avertissement part
+en console. `useAppData(peutEcrire)` coupe en plus l'effet d'enregistrement, sans quoi chaque
+visiteur anonyme renvoyait le document entier (un demi-méga) à chaque chargement de page et à chaque
+notification temps réel — pour réécrire ce qu'il venait de lire. Elle ne bloque
 que sur un `null` franc (session résolue, personne connecté) — tant que la réponse n'est pas
 arrivée, on laisse passer : un verrou trop zélé ici couperait l'enregistrement pour toute la troupe,
 en silence. Corollaire : **tout écran qui propose une action d'écriture doit la masquer sans
