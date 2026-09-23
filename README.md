@@ -71,11 +71,12 @@ mots de passe en clair, pas de fusion — sont réglés depuis : les comptes pas
 (`src/auth.js`, table `profiles`), et les écritures concurrentes se fusionnent ligne par ligne
 (`src/fusionBlob.js`). Ce qui reste :)*
 
-- **`app_data` est lisible et modifiable par quiconque a la clé publique** — laquelle est, par
-  construction, dans le JavaScript que tout visiteur télécharge. C'est assumé : un visiteur sans
-  compte peut mettre une fiche en favori, donc écrire dans le document partagé. La suppression de
-  la ligne, elle, est fermée depuis la migration `20260924133004`. Réserver l'écriture aux comptes
-  connectés serait une décision produit, pas un réglage de droits.
+- **`app_data` reste modifiable par quiconque a la clé publique** — laquelle est, par construction,
+  dans le JavaScript que tout visiteur télécharge. Côté appli, plus rien ne s'écrit sans compte : la
+  garde est dans `update()`, le point de passage unique des écritures. Mais une garde en JavaScript
+  se contourne depuis la console du navigateur ; tant que `anon` garde `insert`/`update` en base, le
+  verrou n'est pas complet. La suppression de la ligne, elle, est fermée depuis la migration
+  `20260924133004`.
 - **Tout tient dans une seule ligne** : une écriture fautive touche tout le monde à la fois. D'où
   la sauvegarde quotidienne automatique (`app_data_sauvegardes`, 30 jours de rétention).
 

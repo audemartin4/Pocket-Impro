@@ -17,9 +17,10 @@
 --
 -- Ce que l'appli fait réellement, et donc ce qu'on garde :
 --   app_data  — SELECT (lecture initiale et relecture avant écriture), INSERT + UPDATE (upsert).
---               Y compris pour `anon` : un visiteur sans compte peut mettre une fiche en favori, et
---               ça réécrit le document partagé. Lui retirer l'écriture casserait l'appli ; ce serait
---               une décision produit, pas un ajustement de droits.
+--               INSERT et UPDATE restent ici accordés à `anon`, par prudence : cette migration ne
+--               devait rien changer au fonctionnement. La vérification faite depuis (2026-09-25)
+--               montre qu'aucune fonctionnalité légitime n'écrit sans compte — le passage de `anon`
+--               en lecture seule est donc prévu dans une migration à part.
 --   profiles  — SELECT pour tous ; UPDATE limité à (username, troupe, ville) et DELETE (« Supprimer
 --               mon compte ») pour les comptes connectés seulement.
 --

@@ -2678,7 +2678,36 @@ export default function ImproApp() {
     setTab(targetTab);
   };
 
-  const update = useCallback((fn) => setData((prev) => fn(structuredClone(prev))), [setData]);
+  /* Rien ne s'écrit dans le document partagé sans compte.
+     La garde est ici, au point de passage unique des 67 écritures de l'appli, et non écran par
+     écran : une vérification par écran finit toujours par s'oublier quelque part. C'est ce qui
+     laissait n'importe quel visiteur supprimer les plans de cours enregistrés de toute la troupe —
+     l'écran « Plans » n'en avait aucune, et une seule pression sur la corbeille suffisait.
+     On se fie à la session Supabase plutôt qu'à `currentUser` : c'est elle qui décide du rôle vu
+     par la base (`authenticated` plutôt que `anon`), et elle est là dès la connexion, sans attendre
+     que le profil soit chargé.
+     On ne bloque que sur un `null` franc — session résolue, personne connecté. Tant qu'elle vaut
+     `undefined` (réponse pas encore arrivée), on laisse passer : cette garde doit pouvoir se
+     tromper dans le sens permissif, jamais dans l'autre. Un verrou trop zélé ici couperait
+     l'enregistrement pour TOUTE la troupe, en silence, et c'est le genre de panne qu'on met une
+     semaine à comprendre. La fenêtre ainsi laissée ouverte dure le temps d'un aller-retour réseau,
+     avant même que l'écran soit utilisable — et la base, elle, ne s'y trompera pas.
+     Cette garde ne suffit pas à elle seule : elle se contourne en trois lignes depuis la console du
+     navigateur, puisque la clé publique donne encore le droit d'écrire à `anon`. Le vrai verrou
+     sera le passage de `anon` en lecture seule sur `app_data`, côté base (en attente de décision).
+     Celui-ci reste utile de toute façon : il évite une requête vouée à l'échec et un écran qui ment.
+     Les écrans qui proposent une action d'écriture doivent de toute façon la masquer sans compte :
+     si on arrive ici sans droit, c'est qu'un bouton n'aurait pas dû être affiché. */
+  const peutEcrire = auth.session !== null;
+  const update = useCallback((fn) => {
+    if (!peutEcrire) {
+      // Trace en console : si cette ligne apparaît, c'est qu'un écran a proposé une action
+      // d'écriture qu'il aurait dû masquer. Le bouton est à corriger, pas la garde.
+      console.warn("Écriture refusée : aucun compte connecté.");
+      return;
+    }
+    setData((prev) => fn(structuredClone(prev)));
+  }, [peutEcrire, setData]);
   // Vue "publique" des données : masque les exercices/catégories créés par la communauté tant qu'ils
   // n'ont pas été validés par l'Admin, ainsi que ceux refusés — utilisée partout où le contenu doit
   // rester fiable (génération de cours/spectacle/échauffement, recherche, tirage aléatoire, favoris,
@@ -11495,11 +11524,16 @@ function PlanCoursDetail({ plan, data, allData, update, currentUser, isAdmin, pr
   return (
     <div className="mt-2">
       {dragged && dragPos && draggedTitre && <DragGhost x={dragPos.x} y={dragPos.y} title={draggedTitre} />}
-      <div className="flex justify-end mb-2">
-        <Btn small variant={modeEdition ? "accent" : "ghost"} onClick={() => { setModeEdition((v) => !v); setPicker(null); }}>
-          {modeEdition ? <><Check size={13} /> Terminer</> : <><Pencil size={13} /> Modifier</>}
-        </Btn>
-      </div>
+      {/* Un plan enregistré appartient à la troupe : sans compte, on le consulte et on le télécharge,
+          on ne le remanie pas. Sans cette garde, « Modifier » ouvrait le plan à n'importe quel
+          visiteur arrivé sur « #plans ». */}
+      {currentUser && (
+        <div className="flex justify-end mb-2">
+          <Btn small variant={modeEdition ? "accent" : "ghost"} onClick={() => { setModeEdition((v) => !v); setPicker(null); }}>
+            {modeEdition ? <><Check size={13} /> Terminer</> : <><Pencil size={13} /> Modifier</>}
+          </Btn>
+        </div>
+      )}
       {modeEdition && (
         <Field label="Nom du cours">
           <input
@@ -11659,7 +11693,7 @@ function PlanCoursDetail({ plan, data, allData, update, currentUser, isAdmin, pr
 
 /* Détail dépliable d'un spectacle enregistré : le déroulé complet, dans l'ordre, avec les horaires
    recalculés si une heure de début avait été saisie. */
-function PlanSpectacleDetail({ plan, data, update }) {
+function PlanSpectacleDetail({ plan, data, update, currentUser }) {
   const [expandedId, setExpandedId] = useState(null);
   const [picker, setPicker] = useState(null); // { mode, id }
   const [nom, setNom] = useState(plan.name);
@@ -11807,11 +11841,14 @@ function PlanSpectacleDetail({ plan, data, update }) {
   return (
     <div className="mt-2">
       {dragged && dragPos && draggedTitre && <DragGhost x={dragPos.x} y={dragPos.y} title={draggedTitre} />}
-      <div className="flex justify-end mb-2">
-        <Btn small variant={modeEdition ? "accent" : "ghost"} onClick={() => { setModeEdition((v) => !v); setPicker(null); }}>
-          {modeEdition ? <><Check size={13} /> Terminer</> : <><Pencil size={13} /> Modifier</>}
-        </Btn>
-      </div>
+      {/* Même règle que pour un plan de cours : sans compte, on consulte, on ne remanie pas. */}
+      {currentUser && (
+        <div className="flex justify-end mb-2">
+          <Btn small variant={modeEdition ? "accent" : "ghost"} onClick={() => { setModeEdition((v) => !v); setPicker(null); }}>
+            {modeEdition ? <><Check size={13} /> Terminer</> : <><Pencil size={13} /> Modifier</>}
+          </Btn>
+        </div>
+      )}
       {modeEdition && (
         <Field label="Nom du spectacle">
           <input
@@ -11953,13 +11990,21 @@ function PlansTab({ data, allData, update, setTab, currentUser, isAdmin, profile
             )}
             {/* Télécharger à gauche, supprimer à droite : les deux actions qui portent sur le plan
                 entier, à distance l'une de l'autre pour ne pas se tromper de bouton. */}
+            {/* Télécharger reste ouvert à tous — c'est une lecture. Supprimer demande un compte :
+                ces plans sont ceux de toute la troupe, et la corbeille n'avait aucune garde, si
+                bien qu'un visiteur arrivé sur « #plans » pouvait en effacer un pour tout le monde.
+                Suppression à deux temps, comme partout ailleurs : un seul appui effaçait un plan
+                sans rien demander. */}
             <div className="flex justify-between items-center mt-2">
               <button onClick={() => exportPlan(plan)} title="Télécharger en PDF" className="p-1 -m-1">
                 <Download size={22} color={COLORS.ink} />
               </button>
-              <button onClick={() => update((d) => { d.coursePlans = d.coursePlans.filter((x) => x.id !== plan.id); return d; })} title="Supprimer ce plan" className="p-1 -m-1">
-                <Trash2 size={22} color={COLORS.accent} />
-              </button>
+              {currentUser && (
+                <BoutonSupprimer
+                  titre="Supprimer ce plan"
+                  onDelete={() => update((d) => { d.coursePlans = d.coursePlans.filter((x) => x.id !== plan.id); return d; })}
+                />
+              )}
             </div>
           </IndexCard>
         );
@@ -11982,14 +12027,17 @@ function PlansTab({ data, allData, update, setTab, currentUser, isAdmin, profile
                 {ouvert ? <ChevronUp size={22} color={COLORS.ink} /> : <ChevronDown size={22} color={COLORS.ink} />}
               </button>
             </div>
-            {ouvert && <PlanSpectacleDetail plan={plan} data={data} update={update} />}
+            {ouvert && <PlanSpectacleDetail plan={plan} data={data} update={update} currentUser={currentUser} />}
             <div className="flex justify-between items-center mt-2">
               <button onClick={() => exportSpectaclePlan(plan)} title="Télécharger en PDF" className="p-1 -m-1">
                 <Download size={22} color={COLORS.ink} />
               </button>
-              <button onClick={() => update((d) => { d.spectaclePlans = d.spectaclePlans.filter((x) => x.id !== plan.id); return d; })} title="Supprimer ce spectacle" className="p-1 -m-1">
-                <Trash2 size={22} color={COLORS.accent} />
-              </button>
+              {currentUser && (
+                <BoutonSupprimer
+                  titre="Supprimer ce spectacle"
+                  onDelete={() => update((d) => { d.spectaclePlans = d.spectaclePlans.filter((x) => x.id !== plan.id); return d; })}
+                />
+              )}
             </div>
           </IndexCard>
         );

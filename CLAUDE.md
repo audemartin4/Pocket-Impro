@@ -131,6 +131,17 @@ policy manquante fait échouer l'opération de façon parfois silencieuse (`wind
 appelé avec `.catch(() => {})`). En cas de comportement « ça ne sauvegarde pas », vérifier
 `select * from pg_policies where tablename = '…'` avant de chercher un bug dans le code.
 
+**Aucune écriture sans compte.** La garde est unique, dans `update()` (`ImproApp`) : sans session
+Supabase, le document partagé n'est pas touché et un avertissement part en console. Elle ne bloque
+que sur un `null` franc (session résolue, personne connecté) — tant que la réponse n'est pas
+arrivée, on laisse passer : un verrou trop zélé ici couperait l'enregistrement pour toute la troupe,
+en silence. Corollaire : **tout écran qui propose une action d'écriture doit la masquer sans
+compte** — si l'avertissement console apparaît, c'est un bouton à corriger, pas la garde. C'est
+l'écran « Plans » qui a motivé la règle : ses corbeilles n'avaient aucune garde, et un visiteur
+arrivé sur `#plans` pouvait supprimer d'un seul appui un plan de cours de toute la troupe.
+Ce qui reste permis sans compte : consulter, générer un cours/spectacle/échauffement (état React,
+jamais enregistré), reprendre celui en cours, télécharger un PDF. Rien de tout cela n'écrit en base.
+
 **Le schéma vit dans `supabase/migrations`**, pas dans l'éditeur SQL du tableau de bord. Les tables
 avaient été créées à la main en août 2026 ; l'historique a été reconstruit le 2026-09-24
 (`20260815000000_etat_initial.sql`, puis les cinq migrations réelles). Toute évolution du schéma
