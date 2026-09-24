@@ -104,6 +104,21 @@ function notifyCreatorRejected(d, item, kind, reason) {
    échauffement/exercice fusionnés volontairement) restent éligibles aux deux sections. */
 const estCorpsDeCours = (e) => ((e.phase || "Impro") !== "Échauffement" || e.dualUse) && !e.application;
 
+/* Deux réservoirs d'échauffement, volontairement distincts.
+
+   `estEchauffement` sert au GÉNÉRATEUR DE COURS : tout ce qui est rangé dans la section
+   Échauffement de la bibliothèque peut occuper un créneau d'échauffement d'un cours — c'est ce que
+   la section veut dire — plus les fiches classées ailleurs qui portent `warmup`. Auparavant le
+   générateur ne regardait que `warmup`, et 86 des 149 échauffements de la bibliothèque (Massage
+   facial, Prénom + geste, Miroir à deux…) n'étaient jamais tirables nulle part. Ce n'était pas un
+   choix : les non cochées sont en moyenne plus courtes que les cochées (6,0 min contre 7,3), donc
+   pas un tri par durée mais une irrégularité de saisie.
+
+   `warmup` garde son sens propre — « échauffement RAPIDE » — et reste le seul filtre de la page
+   « Créer un échauffement », qui prépare une mise en train de 5 à 30 minutes et n'a rien à faire
+   d'un échauffement long. Ne pas fusionner les deux : c'est une distinction demandée. */
+const estEchauffement = (e) => (e.phase || "Impro") === "Échauffement" || e.warmup;
+
 /* Effectif d'une fiche, en toutes lettres. `players` est un MINIMUM (0 = aucun) et `playersMax` un
    maximum (0 = illimité) : l'ancien libellé « Illimité » laissait croire à un effectif exact alors
    que le générateur s'en servait déjà comme d'un plancher. */
@@ -4504,13 +4519,21 @@ function ExerciseForm({ initial, showTypes, objectifsList, thematiquesList, fami
           <input className={inputClass} style={inputStyle} value={f.material || ""} onChange={(e) => setF({ ...f, material: e.target.value })} placeholder="Aucun, Musique, Chaises…" />
         </Field>
       </div>
-      <Field label="Utilisable en échauffement">
+      {/* La case ne décide plus qu'une chose : la page « Créer un échauffement », qui ne propose
+          que des mises en train rapides. Un échauffement de la bibliothèque non coché reste tirable
+          dans la section Échauffement d'un cours — d'où la précision sous la case. */}
+      <Field label="Échauffement rapide">
         <label className="flex items-center gap-2 text-sm" style={{ fontFamily: FONT_BODY, color: COLORS.text }}>
-          <input type="checkbox" checked={f.warmup} onChange={(e) => setF({ ...f, warmup: e.target.checked })} />
+          <input type="checkbox" checked={!!f.warmup} onChange={(e) => setF({ ...f, warmup: e.target.checked })} />
           Oui, cet exercice peut servir d'échauffement rapide
         </label>
+        <p className="text-xs mt-1" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+          {(f.phase || "Impro") === "Échauffement"
+            ? "Seuls les échauffements cochés ici sont proposés par la page « Créer un échauffement ». Les autres restent tirables dans la section Échauffement d'un cours."
+            : "Coché, cet exercice peut aussi occuper un créneau d'échauffement, dans un cours comme sur la page « Créer un échauffement »."}
+        </p>
       </Field>
-      {f.warmup && (
+      {estEchauffement(f) && (
         <>
           <Field label="Échauffement de scène">
             <label className="flex items-center gap-2 text-sm" style={{ fontFamily: FONT_BODY, color: COLORS.text }}>
@@ -8591,7 +8614,7 @@ function buildCours(exercises, categories, { niveau, tempsTotal, nbEchauffements
   // petit groupe) — même règle que sur la page "Créer un échauffement".
   // "Ambassadeur" est exclu du pool normal : il n'est ajouté que via la règle dédiée plus bas
   // (dernier échauffement, uniquement si la case "Inclure un ambassadeur" est cochée).
-  const warmupAll = exercises.filter((e) => e.warmup && e.title !== "Ambassadeur" && fitsGroup(e) && allowedLevel(e) && (participants >= 5 || e.groupe !== "Cercle"));
+  const warmupAll = exercises.filter((e) => estEchauffement(e) && e.title !== "Ambassadeur" && fitsGroup(e) && allowedLevel(e) && (participants >= 5 || e.groupe !== "Cercle"));
   // Les fiches marquées "dualUse" (fusion d'un doublon échauffement/exercice — même contenu
   // utile dans les deux sections) restent éligibles ici même si elles sont aussi cochées comme
   // échauffement ; toutes les autres fiches de phase "Échauffement" restent réservées à
@@ -9125,7 +9148,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
       return pickRandom(diverse.length > 0 ? diverse : candidates);
     };
     const poolBase = slot === "warmup"
-      ? data.exercises.filter((e) => e.warmup && !used.has(e.id))
+      ? data.exercises.filter((e) => estEchauffement(e) && !used.has(e.id))
       : data.exercises.filter((e) => estCorpsDeCours(e) && !used.has(e.id));
     const byFamily = poolBase.filter(familyMatches);
     const byTag = poolBase.filter((e) => !familyMatches(e) && tagMatches(e));

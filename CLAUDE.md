@@ -221,8 +221,17 @@ Distinctions à respecter, elles pilotent les générateurs :
   catégorie est un genre de scène jouable en spectacle (champ `name`). Deux formulaires, deux
   bibliothèques, deux pickers distincts.
 - **`phase`** d'un exercice : `"Échauffement"` / `"Pré-impro"` / `"Impro"`, complété par les drapeaux
-  `warmup` (utilisable en échauffement rapide), `stageWarmup` (échauffement de scène pour ouvrir un
+  `warmup` (échauffement **rapide**), `stageWarmup` (échauffement de scène pour ouvrir un
   spectacle) et `dualUse`.
+- **Deux réservoirs d'échauffement, à ne pas fusionner.** La section Échauffement d'un **cours**
+  puise dans `estEchauffement()` : tout ce que la bibliothèque range dans sa section Échauffement,
+  plus les fiches classées ailleurs qui portent `warmup` (13 fiches, celles qui affichent
+  « Utilisable aussi comme échauffement »). La page **« Créer un échauffement »**, elle, ne propose
+  que `warmup` — c'est une mise en train de 5 à 30 min, un échauffement long n'y a pas sa place.
+  Soit 162 fiches d'un côté, 76 de l'autre. Avant le 2026-09-24 les deux écrans ne regardaient que
+  `warmup`, et 86 des 149 échauffements de la bibliothèque (Massage facial, Prénom + geste, Miroir à
+  deux…) n'étaient tirables nulle part. Ce n'était pas un tri par durée — les non cochées sont même
+  en moyenne plus courtes (6,0 min contre 7,3) — mais une irrégularité de saisie du seed.
 - **`canOpenShow` / `canCloseShow`** sur une catégorie : éligible pour ouvrir/terminer un spectacle.
 - **`groupe`** = famille d'objectifs (une seule) ; **`objectives`** = tags (plusieurs). La liste
   maîtresse des tags valides est `SEED.objectifs` — l'appli s'attend à ce que les tags viennent de là.
@@ -236,9 +245,9 @@ Distinctions à respecter, elles pilotent les générateurs :
   Les minimums des 388 fiches ont été renseignés le 2026-09-24 (`_joueursMinimumV1`) à partir du
   relevé `D:\Pocket Impro\exercices-un-seul-eleve.md` : 1 pour les 81 fiches jouables par un élève
   seul, 2 pour les 156 qui demandent un partenaire, 3 par défaut pour le reste. Avant ça, 377 fiches
-  étaient à 0 et un cours pour un seul élève se voyait proposer des cercles de prénoms. Attention :
-  25 des 35 échauffements solo ne portent pas le drapeau `warmup` et n'atteignent donc jamais les
-  générateurs d'échauffement — d'où seulement 13 fiches disponibles à 1 élève sur cet écran.
+  étaient à 0 et un cours pour un seul élève se voyait proposer des cercles de prénoms. À 1 élève,
+  il reste 36 échauffements et 46 exercices tirables pour un cours, et 13 fiches sur la page
+  « Créer un échauffement » — peu, mais c'est le prix du filtre « rapide », pas un défaut.
 - **`actualDuration`** : durée resserrée que le générateur a réservée pour ce créneau, prioritaire sur
   la `duration` brute de la fiche. La conserver lors d'un remplacement de carte, sinon le total
   affiché dérive.
