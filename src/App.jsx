@@ -3,7 +3,7 @@ import {
   Sparkles, Shuffle, Clock, BookOpen, Users, Flame, ClipboardList,
   Plus, Trash2, Tag, ChevronRight, ChevronUp, ChevronDown, ChevronLeft, Download,
   Save, X, Check, Home, Theater, Pencil, Library, UserCircle, Pointer, Star, LogIn, LogOut, AlertTriangle, Mail, Eye, EyeOff, Contact,
-  Facebook, Instagram, Play, Hand, MoveVertical, Minus, Heart
+  Facebook, Instagram, Play, Hand, MoveVertical, Minus, Heart, User
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
 import { APP_DATA_ROW_ID } from "./appDataRow.js";
@@ -129,6 +129,19 @@ function texteEffectif(ex, mot = "élève") {
   if (min && max) return min === max ? pluriel(min) : `${min} à ${pluriel(max)}`;
   if (min) return `${pluriel(min)} minimum`;
   return `${pluriel(max)} maximum`;
+}
+
+/* Fourchette d'effectif, pour les cartes de programme : « 1 à 5 », « 1 à illimité », ou le nombre
+   seul quand les deux bornes se rejoignent. Les fiches de la bibliothèque gardent `texteEffectif`,
+   plus bavard — on y lit une fiche à la fois, alors que sur un programme on compare d'un coup d'œil
+   et il faut que toutes les cartes se lisent de la même façon. Un minimum absent vaut 1 : « aucun
+   minimum » veut dire qu'un seul élève suffit, pas qu'il en faut zéro.
+   Même forme que `texteJoueursCategorie`, pour que les deux types de cartes d'un même cours
+   s'alignent. */
+function fourchetteJoueurs(ex) {
+  const min = ex.players || 1;
+  const max = ex.playersMax || 0;
+  return max && max <= min ? `${min}` : `${min} à ${max || "illimité"}`;
 }
 
 /* Estime le temps (en min) où un élève reste spectateur pendant un exercice "chacun son tour" */
@@ -8326,7 +8339,11 @@ function ProgrammeExerciseCard({ ex, compteur, duree, participants, expanded, on
       </div>
       <MetaCarte>
         <span>{duree} min</span>
-        <span>{texteEffectif(ex, "joueur")}</span>
+        <span className="inline-flex items-center gap-1">
+          <User size={12} aria-hidden="true" />
+          <span className="sr-only">Nombre de joueurs : </span>
+          {fourchetteJoueurs(ex)}
+        </span>
         <Pastille couleur={format.couleur}>
           {format.texte}
           {wait > 0 && format.texte === "chacun son tour" ? ` · ~${wait} min d'attente/élève` : ""}
