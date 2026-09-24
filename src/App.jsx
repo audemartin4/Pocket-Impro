@@ -8388,12 +8388,12 @@ function ProgrammeCategoryCard({ cat, compteur, duree, expanded, onToggle, star,
   const meta = (
     <MetaCarte>
       <span>{duree} min</span>
-      {cat.energy ? <Pastille couleur={ENERGY_COULEUR[cat.energy] || COLORS.textSoft}>énergie {cat.energy}</Pastille> : null}
       <span className="inline-flex items-center gap-1">
         <User size={12} aria-hidden="true" />
         <span className="sr-only">Nombre de joueurs : </span>
         {fourchetteJoueursCategorie(cat)}
       </span>
+      {cat.energy ? <Pastille couleur={ENERGY_COULEUR[cat.energy] || COLORS.textSoft}>énergie {cat.energy}</Pastille> : null}
     </MetaCarte>
   );
   return (
