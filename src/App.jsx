@@ -132,17 +132,20 @@ function texteEffectif(ex, mot = "élève") {
 }
 
 /* Fourchette d'effectif, pour les cartes de programme : « 1 à 5 », « 1 à illimité », ou le nombre
-   seul quand les deux bornes se rejoignent. Les fiches de la bibliothèque gardent `texteEffectif`,
-   plus bavard — on y lit une fiche à la fois, alors que sur un programme on compare d'un coup d'œil
-   et il faut que toutes les cartes se lisent de la même façon. Un minimum absent vaut 1 : « aucun
-   minimum » veut dire qu'un seul élève suffit, pas qu'il en faut zéro.
-   Même forme que `texteJoueursCategorie`, pour que les deux types de cartes d'un même cours
-   s'alignent. */
-function fourchetteJoueurs(ex) {
-  const min = ex.players || 1;
-  const max = ex.playersMax || 0;
-  return max && max <= min ? `${min}` : `${min} à ${max || "illimité"}`;
+   seul quand les deux bornes se rejoignent. Les fiches de la bibliothèque gardent `texteEffectif`
+   et `texteJoueursCategorie`, plus bavards — on y lit une fiche à la fois, alors qu'un programme se
+   parcourt d'un coup d'œil et exige que toutes ses cartes se lisent de la même façon, exercices
+   comme catégories. Un minimum absent vaut 1 : « aucun minimum » veut dire qu'un seul élève suffit,
+   pas qu'il en faut zéro. */
+function fourchetteEffectif(min, max) {
+  const bas = min || 1;
+  const haut = max || 0;
+  return haut && haut <= bas ? `${bas}` : `${bas} à ${haut || "illimité"}`;
 }
+const fourchetteJoueurs = (ex) => fourchetteEffectif(ex.players, ex.playersMax);
+/* Une catégorie nomme ses bornes autrement, et un maximum à 8 y signifie « pas de plafond » —
+   convention héritée de `playersCountText`, que 80 des 126 catégories utilisent. */
+const fourchetteJoueursCategorie = (c) => fourchetteEffectif(c.playersMin, c.playersMax === 8 ? 0 : c.playersMax);
 
 /* Estime le temps (en min) où un élève reste spectateur pendant un exercice "chacun son tour" */
 function computeWaitMinutes(exercise, participants) {
@@ -8386,7 +8389,11 @@ function ProgrammeCategoryCard({ cat, compteur, duree, expanded, onToggle, star,
     <MetaCarte>
       <span>{duree} min</span>
       {cat.energy ? <Pastille couleur={ENERGY_COULEUR[cat.energy] || COLORS.textSoft}>énergie {cat.energy}</Pastille> : null}
-      <span>{texteJoueursCategorie(cat)}</span>
+      <span className="inline-flex items-center gap-1">
+        <User size={12} aria-hidden="true" />
+        <span className="sr-only">Nombre de joueurs : </span>
+        {fourchetteJoueursCategorie(cat)}
+      </span>
     </MetaCarte>
   );
   return (
