@@ -317,3 +317,16 @@ constante à `true` remet tout en place.
 - Style visuel « fiche bristol » : palette `COLORS`, `IndexCard` pour chaque carte, trois polices
   (`FONT_DISPLAY` / `FONT_BODY` / `FONT_MONO`).
 - Déploiement : Netlify se déclenche automatiquement sur un push vers `master`.
+- **Adresse publique : `https://www.pocketimpro.com`** depuis le 2026-09-24. Le nom est enregistré
+  chez OVH (à renouveler chaque 24 septembre), et sa **zone DNS reste chez OVH** : deux entrées
+  seulement pointent vers Netlify, `@ A 75.2.60.5` et `www CNAME pocketimpro.netlify.app.`
+  Ne pas basculer les serveurs de noms vers Netlify DNS sans désactiver au préalable le DNSSEC
+  d'OVH, sinon le domaine devient injoignable. Le certificat est un Let's Encrypt couvrant les deux
+  noms, renouvelé automatiquement par Netlify.
+  `pocketimpro.netlify.app` **continue de servir l'appli** — Netlify ne le redirige pas de lui-même,
+  et rien ne l'y force : les favoris des membres restent valides. `pocketimpro.com` sans le `www`,
+  lui, redirige vers le domaine principal.
+  Conséquence à ne pas oublier : toute nouvelle adresse doit être ajoutée aux **Redirect URLs** de
+  Supabase (Authentication → URL Configuration), sinon les liens de réinitialisation de mot de passe
+  repartent vers la *Site URL* au lieu de l'adresse d'où vient la personne. `src/auth.js` construit
+  son `redirectTo` depuis `window.location.origin`, donc aucune adresse n'est écrite en dur.
