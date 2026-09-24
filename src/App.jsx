@@ -1868,7 +1868,7 @@ function BoutonSupprimer({ onDelete, titre = "Supprimer", texte = false, taille 
   }
   if (cadre) {
     // Corbeille encadrée du pied des cartes de programme : elle se lit comme une action, au même
-    // titre que les boutons "Aléatoire" et "Changer" qui la précèdent.
+    // titre que les boutons "Aléatoire" et "Choisir" qui la précèdent.
     return (
       <button
         type="button"
@@ -7866,7 +7866,7 @@ function AmbassadeurPlanCard({ data, mancheIds, onChange, currentUser, isAdmin, 
           </>
         ) : (
           <>
-            {/* Même grammaire que les autres cartes du plan : "Aléatoire" et "Changer" empilés en
+            {/* Même grammaire que les autres cartes du plan : "Aléatoire" et "Choisir" empilés en
                 haut à droite, l'action principale et la corbeille en pied de carte. */}
             <div className="flex justify-between items-start">
               <div className="flex-1">
@@ -9454,7 +9454,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                   actions={
                     <div className="flex flex-wrap items-center gap-2">
                       <Btn small variant="ghost" onClick={() => replaceCat(it.idx)}>Aléatoire</Btn>
-                      <Btn small variant="ghost" onClick={() => setCatPicker({ mode: "replace", idx: it.idx })}>Changer</Btn>
+                      <Btn small variant="ghost" onClick={() => setCatPicker({ mode: "replace", idx: it.idx })}>Choisir</Btn>
                     </div>
                   }
                   footerRight={
@@ -9527,7 +9527,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                 actions={
                   <div className="flex flex-wrap items-center gap-2">
                     <Btn small variant="ghost" onClick={() => replace(it.slot, it.idx)}>Aléatoire</Btn>
-                    <Btn small variant="ghost" onClick={() => setPicker({ mode: "replace", slot: it.slot, idx: it.idx, groupe: it.ex.groupe })}>Changer</Btn>
+                    <Btn small variant="ghost" onClick={() => setPicker({ mode: "replace", slot: it.slot, idx: it.idx, groupe: it.ex.groupe })}>Choisir</Btn>
                   </div>
                 }
                 footerRight={
@@ -10573,7 +10573,7 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
                 actions={
                   <div className="flex flex-wrap items-center gap-2">
                     <Btn small variant="ghost" onClick={() => replace(idx)}>Aléatoire</Btn>
-                    <Btn small variant="ghost" onClick={() => setPicker({ mode: "replace", idx })}>Changer</Btn>
+                    <Btn small variant="ghost" onClick={() => setPicker({ mode: "replace", idx })}>Choisir</Btn>
                   </div>
                 }
                 footerRight={<BoutonSupprimer cadre onDelete={() => remove(idx)} />}
@@ -11568,7 +11568,7 @@ function PlanCoursDetail({ plan, data, allData, update, currentUser, isAdmin, pr
   const [picker, setPicker] = useState(null); // { kind, mode, id }
   const [nom, setNom] = useState(plan.name);
   // Un plan enregistré s'ouvre VERROUILLÉ : on le relit le jour du cours, souvent en le faisant
-  // défiler d'une main, et un glissement involontaire ou un clic sur "Changer" y serait vite
+  // défiler d'une main, et un glissement involontaire ou un clic sur "Choisir" y serait vite
   // arrivé. Les cartes restent dépliables pour lire le détail ; le bouton "Modifier" déverrouille.
   const [modeEdition, setModeEdition] = useState(false);
   const planIdRef = useRef(plan.id);
@@ -11695,7 +11695,7 @@ function PlanCoursDetail({ plan, data, allData, update, currentUser, isAdmin, pr
     </div>
   ) : null);
   const boutonChanger = (onReplace) => (modeEdition ? (
-    <Btn small variant="ghost" onClick={onReplace}>Changer</Btn>
+    <Btn small variant="ghost" onClick={onReplace}>Choisir</Btn>
   ) : null);
 
   return (
@@ -11986,7 +11986,7 @@ function PlanSpectacleDetail({ plan, data, update, currentUser }) {
           actions={
             modeEdition || plan.format === "Match" ? (
               <div className="flex flex-wrap items-center gap-2">
-                {modeEdition && <Btn small variant="ghost" onClick={() => setPicker({ mode: "replace", id: idx })}>Changer</Btn>}
+                {modeEdition && <Btn small variant="ghost" onClick={() => setPicker({ mode: "replace", id: idx })}>Choisir</Btn>}
                 {plan.format === "Match" && (
                   <SelecteurMatchMode
                     value={plan.matchModeById?.[cat.id]}
