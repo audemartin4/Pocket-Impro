@@ -9330,6 +9330,14 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
           </div>
           <LigneOuiNon label="Les joueurs se connaissent" value={joueursSeConnaissent} onChange={setJoueursSeConnaissent} />
           <LigneOuiNon label="Inclure un Ambassadeur" precision="(jeu de mime)" value={faireAmbassadeur} onChange={setFaireAmbassadeur} />
+          {/* L'Ambassadeur reste proposé à un seul élève : c'est jouable en le faisant mimer, et
+              c'est à l'intervenant d'en décider — d'où un avis, pas un retrait de la case. */}
+          {participants === 1 && faireAmbassadeur && (
+            <p style={{ fontFamily: FONT_BODY, fontSize: 12.5, lineHeight: 1.35, color: COLORS.brass, padding: "0 0 5px" }}>
+              Attention, les ambassadeurs se jouent normalement en équipe, mais tu peux quand même
+              faire mimer à ton élève si tu le souhaites.
+            </p>
+          )}
           <LigneOuiNon label="Inclure mes favoris" value={integrerFavoris} onChange={setIntegrerFavoris} />
         </SectionReglages>
         {/* Le cours : sa durée et son contenu, sur l'encart papier. */}
