@@ -7026,7 +7026,7 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditMa
                         sans défaire l'assemblage. */}
                     {resteAPiocher && (
                       <Btn small variant="ghost" onClick={() => { setPicking(picking === i ? null : i); setCreating(null); setEditing(null); }}>
-                        Choisir
+                        Changer
                       </Btn>
                     )}
                     {/* Corriger une manche sans quitter l'assemblage : on repère une faute de frappe
