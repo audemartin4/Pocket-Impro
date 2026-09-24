@@ -104,6 +104,18 @@ function notifyCreatorRejected(d, item, kind, reason) {
    échauffement/exercice fusionnés volontairement) restent éligibles aux deux sections. */
 const estCorpsDeCours = (e) => ((e.phase || "Impro") !== "Échauffement" || e.dualUse) && !e.application;
 
+/* Effectif d'une fiche, en toutes lettres. `players` est un MINIMUM (0 = aucun) et `playersMax` un
+   maximum (0 = illimité) : l'ancien libellé « Illimité » laissait croire à un effectif exact alors
+   que le générateur s'en servait déjà comme d'un plancher. */
+function texteEffectif(ex, mot = "élève") {
+  const min = ex.players || 0, max = ex.playersMax || 0;
+  const pluriel = (n) => `${n} ${mot}${n > 1 ? "s" : ""}`;
+  if (!min && !max) return `${mot}s illimités`;
+  if (min && max) return min === max ? pluriel(min) : `${min} à ${pluriel(max)}`;
+  if (min) return `${pluriel(min)} minimum`;
+  return `${pluriel(max)} maximum`;
+}
+
 /* Estime le temps (en min) où un élève reste spectateur pendant un exercice "chacun son tour" */
 function computeWaitMinutes(exercise, participants) {
   if (exercise.format !== "Tour à tour avec spectateur") return 0;
@@ -1011,6 +1023,67 @@ function mergeDetailedCategories(data) {
   return { ...data, categories, _categoriesDetailV1: true };
 }
 
+/* Relevé du 2026-09-24 : les fiches jouables avec un seul élève, lues une par une (voir
+   `exercices-un-seul-eleve.md`). Deux situations bien distinctes, d'où deux listes.
+   JOUEURS_SOLO : l'élève fait l'exercice seul, l'intervenant donne la consigne et regarde.
+   JOUEURS_DUO : il faut un partenaire ; avec un seul élève, c'est l'intervenant qui entre en scène.
+   JOUEURS_TRIO : annoncées « à 2 joueurs » mais un troisième rôle regarde pendant que les deux
+   autres jouent — l'intervenant ne peut pas tenir les deux places. */
+const JOUEURS_SOLO = [
+  "Massage facial", "La vie d'un arbre", "Blocs de glace", "Montagne russe d'émotions", "Les plus mauvais danseurs",
+  "Consignes sur chaises", "Course de papier journal", "Peinture corporelle", "Douche imaginaire", "Les 12 tibétains",
+  "Clap clap", "1-2-3-4 tête-épaule-hanche-pieds", "Ça marche", "Gonflé comme un ballon", "Attention une haie !",
+  "Vire-langues", "Sons de bouches", "A E I O U", "Voyelles + poses", "Compter crescendo",
+  "Ma me mu mo mu, Sa se si so su", "Phrasé inventé", "Ça fait 8 choses", "Je suis Superman parce que...", "Commandements",
+  "Sur consignes", "Grille environnement", "Démarches de personnages", "Démarches d'univers", "Bruitage d'objets",
+  "Le corps qui bug", "Statues au signal", "Les deux bords", "Tous à poils !", "Carrousel équestre",
+  "La chaise en 5 façons", "Course au ralenti + public", "Devinettes", "Visage émotions", "Une phrase 4 chaises",
+  "Applaudissements", "Personnage robot", "Kamasutra", "Étymologie", "Compagnon invisible",
+  "Expressions imagées", "Nudistes", "Douleur en silence",
+  "Scènes 1 masque", "5 éléments", "Statuts avec un objet", "Objet récalcitrant", "Valise d'émotions",
+  "Martin venez dans mon bureau", "Devine mon émotion", "Le voyage intérieur", "Parler tout seul", "Vieillissement",
+  "Pose et personnage", "Posture confiante", "Débit rapide - 1 minute", "Rencontre annulée", "Le mantra",
+  "Démarches de perso (en marche)", "Brainstorm univers", "Ça fait 8 choses (univers)", "Invocation", "Émotions au bout des pieds",
+  "Attente", "Traversée impossible", "Playback", "Chanliloquer", "Strip-tease mimé",
+  "Cadeau mystère", "La star ne vient pas", "Accusation", "Fin du monde", "Déceler le rire",
+  "Ma vraie enfance", "Bagarre fantôme", "Ennui au bureau",
+];
+const JOUEURS_DUO = [
+  "Cercle de taichi", "Miroir à deux", "Respiration en chœur", "Guide d'aveugle", "Le dauphin",
+  "La corde imaginaire", "Chaises, lignes, dragons", "Hypnotiseur", "Suivez le suiveur", "Banc de poisson",
+  "Gros câlin", "Points moteurs", "Cercle des grimaces", "Cercle des mouvements", "Rythme cuisse direction à 2",
+  "Parcours du combattant", "Ouverture de porte", "Le grand samouraï", "Volley-mot", "Expert en monstre",
+  "Même mouvements", "Rire & corps", "Voyelles binômes", "Chaise avec mouvements cumulés", "1-2-3 j'ai raté",
+  "Ping-pong King-kong Ding-dong", "Lancer de couteaux", "Boules de couleur", "Balle imaginaire claquement", "Association d'idées",
+  "Help association d'idée", "Gestes en chœur", "Oui on y va !", "Se passer des objets mimés", "Les répliques",
+  "Ambassadeur", "Le chat fait rire", "Bonjour", "Les perroquets",
+  "M. Loyal et son freakshow", "Cercle de présentation folle", "Amplification par demi-cercle", "Amplification de personnage", "Le goaler",
+  "Qu'est-ce que tu fais ?", "Qui-qui-où", "Je t'aime / je t'aime aussi mais...", "Logo de t-shirt", "Bataille au ralenti",
+  "Soultrain d'imitation", "Matière et Observateur", "Cadeaux mimés", "Déclaration", "Devine lieu grâce à objet",
+  "Super-pouvoir et inconvénients", "Meilleurs titres", "Fleur précieuse", "Secret en grommelot", "Notre bon roi",
+  "L'aide", "Histoire en oui et", "Oui et", "Histoire 1 mot à la fois", "Gromelo alterné",
+  "Fusionner 2 mimes", "Lieu en mouvement", "Rester connecté à son perso", "Cadeau nul adoré", "Blind Date",
+  "On ne parle pas de ce qu'on fait", "Le gros titre du journal", "Lire des lettres", "Le qui-où-quoi en 3 répliques", "La file d'attente",
+  "La visite guidée / l'audio-guide", "Manipulation d'objets dans un lieu", "On parle pas de ce qu'on fait", "Meubler un espace", "Visite guidée aveugle",
+  "Scène painting (échange d'objets)", "Parlez moi... (Lieu ou relation)", "Manipuler un objet avant de parler", "Rien, rien, quelque chose", "Propositions faibles et fortes",
+  "Henri... je sais", "Remarquer et répéter", "Phrases imposées", "Débuts de phrases...", "Le seul chocolat",
+  "Le désaccord", "Scènes avec \"la vérité c'est que...\"", "5 minutes avant le meurtre", "Urgence à deux", "Miroir, miroir en ligne, ascenseur",
+  "Sortir du conflit", "Scènes avec \"moi aussi\"", "Les 2 chaises", "Inspiration sur pose chaise", "2 phrases",
+  "Scènes avec silence", "Scènes avec 2 masques", "Masque et sans masque", "Sculpter son partenaire", "Gromelot partir/rester",
+  "Gromelot speed dating", "La pièce", "Gromelot énergies", "La muette (scène)", "Suiveur bêta",
+  "2 énergies", "Jouer des scènes simples avec statuts", "Bataille de statuts", "Évolution de statuts", "Rôles inversés",
+  "Dessus-dessous", "Blind date émotion imposée", "Interruption", "Les prénoms", "Poses d'émotion",
+  "Chaise en face à face émotion", "Avancer face à face émotion", "Émotions inversées", "Fais moi deviner mon émotion", "Les prisonniers affamés",
+  "Rencontre 2 perso point moteur", "Profession + adjectif", "Conviction personnelle", "Formules pour approfondir le perso", "Micro-trottoir",
+  "Carte de visite", "Grand magasin", "Regard public", "Même regard", "Début de scène contact",
+  "Inspiration par le toucher", "Tag out", "Tu as raison", "Histoire avec AAAAAH", "Scène avec AAAAAH",
+  "Gérer le AAAAAH", "Provoquer le AAAAAH", "Demander une faveur", "Le brevet", "Bonne raison de boire",
+  "Acceptation physique", "Le flash", "Refaire un sketch", "Anecdote", "Docteur inquiétant",
+  "Pourquoi ?", "Pilotes farceurs", "Univers secret", "Relier 2 phrases", "Cricri Cracra",
+  "Histoires en trois mots avec des piranhas", "Vérité immédiate",
+];
+const JOUEURS_TRIO = ["Devine la règle", "Perso décrit par un autre", "Plate-forme crédible", "Repérer le jeu", "Backline"];
+
 function mergeMissingCategories(data) {
   const existingNames = new Set(data.categories.map((c) => c.name));
   const toAdd = CATEGORIES_A_FUSIONNER.filter((c) => !existingNames.has(c.name));
@@ -1230,6 +1303,30 @@ function mergeMissingCategories(data) {
       e.title === "Devinettes" && e.energy !== "Forte" ? { ...e, energy: "Forte" } : e
     );
     devinettesEnergyV1 = true;
+  }
+
+  /* Renseigne une seule fois le nombre d'élèves MINIMUM de chaque fiche, à partir du relevé du
+     2026-09-24. Jusqu'ici, 377 fiches sur 388 étaient à 0 — « aucun minimum » — si bien qu'un cours
+     pour un seul élève se voyait proposer des cercles de prénoms et des jeux à deux équipes : le
+     filtre `e.players <= participants` laisse tout passer quand `players` vaut 0.
+     Les fiches qu'aucune des deux listes ne retient reçoivent 3 si elles n'avaient rien : c'est
+     la seule chose qu'on puisse affirmer sans les relire une à une — il y faut plus que
+     l'intervenant et un élève. Volontairement prudent ; plusieurs en demandent bien davantage.
+     Ne se réexécute plus ensuite, pour ne pas revenir sur un réglage manuel. */
+  let joueursMinimumV1 = data._joueursMinimumV1;
+  if (!joueursMinimumV1 && exercises) {
+    const solo = new Set(JOUEURS_SOLO);
+    const duo = new Set(JOUEURS_DUO);
+    const trio = new Set(JOUEURS_TRIO);
+    exercises = exercises.map((e) => {
+      let min = e.players || 0;
+      if (solo.has(e.title)) min = 1;
+      else if (duo.has(e.title)) min = Math.max(min, 2);
+      else if (trio.has(e.title)) min = Math.max(min, 3);
+      else if (min === 0) min = 3;
+      return min === e.players ? e : { ...e, players: min };
+    });
+    joueursMinimumV1 = true;
   }
 
   // Marque une seule fois les catégories adaptées pour ouvrir un spectacle (Libre, Mitraillette,
@@ -1493,6 +1590,7 @@ function mergeMissingCategories(data) {
     stageWarmupMachineV1 === data._stageWarmupMachineV1 &&
     stageWarmupBatch2V1 === data._stageWarmupBatch2V1 &&
     devinettesEnergyV1 === data._devinettesEnergyV1 &&
+    joueursMinimumV1 === data._joueursMinimumV1 &&
     canOpenShowDefaultsV1 === data._canOpenShowDefaultsV1 &&
     canCloseShowDefaultsV1 === data._canCloseShowDefaultsV1 &&
     universLieuxV1 === data._universLieuxV1 &&
@@ -1509,7 +1607,7 @@ function mergeMissingCategories(data) {
     ambassadeurBarsMontpellierV1 === data._ambassadeurBarsMontpellierV1 &&
     ambassadeursResetV1 === data._ambassadeursResetV1
   ) return data;
-  return { ...data, ambassadeurThemes, ambassadeurManches, ambassadeurs, _ambassadeursV1: ambassadeursV1, _ambassadeurBarsMontpellierV1: ambassadeurBarsMontpellierV1, _ambassadeursResetV1: ambassadeursResetV1, categories, showTypes, showConcepts, exercises, objectifs, thematiques, _cercleTagV1: cercleTagV1, _musiqueTagV1: musiqueTagV1, _materialMusiqueV1: materialMusiqueV1, _tagCaseAccentMergeV1: tagCaseAccentMergeV1, _stageWarmupMachineV1: stageWarmupMachineV1, _stageWarmupBatch2V1: stageWarmupBatch2V1, _devinettesEnergyV1: devinettesEnergyV1, _canOpenShowDefaultsV1: canOpenShowDefaultsV1, _canCloseShowDefaultsV1: canCloseShowDefaultsV1, _universLieuxV1: universLieuxV1, _comedieMusicaleLieuxV1: comedieMusicaleLieuxV1, _universArchetypesV2: universArchetypesV2, _universArchetypesV3: universArchetypesV3, _universFormatsV1: universFormatsV1, _universLexiqueV1: universLexiqueV1, _removedAmourConceptV1: removedAmourConceptV1 };
+  return { ...data, ambassadeurThemes, ambassadeurManches, ambassadeurs, _ambassadeursV1: ambassadeursV1, _ambassadeurBarsMontpellierV1: ambassadeurBarsMontpellierV1, _ambassadeursResetV1: ambassadeursResetV1, categories, showTypes, showConcepts, exercises, objectifs, thematiques, _cercleTagV1: cercleTagV1, _musiqueTagV1: musiqueTagV1, _materialMusiqueV1: materialMusiqueV1, _tagCaseAccentMergeV1: tagCaseAccentMergeV1, _stageWarmupMachineV1: stageWarmupMachineV1, _stageWarmupBatch2V1: stageWarmupBatch2V1, _devinettesEnergyV1: devinettesEnergyV1, _joueursMinimumV1: joueursMinimumV1, _canOpenShowDefaultsV1: canOpenShowDefaultsV1, _canCloseShowDefaultsV1: canCloseShowDefaultsV1, _universLieuxV1: universLieuxV1, _comedieMusicaleLieuxV1: comedieMusicaleLieuxV1, _universArchetypesV2: universArchetypesV2, _universArchetypesV3: universArchetypesV3, _universFormatsV1: universFormatsV1, _universLexiqueV1: universLexiqueV1, _removedAmourConceptV1: removedAmourConceptV1 };
 }
 
 /* ---------- Persistence ---------- */
@@ -3359,7 +3457,7 @@ function BibliothequeTab({ data, update, setTab, isAdmin, currentUser, goToLibra
                 <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-lg font-medium">{ex.title}</h3>
                 <p style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }} className="text-sm my-1">{ex.summary}</p>
                 <div className="flex flex-wrap gap-1 text-xs" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
-                  <span>{ex.level}</span>·<span>{ex.players > 0 ? `${ex.players} élève${ex.players > 1 ? "s" : ""}` : "Illimité"}</span>·<span>{ex.duration} min</span>
+                  <span>{ex.level}</span>·<span>{texteEffectif(ex)}</span>·<span>{ex.duration} min</span>
                   {ex.energy && <span>· énergie {ex.energy}</span>}
                   {ex.material && ex.material !== "Aucun" && <span>· {ex.material}</span>}
                   {ex.objectives?.length > 0 && <span>· {ex.objectives.join(", ")}</span>}
@@ -4315,7 +4413,7 @@ function ParametresTab({ setTab, currentUser, profile }) {
 /* ---------- Exercices ---------- */
 function ExerciseForm({ initial, showTypes, objectifsList, thematiquesList, familiesList, onCreateFamily, isAdmin, creatorTroupe, creatorUsername, onSave, onCancel }) {
   const [f, setF] = useState(
-    initial || { title: "", summary: "", level: "Débutant", objectives: [], thematiques: [], publics: [], players: 2, duration: 10, format: "Solo simultané", groupSize: 2, warmup: false, stageWarmup: false, application: false, showTypes: [], phase: "Impro", favorite: false, createdByUser: true, showTroupeOnCard: false }
+    initial || { title: "", summary: "", level: "Débutant", objectives: [], thematiques: [], publics: [], players: 2, playersMax: 0, duration: 10, format: "Solo simultané", groupSize: 2, warmup: false, stageWarmup: false, application: false, showTypes: [], phase: "Impro", favorite: false, createdByUser: true, showTroupeOnCard: false }
   );
   const isCommunitySubmission = !initial && !isAdmin;
   return (
@@ -4331,19 +4429,31 @@ function ExerciseForm({ initial, showTypes, objectifsList, thematiquesList, fami
           {SECTIONS_EXERCICE.map((s) => <option key={s}>{s}</option>)}
         </select>
       </Field>
-      <div className="grid grid-cols-2 gap-2">
-        <Field label="Niveau">
-          <select className={inputClass} style={inputStyle} value={f.level} onChange={(e) => setF({ ...f, level: e.target.value })}>
-            {NIVEAUX.map((o) => <option key={o}>{o}</option>)}
+      <Field label="Niveau">
+        <select className={inputClass} style={inputStyle} value={f.level} onChange={(e) => setF({ ...f, level: e.target.value })}>
+          {NIVEAUX.map((o) => <option key={o}>{o}</option>)}
+        </select>
+      </Field>
+      <Field label="Nombre d'élèves">
+        <div className="grid grid-cols-2 gap-2">
+          <select aria-label="Élèves au minimum" className={inputClass} style={inputStyle} value={f.players || 0} onChange={(e) => setF({ ...f, players: Number(e.target.value) })}>
+            <option value={0}>Minimum : aucun</option>
+            {STUDENTS_COUNTS.map((n) => <option key={n} value={n}>{`Minimum : ${n}`}</option>)}
           </select>
-        </Field>
-        <Field label="Nombre d'élèves (0 = illimité)">
-          <select className={inputClass} style={inputStyle} value={f.players} onChange={(e) => setF({ ...f, players: Number(e.target.value) })}>
-            <option value={0}>Illimité</option>
-            {STUDENTS_COUNTS.map((n) => <option key={n} value={n}>{n}</option>)}
+          <select aria-label="Élèves au maximum" className={inputClass} style={inputStyle} value={f.playersMax || 0} onChange={(e) => setF({ ...f, playersMax: Number(e.target.value) })}>
+            <option value={0}>Maximum : illimité</option>
+            {STUDENTS_COUNTS.map((n) => <option key={n} value={n}>{`Maximum : ${n}`}</option>)}
           </select>
-        </Field>
-      </div>
+        </div>
+        {/* Le maximum écarte la fiche d'un cours trop nombreux. Il ne sert donc QUE là où l'exercice
+            cesse de fonctionner au-delà : un exercice en binôme n'a pas de maximum, on fait plusieurs
+            binômes en parallèle. */}
+        <p className="text-xs mt-1" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+          Le générateur écarte la fiche en dehors de ces bornes. Ne mettez un maximum que si
+          l'exercice cesse vraiment de fonctionner au-delà — un exercice en binôme reste illimité,
+          on fait plusieurs binômes à la fois.
+        </p>
+      </Field>
       <Field label="Tranches d'âge (vide = tous publics)">
         <ChoixPublics value={f.publics} onChange={(v) => setF({ ...f, publics: v })} />
       </Field>
@@ -8193,7 +8303,7 @@ function ProgrammeExerciseCard({ ex, compteur, duree, participants, expanded, on
       </div>
       <MetaCarte>
         <span>{duree} min</span>
-        <span>{ex.players > 0 ? `${ex.players} joueurs` : "joueurs illimités"}</span>
+        <span>{texteEffectif(ex, "joueur")}</span>
         <Pastille couleur={format.couleur}>
           {format.texte}
           {wait > 0 && format.texte === "chacun son tour" ? ` · ~${wait} min d'attente/élève` : ""}
@@ -8302,7 +8412,7 @@ function FicheBibliothequeExercice({ ex, ouverte, onToggle, onToggleFavori, aver
       )}
       <MetaCarte>
         <span>{ex.duration} min</span>
-        <span>{ex.players > 0 ? `${ex.players} joueurs` : "joueurs illimités"}</span>
+        <span>{texteEffectif(ex, "joueur")}</span>
         {ex.level ? <span>{ex.level}</span> : null}
         {ex.energy ? <Pastille couleur={ENERGY_COULEUR[ex.energy] || COLORS.textSoft}>énergie {ex.energy}</Pastille> : null}
         {format ? <Pastille couleur={format.couleur}>{format.texte}</Pastille> : null}
@@ -8392,9 +8502,9 @@ function buildCours(exercises, categories, { niveau, tempsTotal, nbEchauffements
     const idx = NIVEAU_ORDER.indexOf(e.level);
     return idx === -1 || Math.abs(idx - niveauIdx) <= 1;
   };
-  // players = nombre minimum de joueurs requis (0 = illimité/aucun minimum) : on écarte les
-  // exercices/catégories qui demandent plus de joueurs que le groupe n'en compte.
-  const fitsGroup = (e) => !e.players || e.players <= participants;
+  // players = nombre minimum de joueurs requis (0 = aucun minimum), playersMax = maximum au-delà
+  // duquel l'exercice ne fonctionne plus (0 = illimité) : on écarte ce qui tombe hors des bornes.
+  const fitsGroup = (e) => (!e.players || e.players <= participants) && (!e.playersMax || participants <= e.playersMax);
   const fitsGroupCat = (c) => !c.playersMin || c.playersMin <= participants;
   const recent = recentIds || new Set();
   // Le temps de chaque section est calculé en interne à partir du temps total et du niveau (plus
@@ -10219,11 +10329,15 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
   const [picker, setPicker] = useState(null); // { mode: "add" } | { mode: "replace", idx }
   const [toastMsg, showToast] = useToast();
 
+  // Sous 5 participants, on écarte les échauffements tagués "Cercle" (peu adaptés à un petit groupe).
+  // Et, comme le générateur de cours, on respecte les bornes d'effectif de la fiche : sans ça,
+  // un échauffement pour un seul élève proposait des cercles de prénoms.
+  const byGroupSize = (e) => (participants >= 5 || !e.objectives?.includes("Cercle"))
+    && (!e.players || e.players <= participants) && (!e.playersMax || participants <= e.playersMax);
+
   const generate = () => {
     const matches = (e) => tags.length === 0 || tags.includes(e.groupe);
     const byLevel = (e) => !niveau || e.level === niveau;
-    // Sous 5 participants, on écarte les échauffements tagués "Cercle" (peu adaptés à un petit groupe).
-    const byGroupSize = (e) => participants >= 5 || !e.objectives?.includes("Cercle");
     const warmupAll = data.exercises.filter((e) => e.warmup && byGroupSize(e));
     const matchedPool = warmupAll.filter(matches);
     const otherPool = warmupAll.filter((e) => !matches(e));
@@ -10290,7 +10404,7 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
   const remove = (idx) => setList((prev) => prev.filter((_, i) => i !== idx));
   const replace = (idx) => {
     const used = new Set(list.map((e) => e.id));
-    const pool = data.exercises.filter((e) => e.warmup && !used.has(e.id) && (participants >= 5 || !e.objectives?.includes("Cercle")));
+    const pool = data.exercises.filter((e) => e.warmup && !used.has(e.id) && byGroupSize(e));
     // Priorité aux exercices classés dans la famille d'objectifs cochée ; si aucune famille n'est
     // cochée ou que les possibilités sont épuisées, on continue avec le reste.
     const matched = tags.length > 0 ? pool.filter((e) => tags.includes(e.groupe)) : [];
@@ -10587,7 +10701,7 @@ function ModerationTab({ data, update, setTab, isAdmin }) {
               )}
               <p style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }} className="text-sm my-1">{ex.summary}</p>
               <div className="flex flex-wrap gap-1 mt-1 text-xs" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
-                <span>{ex.level}</span>·<span>{ex.players > 0 ? `${ex.players} élève${ex.players > 1 ? "s" : ""}` : "Illimité"}</span>·<span>{ex.duration} min</span>
+                <span>{ex.level}</span>·<span>{texteEffectif(ex)}</span>·<span>{ex.duration} min</span>
                 {ex.phase && <span>· {ex.phase}</span>}
                 {ex.creatorTroupe && <span>· {ex.creatorUsername} — Troupe {ex.creatorTroupe}</span>}
               </div>

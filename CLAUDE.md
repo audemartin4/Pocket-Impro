@@ -226,6 +226,19 @@ Distinctions à respecter, elles pilotent les générateurs :
 - **`canOpenShow` / `canCloseShow`** sur une catégorie : éligible pour ouvrir/terminer un spectacle.
 - **`groupe`** = famille d'objectifs (une seule) ; **`objectives`** = tags (plusieurs). La liste
   maîtresse des tags valides est `SEED.objectifs` — l'appli s'attend à ce que les tags viennent de là.
+- **`players` / `playersMax`** : bornes d'effectif d'une fiche d'exercice. `players` est un
+  **minimum** (0 = aucun), `playersMax` un **maximum** (0 = illimité) ; les deux générateurs
+  écartent ce qui tombe hors des bornes. Le libellé du formulaire disait « Nombre d'élèves
+  (0 = illimité) », ce qui laissait croire à un effectif exact alors que le code s'en servait déjà
+  comme d'un plancher — d'où deux menus explicites (« Minimum : … » / « Maximum : … ») et
+  `texteEffectif()` pour l'affichage. **Un maximum ne se met que là où l'exercice cesse vraiment de
+  fonctionner au-delà** : un exercice en binôme reste illimité, on fait plusieurs binômes à la fois.
+  Les minimums des 388 fiches ont été renseignés le 2026-09-24 (`_joueursMinimumV1`) à partir du
+  relevé `D:\Pocket Impro\exercices-un-seul-eleve.md` : 1 pour les 81 fiches jouables par un élève
+  seul, 2 pour les 156 qui demandent un partenaire, 3 par défaut pour le reste. Avant ça, 377 fiches
+  étaient à 0 et un cours pour un seul élève se voyait proposer des cercles de prénoms. Attention :
+  25 des 35 échauffements solo ne portent pas le drapeau `warmup` et n'atteignent donc jamais les
+  générateurs d'échauffement — d'où seulement 13 fiches disponibles à 1 élève sur cet écran.
 - **`actualDuration`** : durée resserrée que le générateur a réservée pour ce créneau, prioritaire sur
   la `duration` brute de la fiche. La conserver lors d'un remplacement de carte, sinon le total
   affiché dérive.
