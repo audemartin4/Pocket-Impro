@@ -10132,11 +10132,11 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
             badgesFallback={c.name === "Libre" ? <SousTitreCarte>Libre</SousTitreCarte> : null}
             actions={
               // Le sélecteur Mixte/Comparé est descendu du titre au pied : c'est un réglage de la
-              // catégorie, comme "Aléatoire" et "Modifier", et en haut il disputait la ligne du
+              // catégorie, comme "Aléatoire" et "Choisir", et en haut il disputait la ligne du
               // titre au compteur et à l'étoile. Il ne concerne que le match.
               <div className="flex flex-wrap items-center gap-2">
                 <Btn small variant="ghost" onClick={() => replaceCat(part, i)}>Aléatoire</Btn>
-                <Btn small variant="ghost" onClick={() => setCatPicker({ part, idx: i })}>Modifier</Btn>
+                <Btn small variant="ghost" onClick={() => setCatPicker({ part, idx: i })}>Choisir</Btn>
                 {format === "Match" && <SelecteurMatchMode value={c.matchMode} onChange={(mode) => setMatchMode(part, i, mode)} />}
               </div>
             }
@@ -10262,7 +10262,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
                 actions={
                   <div className="flex flex-wrap items-center gap-2">
                     <Btn small variant="ghost" onClick={replaceStageWarmup}>Aléatoire</Btn>
-                    <Btn small variant="ghost" onClick={() => setStageWarmupPicker(true)}>Modifier</Btn>
+                    <Btn small variant="ghost" onClick={() => setStageWarmupPicker(true)}>Choisir</Btn>
                   </div>
                 }
                 footerRight={<BoutonSupprimer cadre onDelete={removeStageWarmup} />}
