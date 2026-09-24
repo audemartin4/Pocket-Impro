@@ -7026,7 +7026,7 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditMa
                         sans défaire l'assemblage. */}
                     {resteAPiocher && (
                       <Btn small variant="ghost" onClick={() => { setPicking(picking === i ? null : i); setCreating(null); setEditing(null); }}>
-                        Changer
+                        Choisir
                       </Btn>
                     )}
                     {/* Corriger une manche sans quitter l'assemblage : on repère une faute de frappe
@@ -7898,10 +7898,10 @@ function AmbassadeurPlanCard({ data, mancheIds, onChange, currentUser, isAdmin, 
               {!lecture && (
                 <div className="flex flex-col gap-1 items-end">
                   {assezPourPiocher && <Btn small variant="ghost" onClick={piocher}>Aléatoire</Btn>}
-                  {/* "Changer" ouvre l'assembleur pré-rempli : on voit les trois manches en place et
+                  {/* "Modifier" ouvre l'assembleur pré-rempli : on voit les trois manches en place et
                       on choisit laquelle remplacer. Avant, le sélecteur ajoutait la nouvelle manche
                       à la fin et faisait sauter la première, sans qu'on l'ait demandé. */}
-                  <Btn small variant="ghost" onClick={() => setCreation(true)}>Changer</Btn>
+                  <Btn small variant="ghost" onClick={() => setCreation(true)}>Modifier</Btn>
                 </div>
               )}
             </div>
