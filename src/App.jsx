@@ -2817,6 +2817,11 @@ export default function ImproApp() {
   // compte, RIEN n'est enregistré en base : quitter la page perdait tout le travail. On garde donc
   // { slots, manchesLocales } le temps de la visite.
   const [ambassadeurBrouillon, setAmbassadeurBrouillon] = useState(null);
+  // « Crée un compte » proposé sous un cours généré : on bascule sur l'onglet Profil en l'ouvrant
+  // directement sur le formulaire d'inscription. Le cours, lui, vit ici (coursPlan) : changer
+  // d'onglet ne le perd pas, l'utilisateur le retrouve tel quel une fois son compte créé.
+  const [inscriptionDemandee, setInscriptionDemandee] = useState(false);
+  const allerVersInscription = () => { setInscriptionDemandee(true); setTab("profil"); };
   const goToLibrarySection = (targetTab, query) => {
     setLibrarySearchSeed(query);
     setTab(targetTab);
@@ -2934,7 +2939,7 @@ export default function ImproApp() {
             hasAmbassadeur={!!(ambassadeurBrouillon?.slots || []).some(Boolean)}
           />
         )}
-        {tab === "gen-cours" && <GenerateurCoursTab data={publicData} allData={data} update={update} plan={coursPlan} setPlan={setCoursPlan} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} setTab={setTab} />}
+        {tab === "gen-cours" && <GenerateurCoursTab data={publicData} allData={data} update={update} plan={coursPlan} setPlan={setCoursPlan} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} setTab={setTab} allerVersInscription={allerVersInscription} />}
         {tab === "gen-spectacle" && <GenerateurSpectacleTab data={publicData} allData={data} update={update} plan={spectaclePlan} setPlan={setSpectaclePlan} currentUser={currentUser} setTab={setTab} />}
         {tab === "gen-echauffement" && <GenerateurEchauffementTab data={publicData} update={update} plan={echauffementPlan} setPlan={setEchauffementPlan} currentUser={currentUser} />}
         {tab === "gen-idees" && <GenererIdeesTab setTab={setTab} data={publicData} />}
@@ -2959,7 +2964,7 @@ export default function ImproApp() {
         {tab === "mes-messages" && <MesMessagesTab data={data} update={update} setTab={setTab} currentUser={currentUser} />}
         {tab === "messages-envoyes" && <MessagesEnvoyesTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} />}
         {tab === "favoris" && <FavorisTab data={publicData} update={update} isAdmin={isAdmin} currentUser={currentUser} setTab={setTab} />}
-        {tab === "profil" && <ProfilTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} realIsAdmin={auth.isAdmin} simulateMember={simulateMember} setSimulateMember={setSimulateMember} />}
+        {tab === "profil" && <ProfilTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} realIsAdmin={auth.isAdmin} simulateMember={simulateMember} setSimulateMember={setSimulateMember} inscriptionDemandee={inscriptionDemandee} setInscriptionDemandee={setInscriptionDemandee} />}
         {tab === "parametres" && <ParametresTab setTab={setTab} currentUser={currentUser} profile={auth.profile} />}
         </>
         )}
@@ -3713,8 +3718,12 @@ function ResetPasswordScreen({ onDone }) {
   );
 }
 
-function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIsAdmin, simulateMember, setSimulateMember }) {
-  const [mode, setMode] = useState("login"); // "login" | "signup" | "signup-done" | "forgot" | "forgot-sent"
+function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIsAdmin, simulateMember, setSimulateMember, inscriptionDemandee, setInscriptionDemandee }) {
+  // `inscriptionDemandee` : on arrive d'un « Crée un compte » posé ailleurs dans l'appli (sous un
+  // cours généré, par exemple). On ouvre alors directement le formulaire d'inscription au lieu de
+  // celui de connexion, puis on consomme le drapeau pour que la visite suivante reparte normalement.
+  const [mode, setMode] = useState(inscriptionDemandee ? "signup" : "login"); // "login" | "signup" | "signup-done" | "forgot" | "forgot-sent"
+  useEffect(() => { if (inscriptionDemandee) setInscriptionDemandee?.(false); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [loginEmail, setLoginEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
@@ -9007,7 +9016,7 @@ function buildCours(exercises, categories, { niveau, tempsTotal, nbEchauffements
 
 
 
-function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, currentUser, isAdmin, profile, setTab }) {
+function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, currentUser, isAdmin, profile, setTab, allerVersInscription }) {
   // Fiches en attente/refusées du créateur courant : jamais proposées par le tirage automatique,
   // mais ajoutées au pool de recherche manuelle des pickers pour qu'il puisse quand même les ajouter
   // lui-même à son cours (voir notifyCreatorRejected).
@@ -9640,10 +9649,10 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
             </div>
           ) : (
             <p className="text-xs italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-              {setTab ? (
-                <>Connecte-toi ou crée un compte (<button onClick={() => setTab("profil")} className="underline" style={{ color: COLORS.accent }}>onglet Mon profil</button>) pour enregistrer ce cours dans tes Plans de cours.</>
+              {allerVersInscription ? (
+                <><button onClick={allerVersInscription} className="underline" style={{ fontFamily: "inherit", fontStyle: "inherit", fontSize: "inherit", color: COLORS.accent }}>Crée un compte</button> pour enregistrer ton cours directement sur Pocket Impro.</>
               ) : (
-                "Connecte-toi ou crée un compte (onglet Mon profil) pour enregistrer ce cours dans tes Plans de cours."
+                "Crée un compte pour enregistrer ton cours directement sur Pocket Impro."
               )}
             </p>
           )}
