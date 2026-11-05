@@ -2742,6 +2742,28 @@ function EcranChargement() {
   );
 }
 
+/* ---------- « Crée un compte » ---------- */
+/* Le lien qui ouvre l'onglet Profil directement sur le formulaire d'inscription, et non sur celui
+   de connexion. Une demi-douzaine d'écrans l'affichent, à des profondeurs très différentes —
+   jusqu'à l'assembleur d'ambassadeur, trois composants sous l'onglet. Le passer en prop ferait
+   traverser la fonction à des composants qui n'en font rien : il passe donc par un contexte.
+   Hors Provider (jamais le cas dans l'appli), le lien retombe en texte simple. */
+const InscriptionContext = React.createContext(null);
+
+function LienCreerCompte({ libelle = "Crée un compte" }) {
+  const aller = React.useContext(InscriptionContext);
+  if (!aller) return libelle;
+  return (
+    <button
+      onClick={aller}
+      className="underline"
+      style={{ fontFamily: "inherit", fontStyle: "inherit", fontSize: "inherit", color: COLORS.accent }}
+    >
+      {libelle}
+    </button>
+  );
+}
+
 /* ---------- Main App ---------- */
 export default function ImproApp() {
   useEffect(() => {
@@ -2810,6 +2832,7 @@ export default function ImproApp() {
   const isAdmin = auth.isAdmin && !simulateMember;
   const [librarySearchSeed, setLibrarySearchSeed] = useState(""); // pré-remplit la recherche en arrivant depuis la Bibliothèque
   const [coursPlan, setCoursPlan] = useState(null); // levé ici pour survivre à la navigation + permettre de "reprendre"
+  const [coursAmbassadeurManches, setCoursAmbassadeurManches] = useState([]); // les manches rattachées à ce cours, levées avec lui
   const [spectaclePlan, setSpectaclePlan] = useState(null); // idem, pour "Reprendre le dernier spectacle généré"
   const [echauffementPlan, setEchauffementPlan] = useState(null); // idem, pour "Reprendre le dernier échauffement généré"
   // L'ambassadeur qu'on est en train de monter : ses trois emplacements et les manches créées à la
@@ -2821,7 +2844,7 @@ export default function ImproApp() {
   // directement sur le formulaire d'inscription. Le cours, lui, vit ici (coursPlan) : changer
   // d'onglet ne le perd pas, l'utilisateur le retrouve tel quel une fois son compte créé.
   const [inscriptionDemandee, setInscriptionDemandee] = useState(false);
-  const allerVersInscription = () => { setInscriptionDemandee(true); setTab("profil"); };
+  const allerVersInscription = useCallback(() => { setInscriptionDemandee(true); setTab("profil"); }, [setTab]);
   const goToLibrarySection = (targetTab, query) => {
     setLibrarySearchSeed(query);
     setTab(targetTab);
@@ -2888,6 +2911,7 @@ export default function ImproApp() {
   if (!loaded || !data) return <EcranChargement />;
 
   return (
+    <InscriptionContext.Provider value={allerVersInscription}>
     <div style={{ background: COLORS.paper, minHeight: "100vh" }}>
       {/* Top bar */}
       <div style={{ background: COLORS.ink }} className="px-4 py-3 sticky top-0 z-20">
@@ -2939,8 +2963,8 @@ export default function ImproApp() {
             hasAmbassadeur={!!(ambassadeurBrouillon?.slots || []).some(Boolean)}
           />
         )}
-        {tab === "gen-cours" && <GenerateurCoursTab data={publicData} allData={data} update={update} plan={coursPlan} setPlan={setCoursPlan} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} setTab={setTab} allerVersInscription={allerVersInscription} />}
-        {tab === "gen-spectacle" && <GenerateurSpectacleTab data={publicData} allData={data} update={update} plan={spectaclePlan} setPlan={setSpectaclePlan} currentUser={currentUser} setTab={setTab} />}
+        {tab === "gen-cours" && <GenerateurCoursTab data={publicData} allData={data} update={update} plan={coursPlan} setPlan={setCoursPlan} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} ambassadeurMancheIds={coursAmbassadeurManches} setAmbassadeurMancheIds={setCoursAmbassadeurManches} />}
+        {tab === "gen-spectacle" && <GenerateurSpectacleTab data={publicData} allData={data} update={update} plan={spectaclePlan} setPlan={setSpectaclePlan} currentUser={currentUser} />}
         {tab === "gen-echauffement" && <GenerateurEchauffementTab data={publicData} update={update} plan={echauffementPlan} setPlan={setEchauffementPlan} currentUser={currentUser} />}
         {tab === "gen-idees" && <GenererIdeesTab setTab={setTab} data={publicData} />}
         {tab === "bibliotheque" && <BibliothequeTab data={publicData} update={update} setTab={setTab} isAdmin={isAdmin} currentUser={currentUser} goToLibrarySection={goToLibrarySection} />}
@@ -2972,6 +2996,7 @@ export default function ImproApp() {
       <SocialFooter />
       {LIBRARY_TABS.includes(tab) && <BackToTopButton />}
     </div>
+    </InscriptionContext.Provider>
   );
 }
 
@@ -4880,7 +4905,7 @@ function ExercicesTab({ data, update, isAdmin, currentUser, profile, onlyUserCre
     <p className="text-xs mb-3 italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
       {currentUser
         ? "Tu peux proposer un exercice — connecte-toi en tant qu'Admin (onglet Mon profil) pour modifier ou supprimer une fiche existante."
-        : "Connecte-toi ou crée un compte (onglet Mon profil) pour proposer un exercice."}
+        : <><LienCreerCompte /> pour proposer un exercice sur Pocket Impro.</>}
     </p>
   );
 
@@ -5771,7 +5796,7 @@ function CategoriesTab({ data, update, isAdmin, currentUser, profile, onlyUserCr
     <p className="text-xs mb-3 italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
       {currentUser
         ? "Tu peux proposer une catégorie — connecte-toi en tant qu'Admin (onglet Mon profil) pour modifier ou supprimer une fiche existante."
-        : "Connecte-toi ou crée un compte (onglet Mon profil) pour proposer une catégorie."}
+        : <><LienCreerCompte /> pour proposer une catégorie sur Pocket Impro.</>}
     </p>
   );
   const addForm = adding && (
@@ -5999,7 +6024,7 @@ function SpectaclesTab({ data, update, setTab, currentUser, isAdmin, onlyUserCre
 
       {!canCreate && (
         <p className="text-xs mb-3 italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-          Connecte-toi ou crée un compte (onglet Mon profil) pour proposer un concept de spectacle.
+          <LienCreerCompte /> pour proposer un concept de spectacle sur Pocket Impro.
         </p>
       )}
 
@@ -7131,7 +7156,8 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditMa
       </div>
       {!canSave && !onRattacher && auMoinsUneManche && (
         <p className="text-xs mt-2 italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-          Connecte-toi ou crée un compte (onglet Mon profil) pour enregistrer cet ambassadeur et le retrouver plus tard.
+          <LienCreerCompte /> pour enregistrer ton ambassadeur directement sur Pocket Impro
+          {" "}(tu ne perdras pas l'ambassadeur que tu viens de monter).
         </p>
       )}
     </IndexCard>
@@ -7447,8 +7473,8 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
       )}
       {!canCreate && !catalogue && (
         <p className="text-xs mb-3 italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-          Sans compte, tu peux monter un ambassadeur et y jouer tout de suite. Connecte-toi (onglet Mon profil)
-          pour l'enregistrer et proposer tes manches aux autres.
+          Sans compte, tu peux monter un ambassadeur et y jouer tout de suite.
+          {" "}<LienCreerCompte /> pour l'enregistrer et proposer tes manches aux autres.
         </p>
       )}
 
@@ -9016,7 +9042,7 @@ function buildCours(exercises, categories, { niveau, tempsTotal, nbEchauffements
 
 
 
-function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, currentUser, isAdmin, profile, setTab, allerVersInscription }) {
+function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, currentUser, isAdmin, profile, ambassadeurMancheIds, setAmbassadeurMancheIds }) {
   // Fiches en attente/refusées du créateur courant : jamais proposées par le tirage automatique,
   // mais ajoutées au pool de recherche manuelle des pickers pour qu'il puisse quand même les ajouter
   // lui-même à son cours (voir notifyCreatorRejected).
@@ -9034,7 +9060,8 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
   const [faireAmbassadeur, setFaireAmbassadeur] = useState(true);
   // Manches d'ambassadeur rattachées à ce cours (voir AmbassadeurPlanCard, sous la carte de
   // l'exercice "Ambassadeur"). Enregistrées avec le plan pour qu'on les retrouve le jour du cours.
-  const [ambassadeurMancheIds, setAmbassadeurMancheIds] = useState([]);
+  // Elles vivent dans l'App, comme le plan : sans ça, un aller-retour vers un autre onglet
+  // ramenait le cours intact mais vidé de son ambassadeur.
   const [integrerFavoris, setIntegrerFavoris] = useState(false);
   const [tempsTotal, setTempsTotal] = useState(120);
   const [nbEchauffements, setNbEchauffements] = useState(4);
@@ -9649,11 +9676,8 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
             </div>
           ) : (
             <p className="text-xs italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-              {allerVersInscription ? (
-                <><button onClick={allerVersInscription} className="underline" style={{ fontFamily: "inherit", fontStyle: "inherit", fontSize: "inherit", color: COLORS.accent }}>Crée un compte</button> pour enregistrer ton cours directement sur Pocket Impro.</>
-              ) : (
-                "Crée un compte pour enregistrer ton cours directement sur Pocket Impro."
-              )}
+              <LienCreerCompte /> pour enregistrer ton cours directement sur Pocket Impro
+              {" "}(tu ne perdras pas le cours que tu viens de générer).
             </p>
           )}
         </>
@@ -9950,7 +9974,7 @@ function buildSpectacle(categories, { format, niveau, duree, entracteOn, integre
   return { first, second, budget1, budget2 };
 }
 
-function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentUser, setTab }) {
+function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentUser }) {
   // Catégories en attente/refusées du créateur courant : jamais proposées par le tirage automatique,
   // mais ajoutées au pool de recherche manuelle du picker pour qu'il puisse quand même les ajouter
   // lui-même à son spectacle (voir notifyCreatorRejected).
@@ -10363,11 +10387,8 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
             </div>
           ) : (
             <p className="text-xs italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-              {setTab ? (
-                <>Connecte-toi ou crée un compte (<button onClick={() => setTab("profil")} className="underline" style={{ color: COLORS.accent }}>onglet Mon profil</button>) pour enregistrer ce spectacle dans tes Plans de cours.</>
-              ) : (
-                "Connecte-toi ou crée un compte (onglet Mon profil) pour enregistrer ce spectacle dans tes Plans de cours."
-              )}
+              <LienCreerCompte /> pour enregistrer ton spectacle directement sur Pocket Impro
+              {" "}(tu ne perdras pas le spectacle que tu viens de générer).
             </p>
           )}
         </>
