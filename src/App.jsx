@@ -12774,7 +12774,10 @@ function PlansTab({ data, allData, update, setTab, currentUser, isAdmin, profile
 
   return (
     <div>
-      {setTab && <LibraryBackBtn onClick={() => setTab("bibliotheque")} />}
+      {/* Retour vers le profil, d'où l'on vient : ces deux pages ne contiennent que les plans du
+          compte, elles ne sont listées nulle part dans la Bibliothèque. Même règle que « Exercices
+          créés » et « Catégories créées ». */}
+      {setTab && <LibraryBackBtn label="Mon profil" onClick={() => setTab("profil")} />}
       {!spectacles && <SectionHeader icon={ClipboardList} title="Plans de cours" subtitle="Retrouve, ajuste et exporte les plans de cours enregistrés. Touche un plan pour l'ouvrir." />}
       {!spectacles && coursePlans.length === 0 && <Empty text="Aucun plan de cours enregistré pour l'instant." />}
       {!spectacles && coursePlans.map((plan) => {
