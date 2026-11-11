@@ -541,12 +541,18 @@ const basculerFavoriCategorie = basculerFavori("categories");
 /* Les plans de cours et de spectacle enregistrés ne regardent QUE leur auteur — l'Admin compris, qui
    n'a pas à lire la préparation des profs des autres troupes. Un compte sert à s'organiser ; voir
    les cours des autres ajouterait du bruit là où on vient chercher de l'ordre.
-   Pas de dérogation, donc : ni pour l'Admin, ni pour les plans d'avant le 2026-11-11, qui n'ont pas
-   d'auteur et n'apparaissent plus nulle part tant qu'on ne leur en a pas donné un. Ils ne sont pas
-   perdus pour autant : ils dorment dans le document et dans les sauvegardes quotidiennes.
-   Sans compte, aucun plan non plus : un visiteur n'a pas de « mes plans ». */
+   Pas de dérogation pour l'Admin, donc.
+   Reste le cas des plans d'avant le 2026-11-11, qui n'ont pas d'auteur — le nom n'a jamais été
+   écrit. Ceux-là sont COMMUNS : ils s'affichent chez tous les comptes. Chacun peut s'en débarrasser,
+   mais le geste ne les efface que pour lui (`masquePour`), sinon le premier qui range le plan le
+   ferait disparaître chez celui qui l'a écrit. Voir `supprimerPlan` dans PlansTab.
+   Sans compte, aucun plan : un visiteur n'a pas de « mes plans ». */
 const mesPlans = (liste, currentUser) =>
-  (liste || []).filter((p) => !!currentUser && p.creatorUsername === currentUser);
+  (liste || []).filter((p) => {
+    if (!currentUser) return false;
+    if (p.creatorUsername) return p.creatorUsername === currentUser;
+    return !(p.masquePour || []).includes(currentUser);
+  });
 
 /* ---------- Seed data (à remplacer par ton contenu) ---------- */
 const SEED = {
@@ -12740,6 +12746,19 @@ function PlansTab({ data, allData, update, setTab, currentUser, isAdmin, profile
   const coursePlans = mesPlans(data.coursePlans, currentUser);
   const spectaclePlans = mesPlans(data.spectaclePlans, currentUser);
 
+  /* La corbeille ne veut pas dire la même chose sur un plan à soi et sur un plan commun d'avant les
+     comptes : sur le premier elle efface, sur le second elle range — le plan reste chez les autres,
+     et surtout chez celui qui l'a écrit, qui n'a aucune raison de le perdre parce qu'un inconnu a
+     fait le ménage chez lui. */
+  const planCommun = (plan) => !plan.creatorUsername;
+  const supprimerPlan = (cle, plan) => update((d) => {
+    if (!planCommun(plan)) { d[cle] = (d[cle] || []).filter((x) => x.id !== plan.id); return d; }
+    d[cle] = (d[cle] || []).map((x) => (x.id === plan.id
+      ? { ...x, masquePour: [...new Set([...(x.masquePour || []), currentUser])] }
+      : x));
+    return d;
+  });
+
   const totalCours = (plan) => {
     const ex = (plan.exerciseIds || []).map((id) => data.exercises.find((e) => e.id === id)).filter(Boolean);
     const cats = (plan.categoryIds || []).map((id) => data.categories.find((c) => c.id === id)).filter(Boolean);
@@ -12791,8 +12810,8 @@ function PlansTab({ data, allData, update, setTab, currentUser, isAdmin, profile
               </button>
               {currentUser && (
                 <BoutonSupprimer
-                  titre="Supprimer ce plan"
-                  onDelete={() => update((d) => { d.coursePlans = d.coursePlans.filter((x) => x.id !== plan.id); return d; })}
+                  titre={planCommun(plan) ? "Retirer ce plan de ma liste" : "Supprimer ce plan"}
+                  onDelete={() => supprimerPlan("coursePlans", plan)}
                 />
               )}
             </div>
@@ -12824,8 +12843,8 @@ function PlansTab({ data, allData, update, setTab, currentUser, isAdmin, profile
               </button>
               {currentUser && (
                 <BoutonSupprimer
-                  titre="Supprimer ce spectacle"
-                  onDelete={() => update((d) => { d.spectaclePlans = d.spectaclePlans.filter((x) => x.id !== plan.id); return d; })}
+                  titre={planCommun(plan) ? "Retirer ce spectacle de ma liste" : "Supprimer ce spectacle"}
+                  onDelete={() => supprimerPlan("spectaclePlans", plan)}
                 />
               )}
             </div>

@@ -206,9 +206,10 @@ s'affichait chez tout le monde, et le spectacle d'une troupe s'ouvrait chez une 
   écrivant `favorite` sur une fiche.
 - **Plans enregistrés** : `creatorUsername` à l'enregistrement, `mesPlans()` à la lecture (écran
   « Plans » et compteurs du profil). **Aucune exception pour l'Admin** : un compte sert à s'organiser,
-  voir la préparation des autres profs ajouterait du bruit. Les plans d'avant n'ont pas d'auteur et
-  n'apparaissent donc nulle part ; ils dorment dans le document et dans les sauvegardes en attendant
-  qu'on leur en donne un.
+  voir la préparation des autres profs ajouterait du bruit. Les plans d'avant n'ont pas d'auteur (le
+  nom n'a jamais été écrit) : ceux-là restent **communs à tous les inscrits**, et la corbeille y range
+  au lieu d'effacer — elle ajoute le compte à `masquePour`, sinon le premier qui fait le ménage ferait
+  disparaître le plan chez celui qui l'a écrit. Voir `supprimerPlan` dans PlansTab.
 - **Déjà en place avant** : les manches et assemblages d'ambassadeur (`creatorUsername`), les
   « exercices/catégories créés ». La **banque de manches** reste commune, c'est le but du jeu.
 - **Ce n'est pas de la confidentialité** : tout vit dans le même document, et `anon` a le droit de
