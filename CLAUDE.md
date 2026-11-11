@@ -205,8 +205,10 @@ s'affichait chez tout le monde, et le spectacle d'une troupe s'ouvrait chez une 
   Poser/retirer une étoile passe par `basculerFavoriExercice` / `basculerFavoriCategorie`, jamais en
   écrivant `favorite` sur une fiche.
 - **Plans enregistrés** : `creatorUsername` à l'enregistrement, `mesPlans()` à la lecture (écran
-  « Plans » et compteurs du profil). Les plans d'avant n'ont pas d'auteur : ils restent visibles par
-  l'Admin, seul à pouvoir les rattacher à quelqu'un.
+  « Plans » et compteurs du profil). **Aucune exception pour l'Admin** : un compte sert à s'organiser,
+  voir la préparation des autres profs ajouterait du bruit. Les plans d'avant n'ont pas d'auteur et
+  n'apparaissent donc nulle part ; ils dorment dans le document et dans les sauvegardes en attendant
+  qu'on leur en donne un.
 - **Déjà en place avant** : les manches et assemblages d'ambassadeur (`creatorUsername`), les
   « exercices/catégories créés ». La **banque de manches** reste commune, c'est le but du jeu.
 - **Ce n'est pas de la confidentialité** : tout vit dans le même document, et `anon` a le droit de

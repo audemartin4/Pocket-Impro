@@ -538,12 +538,15 @@ const basculerFavori = (cle) => (update, username, id) => {
 const basculerFavoriExercice = basculerFavori("exercises");
 const basculerFavoriCategorie = basculerFavori("categories");
 
-/* Les plans de cours et de spectacle enregistrés ne regardent que leur auteur. Ceux d'avant le
-   2026-11-11 n'en ont pas : ils restent visibles par l'Admin — seul à pouvoir les rattacher à
-   quelqu'un — plutôt que d'être montrés à toute la communauté (le défaut) ou de disparaître (une
-   perte de travail). Sans compte, aucun plan : un visiteur n'a pas de « mes plans ». */
-const mesPlans = (liste, currentUser, isAdmin) =>
-  (liste || []).filter((p) => (p.creatorUsername ? p.creatorUsername === currentUser : !!isAdmin));
+/* Les plans de cours et de spectacle enregistrés ne regardent QUE leur auteur — l'Admin compris, qui
+   n'a pas à lire la préparation des profs des autres troupes. Un compte sert à s'organiser ; voir
+   les cours des autres ajouterait du bruit là où on vient chercher de l'ordre.
+   Pas de dérogation, donc : ni pour l'Admin, ni pour les plans d'avant le 2026-11-11, qui n'ont pas
+   d'auteur et n'apparaissent plus nulle part tant qu'on ne leur en a pas donné un. Ils ne sont pas
+   perdus pour autant : ils dorment dans le document et dans les sauvegardes quotidiennes.
+   Sans compte, aucun plan non plus : un visiteur n'a pas de « mes plans ». */
+const mesPlans = (liste, currentUser) =>
+  (liste || []).filter((p) => !!currentUser && p.creatorUsername === currentUser);
 
 /* ---------- Seed data (à remplacer par ton contenu) ---------- */
 const SEED = {
@@ -4266,8 +4269,8 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
   // ambassadeurs) et une colonne "le reste" (spectacles, catégories, favoris) — d'où l'alternance
   // ci-dessous, à conserver si on ajoute une tuile.
   const stats = [
-    { label: "Plans de cours enregistrés", n: mesPlans(data.coursePlans, currentUser, isAdmin).length, icon: ClipboardList, tab: "plans" },
-    { label: "Spectacles enregistrés", n: mesPlans(data.spectaclePlans, currentUser, isAdmin).length, icon: Theater, tab: "plans" },
+    { label: "Plans de cours enregistrés", n: mesPlans(data.coursePlans, currentUser).length, icon: ClipboardList, tab: "plans" },
+    { label: "Spectacles enregistrés", n: mesPlans(data.spectaclePlans, currentUser).length, icon: Theater, tab: "plans" },
     { label: "Exercices créés", n: data.exercises.filter((e) => e.creatorUsername === currentUser).length, icon: Users, tab: "exercices-crees" },
     { label: "Catégories créées", n: data.categories.filter((c) => c.creatorUsername === currentUser).length, icon: Tag, tab: "categories-crees" },
     ...(CONCEPTS_SPECTACLE_VISIBLES
@@ -12732,10 +12735,10 @@ function PlansTab({ data, allData, update, setTab, currentUser, isAdmin, profile
 
 
   /* Chacun ne voit que ses plans — jusqu'au 2026-11-11, cet écran montrait ceux de tout le monde,
-     et le spectacle d'une troupe s'ouvrait chez une autre. Voir `mesPlans` pour le sort des plans
-     d'avant, qui n'ont pas d'auteur. */
-  const coursePlans = mesPlans(data.coursePlans, currentUser, isAdmin);
-  const spectaclePlans = mesPlans(data.spectaclePlans, currentUser, isAdmin);
+     et le spectacle d'une troupe s'ouvrait chez une autre. Voir `mesPlans` : pas d'exception pour
+     l'Admin. */
+  const coursePlans = mesPlans(data.coursePlans, currentUser);
+  const spectaclePlans = mesPlans(data.spectaclePlans, currentUser);
 
   const totalCours = (plan) => {
     const ex = (plan.exerciseIds || []).map((id) => data.exercises.find((e) => e.id === id)).filter(Boolean);
