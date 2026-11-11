@@ -270,14 +270,24 @@ Distinctions à respecter, elles pilotent les générateurs :
   les deux formulaires (`ChoixPublics`, trois pastilles à cocher) et s'affiche sur la fiche dépliée
   de la bibliothèque. **Liste vide = tous publics** : 37 exercices et 30 catégories sont dans ce
   cas, aucun écran ne doit donc les traiter comme « sans public ». Les **trois générateurs** s'en
-  servent depuis le 2026-11-11 : un menu « Tranche d'âge » (par défaut **Adultes**,
-  `PUBLIC_PAR_DEFAUT`) écarte du tirage les fiches dont les `publics` ne contiennent pas la tranche
-  choisie — `convientAuPublic()`, branché sur `warmupAll` / `middlePool` / `categoriesDispo` dans
-  `buildCours`, sur `categoriesNiveau` dans `buildSpectacle`, et sur le `warmupAll` de
-  `GenerateurEchauffementTab`. Les boutons « Aléatoire » d'une carte, eux, restent libres, comme
-  ils le sont déjà du niveau et de l'effectif. À « Adultes », le filtre ne retire presque rien
-  (388 exercices sur 389, toutes les catégories) ; à « Enfants » il retire 164 exercices et
-  45 catégories.
+  servent depuis le 2026-11-11 : un menu « Tranche d'âge » (Tous / Enfants / Ados / Adultes, par
+  défaut **Adultes**, `PUBLIC_PAR_DEFAUT`) qui agit à **deux niveaux**.
+  1. `convientAuPublic()` **écarte** du tirage les fiches dont les `publics` ne contiennent pas la
+     tranche choisie — branché sur `warmupAll` / `middlePool` / `categoriesDispo` dans `buildCours`,
+     sur `categoriesNiveau` dans `buildSpectacle`, et sur le `warmupAll` de
+     `GenerateurEchauffementTab`.
+  2. `prefereLePublic()` **priorise** ensuite, parmi ce qui reste, les fiches qui portent
+     explicitement la tranche : celles sans public coché ne servent que de complément, quand les
+     premières manquent. Même idiome que le filtre de niveau (`length === 0 ? pool : prioritized`),
+     donc une priorité et jamais une exclusion. À brancher partout où une fiche est tirée **au
+     hasard** (`pickRandom` ignore l'ordre du tableau qu'on lui passe) ; ailleurs, une clé de tri
+     dans `prioritizeFresh` et un tri à deux étages dans le `fillFrom` de l'échauffement suffisent.
+     Mesuré sur la base réelle : les fiches sans public font 10,8 % des cartes d'un cours à
+     « Tous », 0 % à « Adultes », 3,3 % à « Enfants » — là, les familles d'échauffement les plus
+     maigres s'épuisent et le complément reprend la main, ce qui est exactement le but.
+  Les boutons « Aléatoire » d'une carte, eux, restent libres, comme ils le sont déjà du niveau et
+  de l'effectif. À « Adultes », le filtre ne retire presque rien (388 exercices sur 389, toutes les
+  catégories) ; à « Enfants » il retire 164 exercices et 45 catégories.
   La tranche **`"Senior"` a été retirée le 2026-11-11** : elle ne distinguait rien d'« Adultes »
   (les 4 exercices et 2 manches qui la portaient la portaient toujours en plus d'« Adultes ») et
   allongeait un menu qui doit rester court. Le nettoyage des données se fait au chargement, sans
@@ -297,7 +307,11 @@ Distinctions à respecter, elles pilotent les générateurs :
   **n'est visible que de son créateur** (`creatorUsername`), Admin compris. Son drapeau `archive` le
   range : il quitte la liste « Ambassadeurs prêts à jouer » et ne reste que dans la section
   Ambassadeur du profil. Les plans de cours, eux, gardent leurs propres manches
-  (`ambassadeurMancheIds`) et ne dépendent pas des assemblages.
+  (`ambassadeurMancheIds`) et ne dépendent pas des assemblages — mais `AmbassadeurPlanCard` propose
+  « Mes ambassadeurs » (depuis le 2026-11-11), qui recopie dans le cours les `mancheIds` d'un
+  assemblage déjà enregistré au lieu de refaire le montage, sur le générateur comme sur un plan
+  enregistré ouvert en modification. La liste annonce les manches encore disponibles : un
+  assemblage peut en avoir perdu une depuis.
   Le **titre est un secret de jeu** : les équipes doivent le deviner en fin de manche, il ne doit
   jamais s'afficher sur un écran visible des joueurs (écran de jeu, listes publiques) — seulement
   dans le sommaire du maître du jeu, derrière un bouton de révélation, ou au moment de préparer.
@@ -312,7 +326,24 @@ Distinctions à respecter, elles pilotent les générateurs :
   dans `data.ambassadeurManches` laisse fuiter les manches privées ou sous embargo des autres (mots,
   thèmes, suggestions de doublon).
 
-### Écrans mis de côté
+#### Générer des idées
+
+Deux onglets, deux sources bien distinctes — et c'est la seule chose à retenir avant d'y toucher :
+
+- **Normal** tire dans six listes constantes du code (`IDEES_THEMES`, `IDEES_LIEUX`…). Depuis le
+  2026-11-11, l'Admin peut y ajouter des entrées : elles vont dans `data.ideesAjoutees`
+  (`{ [clé de catégorie]: string[] }`, dans le document partagé), **par-dessus** les constantes,
+  jamais dedans. Le tirage lit la concaténation des deux ; seules les idées ajoutées se retirent.
+- **Univers** tire dans la **fiche de la catégorie** choisie : `lieux`, `archetypes` (objets
+  `{ id, name, desc }`) et `vocabulaireUnivers.lexique` (une chaîne séparée par des virgules, pas
+  une liste). Le « + » de l'Admin écrit donc dans la fiche elle-même, ce qui se voit aussi dans la
+  bibliothèque — d'où son absence sur « Tous », où il n'y aurait pas de fiche où écrire.
+
+Dans les deux cas les doublons sont ignorés, accents et majuscules compris (`normalize`), et le
+tri se fait **hors** du `update()` : React peut appeler sa fonction de mise à jour plus tard, un
+compteur lu dedans annoncerait toujours zéro.
+
+## Écrans mis de côté
 
 `CONCEPTS_SPECTACLE_VISIBLES` (à `false` depuis le 2026-09-06) masque **les concepts de spectacle** :
 la carte de la bibliothèque, la tuile du profil et les deux écrans `spectacles` /

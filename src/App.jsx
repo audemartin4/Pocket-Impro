@@ -401,6 +401,15 @@ const PUBLIC_PAR_DEFAUT = "Adultes";
 /* Une fiche sans `publics` vaut « tous publics » — c'est l'état de 37 exercices et 30 catégories,
    elles ne doivent pas disparaître des générateurs du jour au lendemain. */
 const convientAuPublic = (f, tranche) => !tranche || !(f.publics || []).length || f.publics.includes(tranche);
+/* Priorité au public : parmi des fiches déjà retenues, on tire d'abord celles qui portent
+   explicitement la tranche demandée ; celles qui n'ont aucun public coché ne servent que de
+   complément, quand les premières manquent. Même idiome que le filtre de niveau des générateurs
+   (`prioritized.length === 0 ? pool : prioritized`) : une priorité, jamais une exclusion. */
+const prefereLePublic = (liste, tranche) => {
+  if (!tranche) return liste;
+  const exactes = liste.filter((f) => (f.publics || []).includes(tranche));
+  return exactes.length > 0 ? exactes : liste;
+};
 // Classement de la bibliothèque de manches, sur deux niveaux. Le **thème général**
 // (`themeGeneral`) vient de cette liste fermée : les utilisateurs n'en créent pas. Le **sous-thème**
 // (champ `theme` d'une manche, historique) est libre et se crée à la volée : « Films cultes
@@ -2990,7 +2999,7 @@ export default function ImproApp() {
         {tab === "gen-cours" && <GenerateurCoursTab data={publicData} allData={data} update={update} plan={coursPlan} setPlan={setCoursPlan} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} ambassadeurMancheIds={coursAmbassadeurManches} setAmbassadeurMancheIds={setCoursAmbassadeurManches} />}
         {tab === "gen-spectacle" && <GenerateurSpectacleTab data={publicData} allData={data} update={update} plan={spectaclePlan} setPlan={setSpectaclePlan} currentUser={currentUser} />}
         {tab === "gen-echauffement" && <GenerateurEchauffementTab data={publicData} update={update} plan={echauffementPlan} setPlan={setEchauffementPlan} currentUser={currentUser} />}
-        {tab === "gen-idees" && <GenererIdeesTab setTab={setTab} data={publicData} />}
+        {tab === "gen-idees" && <GenererIdeesTab setTab={setTab} data={publicData} update={update} isAdmin={isAdmin} />}
         {tab === "bibliotheque" && <BibliothequeTab data={publicData} update={update} setTab={setTab} isAdmin={isAdmin} currentUser={currentUser} goToLibrarySection={goToLibrarySection} />}
         {tab === "exercices" && <ExercicesTab data={data} update={update} isAdmin={isAdmin} currentUser={currentUser} profile={auth.profile} initialSearchQuery={librarySearchSeed} setTab={setTab} />}
         {tab === "exercices-crees" && <ExercicesTab data={data} update={update} isAdmin={isAdmin} currentUser={currentUser} profile={auth.profile} onlyUserCreated setTab={setTab} />}
@@ -3149,7 +3158,7 @@ const IDEE_CATEGORIES = [
   { key: "mots", label: "Mots", list: IDEES_MOTS },
 ];
 
-function GenererIdeesTab({ setTab, data }) {
+function GenererIdeesTab({ setTab, data, update, isAdmin }) {
   // Un tirage par catégorie, indépendant des autres (objet plutôt qu'une seule valeur) : cliquer sur
   // une catégorie ne doit plus effacer le tirage déjà affiché pour une autre — chacun reste visible
   // jusqu'à ce qu'on le ferme explicitement avec sa croix.
@@ -3168,8 +3177,56 @@ function GenererIdeesTab({ setTab, data }) {
   // même idée, et chacune repart d'une ardoise neuve à la visite suivante. Même principe que
   // `universUsed` plus bas, pour le mode Univers.
   const [ideesVues, setIdeesVues] = useState({}); // { [cat.key]: Set<string> }
+
+  /* Idées ajoutées par l'Admin, enregistrées dans le document partagé (`ideesAjoutees`, une liste
+     par catégorie). Les six listes d'origine restent des constantes du code : les ajouts viennent
+     par-dessus, personne ne peut casser le fonds commun en se trompant de champ. */
+  const [edition, setEdition] = useState(null); // clé de la catégorie dont l'Admin ouvre le formulaire
+  const [ajout, setAjout] = useState("");
+  const [toastMsg, showToast] = useToast();
+  const ajoutsDe = (key) => (data?.ideesAjoutees || {})[key] || [];
+  const listeIdees = (cat) => [...(cat.list || []), ...ajoutsDe(cat.key)];
+  const ouvrirEdition = (key) => { setEdition(edition === key ? null : key); setAjout(""); };
+  const enregistrerIdees = (cat) => {
+    const proposees = ajout.split("\n").map((s) => s.trim()).filter(Boolean);
+    if (proposees.length === 0) return;
+    // Le tri se fait ici et non dans le `update` : React peut appeler sa fonction de mise à jour
+    // plus tard, et le message annoncerait alors toujours « rien d'ajouté ».
+    // Doublons ignorés en silence, accents et majuscules compris : la liste d'origine compte
+    // déjà des centaines d'entrées, personne ne peut la relire avant de coller la sienne.
+    const deja = new Set([...(cat.list || []), ...ajoutsDe(cat.key)].map(normalize));
+    const nouvelles = [];
+    for (const mot of proposees) {
+      if (deja.has(normalize(mot))) continue;
+      deja.add(normalize(mot));
+      nouvelles.push(mot);
+    }
+    if (nouvelles.length > 0) {
+      update((d) => {
+        d.ideesAjoutees = d.ideesAjoutees || {};
+        d.ideesAjoutees[cat.key] = [...(d.ideesAjoutees[cat.key] || []), ...nouvelles];
+        return d;
+      });
+    }
+    const ignorees = proposees.length - nouvelles.length;
+    showToast(
+      nouvelles.length === 0
+        ? "Rien d'ajouté : ces idées existent déjà."
+        : `${nouvelles.length} idée${nouvelles.length > 1 ? "s" : ""} ajoutée${nouvelles.length > 1 ? "s" : ""}${ignorees > 0 ? ` · ${ignorees} déjà présente${ignorees > 1 ? "s" : ""}` : ""}`,
+      nouvelles.length === 0 ? { type: "notice" } : undefined
+    );
+    setAjout("");
+  };
+  const retirerIdee = (cat, mot) => {
+    update((d) => {
+      d.ideesAjoutees = d.ideesAjoutees || {};
+      d.ideesAjoutees[cat.key] = (d.ideesAjoutees[cat.key] || []).filter((v) => v !== mot);
+      return d;
+    });
+  };
+
   const draw = (cat) => {
-    const liste = cat.list || [];
+    const liste = listeIdees(cat);
     if (liste.length === 0) return;
     const vues = ideesVues[cat.key] || new Set();
     const restantes = liste.filter((v) => !vues.has(v));
@@ -3227,8 +3284,53 @@ function GenererIdeesTab({ setTab, data }) {
   };
   const dismissUnivers = (type) => setUniversResults((prev) => { const next = { ...prev }; delete next[type]; return next; });
 
+  /* Même « + » que dans l'onglet Normal, mais ici l'ajout va dans la FICHE de la catégorie (ses
+     lieux, ses archétypes, son lexique) et pas dans une liste à part : c'est de là que le mode
+     Univers tire, et c'est cette fiche que la bibliothèque affiche. D'où le « + » seulement sur un
+     univers précis — sur « Tous », il n'y aurait pas de fiche où écrire. */
+  const [editionUnivers, setEditionUnivers] = useState(null);
+  const [ajoutUnivers, setAjoutUnivers] = useState("");
+  const peutEnrichirUnivers = isAdmin && !!selectedUnivers;
+  const ouvrirEditionUnivers = (type) => { setEditionUnivers(editionUnivers === type ? null : type); setAjoutUnivers(""); };
+  const enregistrerUnivers = (type) => {
+    const proposees = ajoutUnivers.split("\n").map((s) => s.trim()).filter(Boolean);
+    if (proposees.length === 0 || !selectedUnivers) return;
+    const deja = new Set(listForType(selectedUnivers, type).map(normalize));
+    const nouvelles = [];
+    for (const mot of proposees) {
+      if (deja.has(normalize(mot))) continue;
+      deja.add(normalize(mot));
+      nouvelles.push(mot);
+    }
+    if (nouvelles.length > 0) {
+      const cibleId = selectedUnivers.id;
+      update((d) => {
+        const c = (d.categories || []).find((x) => x.id === cibleId);
+        if (!c) return d;
+        if (type === "lieu") c.lieux = [...(c.lieux || []), ...nouvelles];
+        else if (type === "personnage") c.archetypes = [...(c.archetypes || []), ...nouvelles.map((n) => ({ id: uid(), name: n, desc: "" }))];
+        else {
+          // Le lexique est une chaîne séparée par des virgules dans la fiche, pas une liste.
+          c.vocabulaireUnivers = c.vocabulaireUnivers || {};
+          const avant = (c.vocabulaireUnivers.lexique || "").trim().replace(/,+$/, "");
+          c.vocabulaireUnivers.lexique = avant ? `${avant}, ${nouvelles.join(", ")}` : nouvelles.join(", ");
+        }
+        return d;
+      });
+    }
+    const ignorees = proposees.length - nouvelles.length;
+    showToast(
+      nouvelles.length === 0
+        ? "Rien d'ajouté : ces propositions existent déjà."
+        : `${nouvelles.length} ajoutée${nouvelles.length > 1 ? "s" : ""} à la fiche « ${selectedUnivers.name} »${ignorees > 0 ? ` · ${ignorees} déjà présente${ignorees > 1 ? "s" : ""}` : ""}`,
+      nouvelles.length === 0 ? { type: "notice" } : undefined
+    );
+    setAjoutUnivers("");
+  };
+
   return (
     <div>
+      <Toast toast={toastMsg} />
       <button onClick={() => setTab("accueil")} className="flex items-center gap-1 mb-3 text-sm" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
         <ChevronLeft size={16} /> Accueil
       </button>
@@ -3253,19 +3355,70 @@ function GenererIdeesTab({ setTab, data }) {
         <div className="flex flex-col gap-3 mb-4">
           {IDEE_CATEGORIES.map((cat) => (
             <div key={cat.key}>
-              <button
-                onClick={() => !cat.underConstruction && draw(cat)}
-                disabled={cat.underConstruction}
-                className="w-full flex items-center justify-center gap-2 rounded-sm px-4 py-4 text-lg font-medium transition disabled:opacity-60"
-                style={{
-                  fontFamily: FONT_DISPLAY,
-                  background: cat.underConstruction ? COLORS.cardEdge : COLORS.accent,
-                  color: cat.underConstruction ? COLORS.textSoft : "#fff",
-                  cursor: cat.underConstruction ? "default" : "pointer",
-                }}
-              >
-                <Shuffle size={20} /> {cat.label}{cat.underConstruction ? " (en travaux)" : ""}
-              </button>
+              {/* L'étiquette garde toute la largeur ; le « + » de l'Admin se pose à côté, et porte
+                  le nombre d'idées actuellement dans la catégorie. Réservé à l'Admin : la banque
+                  est commune à toute la troupe, et le tirage perdrait son intérêt si chacun
+                  pouvait y glisser ses mots sans relecture. */}
+              <div className="flex items-stretch gap-2">
+                <button
+                  onClick={() => !cat.underConstruction && draw(cat)}
+                  disabled={cat.underConstruction}
+                  className="flex-1 flex items-center justify-center gap-2 rounded-sm px-4 py-4 text-lg font-medium transition disabled:opacity-60"
+                  style={{
+                    fontFamily: FONT_DISPLAY,
+                    background: cat.underConstruction ? COLORS.cardEdge : COLORS.accent,
+                    color: cat.underConstruction ? COLORS.textSoft : "#fff",
+                    cursor: cat.underConstruction ? "default" : "pointer",
+                  }}
+                >
+                  <Shuffle size={20} /> {cat.label}{cat.underConstruction ? " (en travaux)" : ""}
+                </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => ouvrirEdition(cat.key)}
+                    title={edition === cat.key ? "Fermer" : `Ajouter des idées à « ${cat.label} »`}
+                    className="shrink-0 flex flex-col items-center justify-center rounded-sm px-3"
+                    style={{ minWidth: 64, background: "transparent", border: `1.5px solid ${COLORS.accent}`, color: COLORS.accent }}
+                  >
+                    {edition === cat.key ? <X size={26} /> : <Plus size={26} />}
+                    <span style={{ fontFamily: FONT_MONO, fontSize: 11, lineHeight: 1.2 }}>{listeIdees(cat).length}</span>
+                  </button>
+                )}
+              </div>
+              {isAdmin && edition === cat.key && (
+                <IndexCard className="mt-1">
+                  <Field label={`Nouvelles idées pour « ${cat.label} »`}>
+                    <textarea
+                      className={inputClass}
+                      style={{ ...inputStyle, minHeight: 90 }}
+                      value={ajout}
+                      onChange={(e) => setAjout(e.target.value)}
+                      placeholder={"Une idée par ligne.\nLes doublons sont ignorés."}
+                    />
+                  </Field>
+                  <div className="flex gap-2">
+                    <Btn small variant="accent" disabled={!ajout.trim()} onClick={() => enregistrerIdees(cat)}>
+                      <Plus size={13} /> Ajouter
+                    </Btn>
+                  </div>
+                  {ajoutsDe(cat.key).length > 0 && (
+                    <div className="mt-2">
+                      <div style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase mb-1">
+                        Idées ajoutées ({ajoutsDe(cat.key).length})
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {ajoutsDe(cat.key).map((mot) => (
+                          <TagPill key={mot} label={mot} color={COLORS.brass} onRemove={() => retirerIdee(cat, mot)} />
+                        ))}
+                      </div>
+                      <p className="text-xs mt-1 italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+                        Seules les idées ajoutées ici peuvent être retirées : les {(cat.list || []).length} idées
+                        d'origine font partie de l'appli.
+                      </p>
+                    </div>
+                  )}
+                </IndexCard>
+              )}
               {picked[cat.key] !== undefined && (
                 <IndexCard className="mt-2">
                   <div className="flex justify-between items-start">
@@ -3297,19 +3450,54 @@ function GenererIdeesTab({ setTab, data }) {
           <div className="flex flex-col gap-3 mt-3 mb-4">
             {UNIVERS_BUTTONS.map((btn) => (
               <div key={btn.key}>
-                <button
-                  onClick={() => hasSelection && drawUnivers(btn.key)}
-                  disabled={!hasSelection}
-                  className="w-full flex items-center justify-center gap-2 rounded-sm px-4 py-4 text-lg font-medium transition disabled:opacity-60"
-                  style={{
-                    fontFamily: FONT_DISPLAY,
-                    background: hasSelection ? COLORS.accent : COLORS.cardEdge,
-                    color: hasSelection ? "#fff" : COLORS.textSoft,
-                    cursor: hasSelection ? "pointer" : "default",
-                  }}
-                >
-                  <Shuffle size={20} /> {btn.label}
-                </button>
+                <div className="flex items-stretch gap-2">
+                  <button
+                    onClick={() => hasSelection && drawUnivers(btn.key)}
+                    disabled={!hasSelection}
+                    className="flex-1 flex items-center justify-center gap-2 rounded-sm px-4 py-4 text-lg font-medium transition disabled:opacity-60"
+                    style={{
+                      fontFamily: FONT_DISPLAY,
+                      background: hasSelection ? COLORS.accent : COLORS.cardEdge,
+                      color: hasSelection ? "#fff" : COLORS.textSoft,
+                      cursor: hasSelection ? "pointer" : "default",
+                    }}
+                  >
+                    <Shuffle size={20} /> {btn.label}
+                  </button>
+                  {peutEnrichirUnivers && (
+                    <button
+                      onClick={() => ouvrirEditionUnivers(btn.key)}
+                      title={editionUnivers === btn.key ? "Fermer" : `Ajouter des ${btn.label.toLowerCase()}s à « ${selectedUnivers.name} »`}
+                      className="shrink-0 flex flex-col items-center justify-center rounded-sm px-3"
+                      style={{ minWidth: 64, background: "transparent", border: `1.5px solid ${COLORS.accent}`, color: COLORS.accent }}
+                    >
+                      {editionUnivers === btn.key ? <X size={26} /> : <Plus size={26} />}
+                      <span style={{ fontFamily: FONT_MONO, fontSize: 11, lineHeight: 1.2 }}>
+                        {listForType(selectedUnivers, btn.key).length}
+                      </span>
+                    </button>
+                  )}
+                </div>
+                {peutEnrichirUnivers && editionUnivers === btn.key && (
+                  <IndexCard className="mt-1">
+                    <Field label={`${btn.label} à ajouter à « ${selectedUnivers.name} »`}>
+                      <textarea
+                        className={inputClass}
+                        style={{ ...inputStyle, minHeight: 90 }}
+                        value={ajoutUnivers}
+                        onChange={(e) => setAjoutUnivers(e.target.value)}
+                        placeholder={"Une proposition par ligne.\nLes doublons sont ignorés."}
+                      />
+                    </Field>
+                    <Btn small variant="accent" disabled={!ajoutUnivers.trim()} onClick={() => enregistrerUnivers(btn.key)}>
+                      <Plus size={13} /> Ajouter
+                    </Btn>
+                    <p className="text-xs mt-2 italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+                      L'ajout va directement dans la fiche de la catégorie « {selectedUnivers.name} » :
+                      il s'affiche aussi dans la bibliothèque, et se retire depuis la fiche.
+                    </p>
+                  </IndexCard>
+                )}
                 {universResults[btn.key] !== undefined && (
                   <IndexCard className="mt-2">
                     <div className="flex justify-between items-start">
@@ -7824,10 +8012,48 @@ function AmbassadeurPlanCard({ data, mancheIds, onChange, currentUser, isAdmin, 
   const [playing, setPlaying] = useState(false);
   const [themesVisibles, setThemesVisibles] = useState(false);
   const [creation, setCreation] = useState(false);
+  const [choixPerso, setChoixPerso] = useState(false);
   // Manches créées ici sans compte : elles ne partent pas dans la base commune (voir AmbassadeursTab).
   const [manchesLocales, setManchesLocales] = useState([]);
   const peutEnregistrer = isAdmin || !!currentUser;
   const dispo = [...manchesJouables(data, currentUser, isAdmin), ...manchesLocales];
+  // Les ambassadeurs déjà montés et enregistrés par l'utilisateur (les archivés sont rangés, pas
+  // proposés). Les rattacher à un cours évite de réassembler trois manches déjà choisies ensemble.
+  // Un assemblage ne regarde que son auteur : pas de liste pour un visiteur sans compte, et
+  // l'Admin ne voit pas non plus ceux des autres.
+  const mesAmbassadeurs = currentUser
+    ? (data.ambassadeurs || []).filter((a) => a.creatorUsername === currentUser && !a.archive)
+    : [];
+  // Une manche d'un assemblage peut avoir disparu depuis (supprimée, refusée) : on compte celles
+  // qui répondent encore présentes, pour ne pas promettre trois manches et n'en livrer que deux.
+  const manchesEncoreLa = (a) => (a.mancheIds || []).filter((id) => dispo.some((m) => m.id === id)).length;
+  const listeMesAmbassadeurs = !lecture && choixPerso && mesAmbassadeurs.length > 0 && (
+    <IndexCard className="mt-2">
+      <div className="flex justify-between items-start mb-2">
+        <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">Mes ambassadeurs</span>
+        <button onClick={() => setChoixPerso(false)} title="Fermer"><X size={16} color={COLORS.textSoft} /></button>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {mesAmbassadeurs.map((a) => {
+          const total = (a.mancheIds || []).length;
+          const restantes = manchesEncoreLa(a);
+          return (
+            <button
+              key={a.id}
+              onClick={() => { onChange(a.mancheIds || []); setChoixPerso(false); }}
+              className="text-left rounded-sm px-3 py-2"
+              style={{ fontFamily: FONT_BODY, background: COLORS.paper, border: `1px solid ${COLORS.cardEdge}` }}
+            >
+              <span className="text-sm" style={{ color: COLORS.ink }}>{a.nom || "Ambassadeur sans nom"}</span>
+              <span className="block text-xs" style={{ color: restantes < total ? COLORS.accent : COLORS.textSoft }}>
+                {restantes < total ? `${restantes} manche(s) encore disponible(s) sur ${total}` : `${total} manche(s)`}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </IndexCard>
+  );
   const assezPourPiocher = dispo.length >= AMBASSADEUR_MANCHES_PAR_PARTIE;
   const manches = mancheIds.map((id) => dispo.find((m) => m.id === id)).filter(Boolean);
   // Une manche enregistrée dans un plan peut disparaître ensuite (supprimée, refusée en modération,
@@ -7913,8 +8139,12 @@ function AmbassadeurPlanCard({ data, mancheIds, onChange, currentUser, isAdmin, 
                 <div className="flex flex-wrap gap-2">
                   {/* Pas de bouton "Piocher" tant que la banque ne peut pas fournir une partie entière. */}
                   {assezPourPiocher && <Btn small variant="accent" onClick={piocher}><Shuffle size={13} /> Piocher un ambassadeur</Btn>}
+                  {mesAmbassadeurs.length > 0 && (
+                    <Btn small variant="ghost" onClick={() => setChoixPerso(true)}><Hand size={13} /> Mes ambassadeurs</Btn>
+                  )}
                   <Btn small variant="ghost" onClick={() => setCreation(true)}><Plus size={13} /> Créer le mien</Btn>
                 </div>
+                {listeMesAmbassadeurs}
                 {dispo.length === 0 && (
                   <p className="text-xs mt-1 italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
                     Aucune manche disponible pour l'instant : crée la tienne.
@@ -7957,6 +8187,7 @@ function AmbassadeurPlanCard({ data, mancheIds, onChange, currentUser, isAdmin, 
               {!lecture && (
                 <div className="flex flex-col gap-1 items-end">
                   {assezPourPiocher && <Btn small variant="ghost" onClick={piocher}>Aléatoire</Btn>}
+                  {mesAmbassadeurs.length > 0 && <Btn small variant="ghost" onClick={() => setChoixPerso(true)}>Les miens</Btn>}
                   {/* "Modifier" ouvre l'assembleur pré-rempli : on voit les trois manches en place et
                       on choisit laquelle remplacer. Avant, le sélecteur ajoutait la nouvelle manche
                       à la fin et faisait sauter la première, sans qu'on l'ait demandé. */}
@@ -7973,6 +8204,7 @@ function AmbassadeurPlanCard({ data, mancheIds, onChange, currentUser, isAdmin, 
                 </button>
               )}
             </div>
+            {listeMesAmbassadeurs}
           </>
         )}
         {creation && (
@@ -8683,11 +8915,16 @@ function buildCours(exercises, categories, { niveau, tempsTotal, nbEchauffements
   // Priorise les éléments non utilisés lors de la dernière génération (anti-répétition), puis,
   // si demandé, les favoris — sans jamais passer avant la correspondance thématique/objectifs,
   // qui reste gérée par les paliers (matched > other > lastResort) plus haut dans l'appel.
+  // Une fiche cochée pour la tranche d'âge demandée passe devant une fiche sans public coché
+  // (« tous publics »), qui ne vient qu'en complément — voir prefereLePublic.
+  const pourCePublic = (e) => !!publicVise && (e.publics || []).includes(publicVise);
   const prioritizeFresh = (arr) => {
     const shuffled = shuffleArray(arr);
     return shuffled.sort((a, b) => {
       const freshDiff = (recent.has(a.id) ? 1 : 0) - (recent.has(b.id) ? 1 : 0);
       if (freshDiff !== 0) return freshDiff;
+      const publicDiff = (pourCePublic(a) ? 0 : 1) - (pourCePublic(b) ? 0 : 1);
+      if (publicDiff !== 0) return publicDiff;
       if (!integrerFavoris) return 0;
       return (a.favorite ? 0 : 1) - (b.favorite ? 0 : 1);
     });
@@ -8755,7 +8992,7 @@ function buildCours(exercises, categories, { niveau, tempsTotal, nbEchauffements
     // chaque créneau va vers une fiche en lien avec ce qu'on veut travailler, quand c'est possible.
     const prioritized = pool.filter((e) => matchesFamily(e) || matchesTags(e));
     const retenu = sansLesProchesDe(prioritized.length > 0 ? prioritized : pool, dernierEchauffement());
-    const pick = pickRandom(prioritizeFresh(retenu));
+    const pick = pickRandom(prefereLePublic(prioritizeFresh(retenu), publicVise));
     if (!pick) return false;
     warmups.push(withActual(pick, remainingWarmupBudget));
     used.add(pick.id);
@@ -8816,7 +9053,7 @@ function buildCours(exercises, categories, { niveau, tempsTotal, nbEchauffements
     warmups = [...warmups, ...step.picked]; remainingWarmupBudget = step.remaining;
   }
   if (warmups.length === 0 && tempsEchauffement > 0 && maxEchauffements > 0) {
-    const single = pickRandom(warmupAll);
+    const single = pickRandom(prefereLePublic(warmupAll, publicVise));
     if (single) { warmups = [withActual(single, tempsEchauffement)]; used.add(single.id); }
   }
 
@@ -8877,7 +9114,9 @@ function buildCours(exercises, categories, { niveau, tempsTotal, nbEchauffements
     // précède peut être le dernier échauffement, puisque sur le plan imprimé elles se suivent.
     choicePool = sansLesProchesDe(choicePool, middle[middle.length - 1] || warmups[warmups.length - 1]);
     const fresh = choicePool.filter((e) => !recent.has(e.id));
-    const candidates = fresh.length > 0 ? fresh : choicePool;
+    // La tranche d'âge passe avant les favoris : un favori qui n'est pas coché pour ce public ne
+    // doit pas s'imposer dans un cours pour enfants alors qu'une fiche faite pour eux attend.
+    const candidates = prefereLePublic(fresh.length > 0 ? fresh : choicePool, publicVise);
     if (integrerFavoris) {
       const favs = candidates.filter((e) => e.favorite);
       if (favs.length > 0) return pickRandom(favs);
@@ -9416,6 +9655,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
             </ChampReglage>
             <ChampReglage label="Tranche d'âge">
               <SelectReglage value={publicVise} onChange={(e) => setPublicVise(e.target.value)}>
+                <option value="">Tous</option>
                 {TRANCHES_AGE.map((t) => <option key={t}>{t}</option>)}
               </SelectReglage>
             </ChampReglage>
@@ -9878,6 +10118,7 @@ function buildSpectacle(categories, { format, niveau, duree, entracteOn, integre
         const pool2 = candidates.length > 0 ? candidates : remaining;
         let prioritized = pool2.filter(byLevel);
         if (prioritized.length === 0) prioritized = pool2;
+        prioritized = prefereLePublic(prioritized, publicVise);
         const ordered = integrerFavoris
           ? [...prioritized].sort((a, b2) => (a.favorite ? 0 : 1) - (b2.favorite ? 0 : 1))
           : shuffleArray(prioritized);
@@ -9897,6 +10138,7 @@ function buildSpectacle(categories, { format, niveau, duree, entracteOn, integre
         const remaining = pool.filter((c) => c === libre || !localUsed.has(c.id));
         let prioritized = remaining.filter(byLevel);
         if (prioritized.length === 0) prioritized = remaining;
+        prioritized = prefereLePublic(prioritized, publicVise);
         const ordered = integrerFavoris
           ? [...prioritized].sort((a, b2) => (a.favorite ? 0 : 1) - (b2.favorite ? 0 : 1))
           : shuffleArray(prioritized);
@@ -9916,6 +10158,7 @@ function buildSpectacle(categories, { format, niveau, duree, entracteOn, integre
         const remaining = pool.filter((c) => c === bestOf || !localUsed.has(c.id));
         let prioritized = remaining.filter(byLevel);
         if (prioritized.length === 0) prioritized = remaining;
+        prioritized = prefereLePublic(prioritized, publicVise);
         const ordered = integrerFavoris
           ? [...prioritized].sort((a, b2) => (a.favorite ? 0 : 1) - (b2.favorite ? 0 : 1))
           : shuffleArray(prioritized);
@@ -9932,6 +10175,7 @@ function buildSpectacle(categories, { format, niveau, duree, entracteOn, integre
       const remaining = specialesPool.filter((c) => !localUsed.has(c.id));
       let prioritized = remaining.filter(byLevel);
       if (prioritized.length === 0) prioritized = remaining;
+      prioritized = prefereLePublic(prioritized, publicVise);
       const ordered = integrerFavoris
         ? [...prioritized].sort((a, b2) => (a.favorite ? 0 : 1) - (b2.favorite ? 0 : 1))
         : shuffleArray(prioritized);
@@ -10271,6 +10515,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
             </ChampReglage>
             <ChampReglage label="Tranche d'âge">
               <SelectReglage value={publicVise} onChange={(e) => setPublicVise(e.target.value)}>
+                <option value="">Tous</option>
                 {TRANCHES_AGE.map((t) => <option key={t}>{t}</option>)}
               </SelectReglage>
             </ChampReglage>
@@ -10448,7 +10693,7 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
   // Le format du spectacle que cet échauffement prépare. Comme l'ancien « contexte » qu'il remplace,
   // il n'entre encore dans aucun filtre du tirage : les fiches d'échauffement ont bien un champ
   // `showTypes`, mais il est vide sur toutes, il n'y a donc rien à filtrer pour l'instant.
-  const [format, setFormat] = useState(FORMATS_SPECTACLE[0]);
+  const [format, setFormat] = useState("Cabaret");
   const [joueursSeConnaissent, setJoueursSeConnaissent] = useState(true);
   const [tags, setTags] = useState([]); // objectifs OU thématiques mélangés, un seul menu de recherche
   const list = plan;
@@ -10474,7 +10719,16 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
     const fillFrom = (pool) => {
       // Priorise les exercices qui correspondent aux tags cochés ; une fois ces possibilités
       // épuisées, continue avec le reste du pool fourni.
-      const shuffled = shuffleArray([...pool.filter(byLevel), ...pool]);
+      // La tranche d'âge demandée passe avant tout le reste : les fiches cochées pour ce public
+      // défilent en premier, celles sans public coché (« tous publics ») ne viennent qu'ensuite,
+      // si le temps disponible n'est pas encore rempli.
+      const pourCePublic = (e) => !!publicVise && (e.publics || []).includes(publicVise);
+      const exactes = pool.filter(pourCePublic);
+      const reste = pool.filter((e) => !pourCePublic(e));
+      const shuffled = [
+        ...shuffleArray([...exactes.filter(byLevel), ...exactes]),
+        ...shuffleArray([...reste.filter(byLevel), ...reste]),
+      ];
       for (const e of shuffled) {
         // On s'arrête dès qu'il ne reste plus assez de budget pour une durée correcte, plutôt que
         // de retenir un exercice de plus et l'écraser à 0 ou 1 minute.
@@ -10490,14 +10744,14 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
     // "Groupe, prénoms et confiance" (dès que le budget le permet).
     if (joueursSeConnaissent === false && budget >= MIN_CARD_DURATION) {
       const famillePool = warmupAll.filter((e) => e.groupe === "Groupe, prénoms et confiance" && fitsBudget(e.duration, budget));
-      const famillePick = pickRandom(famillePool);
+      const famillePick = pickRandom(prefereLePublic(famillePool, publicVise));
       if (famillePick) { picked.push({ ...famillePick, actualDuration: Math.min(famillePick.duration, budget) }); budget = consumeBudget(famillePick.duration, budget); }
     }
     // Au-delà de 6 participants, on intègre obligatoirement un échauffement de la famille "Cercle"
     // (plus adapté aux grands groupes) dès que le budget le permet.
     if (participants > 6 && budget >= MIN_CARD_DURATION) {
       const cerclePool = warmupAll.filter((e) => e.groupe === "Cercle" && !picked.find((p) => p.id === e.id) && fitsBudget(e.duration, budget));
-      const cerclePick = pickRandom(cerclePool);
+      const cerclePick = pickRandom(prefereLePublic(cerclePool, publicVise));
       if (cerclePick) { picked.push({ ...cerclePick, actualDuration: Math.min(cerclePick.duration, budget) }); budget = consumeBudget(cerclePick.duration, budget); }
     }
     // On épuise d'abord les exercices qui matchent les tags cochés, puis on comble avec le reste
@@ -10568,12 +10822,6 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
       <p className="text-sm mb-3" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
         Il est possible que tu n'aies pas le temps de faire tous les échauffements proposés, n'hésite pas à en supprimer ou en ajouter lors de ton échauffement. Improvise et adapte !
       </p>
-      <IndexCard style={{ borderColor: COLORS.accent, background: COLORS.accent + "15", marginBottom: 12 }} className="flex items-center gap-2">
-        <AlertTriangle size={18} color={COLORS.accent} />
-        <span style={{ fontFamily: FONT_BODY, color: COLORS.accent }} className="text-xs font-medium">
-          Page en travaux — tu peux quand même l'utiliser et la tester librement.
-        </span>
-      </IndexCard>
       <IndexCard>
         {/* Même trio d'en-tête que le générateur de spectacle. Le bloc « Contexte » a disparu : il
             faisait doublon avec le format, et son réglage n'entrait dans aucun filtre du tirage. */}
@@ -10597,6 +10845,7 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
             </ChampReglage>
             <ChampReglage label="Tranche d'âge">
               <SelectReglage value={publicVise} onChange={(e) => setPublicVise(e.target.value)}>
+                <option value="">Tous</option>
                 {TRANCHES_AGE.map((t) => <option key={t}>{t}</option>)}
               </SelectReglage>
             </ChampReglage>
