@@ -187,6 +187,32 @@ Les fiches créées par la communauté ont des drapeaux `pending` / `rejected`. 
 
 Choisir le mauvais des deux est le piège classique de ce fichier.
 
+### 4 bis. Ce qui appartient à un compte, et pas à la communauté
+
+Le blob est commun : par défaut, tout ce qu'on y écrit s'affiche chez les 23 comptes. Jusqu'au
+2026-11-11 c'était le cas des **favoris** (un drapeau `favorite` posé sur la fiche) et des **plans de
+cours et de spectacle enregistrés** (une liste sans auteur) — une étoile mise par une personne
+s'affichait chez tout le monde, et le spectacle d'une troupe s'ouvrait chez une autre.
+
+- **Favoris** : rangés dans `favoris`, une **liste d'objets à `id`** (l'`id` est le nom
+  d'utilisateur) et non un objet indexé par nom — `fusionBlob` ne sait descendre élément par élément
+  que sur les listes à `id`, sinon deux étoiles simultanées s'écrasent.
+  `avecMesFavoris` **repose** les étoiles du compte connecté sur les fiches dans `ImproApp`, une fois
+  pour toute l'appli : les quarante endroits qui lisent `ex.favorite` n'ont rien à savoir de tout ça.
+  En face, `sansFavorisPersonnels` **rince** toute écriture — sans lui, modifier une fiche qu'on a
+  mise en favori la remet en favori pour tout le monde, puisque le formulaire d'édition renvoie la
+  fiche telle qu'il l'a reçue, étoile comprise. C'est le piège du mécanisme.
+  Poser/retirer une étoile passe par `basculerFavoriExercice` / `basculerFavoriCategorie`, jamais en
+  écrivant `favorite` sur une fiche.
+- **Plans enregistrés** : `creatorUsername` à l'enregistrement, `mesPlans()` à la lecture (écran
+  « Plans » et compteurs du profil). Les plans d'avant n'ont pas d'auteur : ils restent visibles par
+  l'Admin, seul à pouvoir les rattacher à quelqu'un.
+- **Déjà en place avant** : les manches et assemblages d'ambassadeur (`creatorUsername`), les
+  « exercices/catégories créés ». La **banque de manches** reste commune, c'est le but du jeu.
+- **Ce n'est pas de la confidentialité** : tout vit dans le même document, et `anon` a le droit de
+  lire `app_data`. C'est une séparation d'affichage, pas un secret. Un vrai cloisonnement
+  demanderait des lignes par compte et des politiques RLS.
+
 ### 5. `App.jsx` : un seul fichier de ~10 800 lignes
 
 Volontairement monolithique (héritage de l'artifact). Les numéros de ligne ci-dessous bougent à

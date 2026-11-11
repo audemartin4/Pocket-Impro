@@ -479,6 +479,72 @@ const AMBASSADEUR_MAX_MIN = 15;
 // NOUVELLE migration (_ambassadeursV2), pas en remplissant ce tableau.
 const AMBASSADEUR_MANCHES_SEED = [];
 
+/* ---------- Ce qui appartient à un compte, et pas à la communauté ----------
+   Les favoris étaient un drapeau `favorite` posé SUR la fiche, et les plans enregistrés une liste
+   sans auteur : une étoile mise par une personne s'affichait chez les 23 comptes, et le plan de
+   cours d'une troupe s'ouvrait chez une autre. Depuis le 2026-11-11, chaque compte ne voit que les
+   siens.
+   Les étoiles sont rangées à part, dans `favoris`, et REPOSÉES sur les fiches au chargement par
+   `avecMesFavoris` : les quarante endroits qui lisent `ex.favorite` (générateurs, tris, cartes)
+   n'ont ainsi rien à savoir de tout ça. */
+
+/* À qui reviennent les étoiles d'avant la séparation des comptes : à l'Admin, seul compte à en
+   avoir posé (sept exercices au 2026-11-11). Voir la migration dans mergeMissingCategories. */
+const FAVORIS_LEGS_COMPTE = "Admin";
+
+/* Les favoris du compte connecté, reposés sur les fiches. Sans compte, aucune étoile : il n'y a
+   personne à qui elles pourraient appartenir. On renvoie la fiche inchangée quand son état est déjà
+   le bon, pour ne pas recréer sept cents objets à chaque rendu. */
+const avecMesFavoris = (d, username) => {
+  if (!d) return d;
+  const mien = username ? (d.favoris || []).find((f) => f.id === username) : null;
+  const exos = new Set(mien?.exercises || []);
+  const cats = new Set(mien?.categories || []);
+  const poser = (liste, ids) => (liste || []).map((f) => (!!f.favorite === ids.has(f.id) ? f : { ...f, favorite: ids.has(f.id) }));
+  return { ...d, exercises: poser(d.exercises, exos), categories: poser(d.categories, cats) };
+};
+
+/* Rinçage à l'écriture. Le formulaire d'édition d'une fiche renvoie la fiche telle qu'il l'a reçue,
+   étoile comprise : sans ce passage, modifier un exercice qu'on a mis en favori le remettait en
+   favori POUR TOUT LE MONDE — exactement le défaut qu'on corrige. On remet `favorite: false` au lieu
+   de supprimer la clé, pour ne pas réveiller la migration qui la rajoute au chargement. */
+const sansFavorisPersonnels = (d) => {
+  if (!d) return d;
+  const sortie = { ...d };
+  for (const cle of ["exercises", "categories"]) {
+    const liste = sortie[cle];
+    if (Array.isArray(liste) && liste.some((f) => f.favorite)) {
+      sortie[cle] = liste.map((f) => (f.favorite ? { ...f, favorite: false } : f));
+    }
+  }
+  return sortie;
+};
+
+/* Poser ou retirer une étoile : on écrit dans la liste du compte, jamais sur la fiche. Sans compte
+   il n'y a rien à écrire — les écrans le disent déjà par un message avant d'arriver ici. */
+const basculerFavori = (cle) => (update, username, id) => {
+  if (!username) return;
+  update((d) => {
+    const favoris = [...(d.favoris || [])];
+    const i = favoris.findIndex((f) => f.id === username);
+    const mien = i >= 0 ? favoris[i] : { id: username, exercises: [], categories: [] };
+    const liste = mien[cle] || [];
+    const maj = { ...mien, [cle]: liste.includes(id) ? liste.filter((x) => x !== id) : [...liste, id] };
+    if (i >= 0) favoris[i] = maj; else favoris.push(maj);
+    d.favoris = favoris;
+    return d;
+  });
+};
+const basculerFavoriExercice = basculerFavori("exercises");
+const basculerFavoriCategorie = basculerFavori("categories");
+
+/* Les plans de cours et de spectacle enregistrés ne regardent que leur auteur. Ceux d'avant le
+   2026-11-11 n'en ont pas : ils restent visibles par l'Admin — seul à pouvoir les rattacher à
+   quelqu'un — plutôt que d'être montrés à toute la communauté (le défaut) ou de disparaître (une
+   perte de travail). Sans compte, aucun plan : un visiteur n'a pas de « mes plans ». */
+const mesPlans = (liste, currentUser, isAdmin) =>
+  (liste || []).filter((p) => (p.creatorUsername ? p.creatorUsername === currentUser : !!isAdmin));
+
 /* ---------- Seed data (à remplacer par ton contenu) ---------- */
 const SEED = {
   thematiques: ["Amour", "Peur", "Aventure", "Mystère", "Cinéma", "Vacances", "Humour", "Émotion", "Familial", "Participatif", "Expérimental"],
@@ -490,6 +556,11 @@ const SEED = {
   showConcepts: [],
   coursePlans: [],
   spectaclePlans: [],
+  /* Favoris propres à chaque compte : une entrée par personne, dont l'`id` est son nom
+     d'utilisateur. Une LISTE d'objets à `id` et non un objet indexé par nom, parce que la fusion du
+     document (voir fusionBlob.js) ne sait descendre élément par élément que sur les listes à `id` :
+     deux personnes qui posent une étoile en même temps se seraient sinon écrasées l'une l'autre. */
+  favoris: [],
   // Ambassadeur : vocabulaire de thèmes propre au jeu (distinct de `thematiques`, qui sert aux
   // catégories et aux générateurs), manches de 5 mots, et parties assemblées (3 manches).
   ambassadeurThemes: [],
@@ -1581,6 +1652,7 @@ function mergeMissingCategories(data) {
   // normalisés à un tableau vide en dessous, pour les blobs enregistrés avant cette version.
   let ambassadeurThemes = data.ambassadeurThemes;
   let ambassadeurManches = data.ambassadeurManches;
+  let favoris = data.favoris;
   let ambassadeurs = data.ambassadeurs;
   let ambassadeursV1 = data._ambassadeursV1;
   if (!ambassadeursV1) {
@@ -1653,6 +1725,31 @@ function mergeMissingCategories(data) {
     ambassadeurManches = ambassadeurManches.map((m) => ((m.tranchesAge || []).includes("Senior") ? { ...m, tranchesAge: sansSenior(m.tranchesAge) } : m));
   }
 
+  /* Les favoris deviennent propres à chaque compte (voir `favoris` plus haut). Les étoiles déjà
+     posées sur les fiches — sept exercices, aucune catégorie — reviennent au compte Admin, seul à
+     s'en être servi, et la fiche est rendue à la communauté sans étoile. Sans flag `_…V1`, comme
+     pour « Expert » et « Senior » : le `some()` suffit à ne pas refaire le travail, et la règle doit
+     pouvoir rejouer si une fiche revient un jour avec son étoile (un vieil onglet, une sauvegarde
+     restaurée). `favoris` reste `undefined` quand il n'y a rien à faire, pour que la comparaison de
+     fin ne déclenche pas une écriture à chaque chargement de page. */
+  if (exercises?.some((e) => e.favorite) || categories?.some((c) => c.favorite)) {
+    const anciennes = {
+      exercises: (exercises || []).filter((e) => e.favorite).map((e) => e.id),
+      categories: (categories || []).filter((c) => c.favorite).map((c) => c.id),
+    };
+    const liste = favoris || [];
+    const i = liste.findIndex((f) => f.id === FAVORIS_LEGS_COMPTE);
+    const mien = i >= 0 ? liste[i] : { id: FAVORIS_LEGS_COMPTE, exercises: [], categories: [] };
+    const fusion = {
+      id: FAVORIS_LEGS_COMPTE,
+      exercises: [...new Set([...(mien.exercises || []), ...anciennes.exercises])],
+      categories: [...new Set([...(mien.categories || []), ...anciennes.categories])],
+    };
+    favoris = i >= 0 ? liste.map((f, j) => (j === i ? fusion : f)) : [...liste, fusion];
+    if (anciennes.exercises.length) exercises = exercises.map((e) => (e.favorite ? { ...e, favorite: false } : e));
+    if (anciennes.categories.length) categories = categories.map((c) => (c.favorite ? { ...c, favorite: false } : c));
+  }
+
   if (
     categories === data.categories &&
     showTypes === data.showTypes &&
@@ -1682,9 +1779,10 @@ function mergeMissingCategories(data) {
     ambassadeurs === data.ambassadeurs &&
     ambassadeursV1 === data._ambassadeursV1 &&
     ambassadeurBarsMontpellierV1 === data._ambassadeurBarsMontpellierV1 &&
-    ambassadeursResetV1 === data._ambassadeursResetV1
+    ambassadeursResetV1 === data._ambassadeursResetV1 &&
+    favoris === data.favoris
   ) return data;
-  return { ...data, ambassadeurThemes, ambassadeurManches, ambassadeurs, _ambassadeursV1: ambassadeursV1, _ambassadeurBarsMontpellierV1: ambassadeurBarsMontpellierV1, _ambassadeursResetV1: ambassadeursResetV1, categories, showTypes, showConcepts, exercises, objectifs, thematiques, _cercleTagV1: cercleTagV1, _musiqueTagV1: musiqueTagV1, _materialMusiqueV1: materialMusiqueV1, _tagCaseAccentMergeV1: tagCaseAccentMergeV1, _stageWarmupMachineV1: stageWarmupMachineV1, _stageWarmupBatch2V1: stageWarmupBatch2V1, _devinettesEnergyV1: devinettesEnergyV1, _joueursMinimumV1: joueursMinimumV1, _canOpenShowDefaultsV1: canOpenShowDefaultsV1, _canCloseShowDefaultsV1: canCloseShowDefaultsV1, _universLieuxV1: universLieuxV1, _comedieMusicaleLieuxV1: comedieMusicaleLieuxV1, _universArchetypesV2: universArchetypesV2, _universArchetypesV3: universArchetypesV3, _universFormatsV1: universFormatsV1, _universLexiqueV1: universLexiqueV1, _removedAmourConceptV1: removedAmourConceptV1 };
+  return { ...data, favoris, ambassadeurThemes, ambassadeurManches, ambassadeurs, _ambassadeursV1: ambassadeursV1, _ambassadeurBarsMontpellierV1: ambassadeurBarsMontpellierV1, _ambassadeursResetV1: ambassadeursResetV1, categories, showTypes, showConcepts, exercises, objectifs, thematiques, _cercleTagV1: cercleTagV1, _musiqueTagV1: musiqueTagV1, _materialMusiqueV1: materialMusiqueV1, _tagCaseAccentMergeV1: tagCaseAccentMergeV1, _stageWarmupMachineV1: stageWarmupMachineV1, _stageWarmupBatch2V1: stageWarmupBatch2V1, _devinettesEnergyV1: devinettesEnergyV1, _joueursMinimumV1: joueursMinimumV1, _canOpenShowDefaultsV1: canOpenShowDefaultsV1, _canCloseShowDefaultsV1: canCloseShowDefaultsV1, _universLieuxV1: universLieuxV1, _comedieMusicaleLieuxV1: comedieMusicaleLieuxV1, _universArchetypesV2: universArchetypesV2, _universArchetypesV3: universArchetypesV3, _universFormatsV1: universFormatsV1, _universLexiqueV1: universLexiqueV1, _removedAmourConceptV1: removedAmourConceptV1 };
 }
 
 /* ---------- Persistence ---------- */
@@ -2834,7 +2932,7 @@ export default function ImproApp() {
      en lecture seule. */
   const peutEcrire = auth.session !== null;
 
-  const [data, setData, loaded, erreurChargement] = useAppData(peutEcrire);
+  const [donneesBrutes, setData, loaded, erreurChargement] = useAppData(peutEcrire);
 
   // Charge jsPDF d'avance (et pas seulement sur la page "Plans de cours") pour que le téléchargement
   // PDF direct depuis "Créer un cours"/"Créer un spectacle" soit prêt sans attendre.
@@ -2876,6 +2974,13 @@ export default function ImproApp() {
   const [simulateMember, setSimulateMember] = useState(false);
   const currentUser = simulateMember ? TEST_USER_NAME : auth.currentUser;
   const isAdmin = auth.isAdmin && !simulateMember;
+  /* Les données vues par ce compte : la bibliothèque est commune, les étoiles ne le sont pas. On les
+     repose ici, une fois pour toute l'appli, plutôt que dans chacun des quarante endroits qui lisent
+     `favorite`. `setData` et `update`, eux, continuent de travailler sur les données brutes : rien
+     de personnel ne repart dans le document commun (voir `sansFavorisPersonnels`).
+     « Mode utilisateur » (le bouton du profil Admin) change `currentUser` : les étoiles suivent, ce
+     qui est justement ce qu'on veut y vérifier. */
+  const data = useMemo(() => avecMesFavoris(donneesBrutes, currentUser), [donneesBrutes, currentUser]);
   const [librarySearchSeed, setLibrarySearchSeed] = useState(""); // pré-remplit la recherche en arrivant depuis la Bibliothèque
   const [coursPlan, setCoursPlan] = useState(null); // levé ici pour survivre à la navigation + permettre de "reprendre"
   const [coursAmbassadeurManches, setCoursAmbassadeurManches] = useState([]); // les manches rattachées à ce cours, levées avec lui
@@ -2917,7 +3022,7 @@ export default function ImproApp() {
       console.warn("Écriture refusée : aucun compte connecté.");
       return;
     }
-    setData((prev) => fn(structuredClone(prev)));
+    setData((prev) => sansFavorisPersonnels(fn(structuredClone(prev))));
   }, [peutEcrire, setData]);
   // Vue "publique" des données : masque les exercices/catégories créés par la communauté tant qu'ils
   // n'ont pas été validés par l'Admin, ainsi que ceux refusés — utilisée partout où le contenu doit
@@ -3753,11 +3858,11 @@ function BibliothequeTab({ data, update, setTab, isAdmin, currentUser, goToLibra
 
   const toggleFavExercise = (id) => {
     if (!currentUser) { showToast("Désolé, il te faut un compte pour enregistrer tes créations !", { type: "notice" }); return; }
-    update((d) => { const e = d.exercises.find((x) => x.id === id); if (e) e.favorite = !e.favorite; return d; });
+    basculerFavoriExercice(update, currentUser, id);
   };
   const toggleFavCategory = (id) => {
     if (!currentUser) { showToast("Désolé, il te faut un compte pour enregistrer tes créations !", { type: "notice" }); return; }
-    update((d) => { const c = d.categories.find((x) => x.id === id); if (c) c.favorite = !c.favorite; return d; });
+    basculerFavoriCategorie(update, currentUser, id);
   };
 
   const sections = [
@@ -3957,11 +4062,11 @@ function FavorisTab({ data, update, isAdmin, currentUser, setTab }) {
 
   const toggleFavExercise = (id) => {
     if (!currentUser) { showToast("Désolé, il te faut un compte pour enregistrer tes créations !", { type: "notice" }); return; }
-    update((d) => { const e = d.exercises.find((x) => x.id === id); if (e) e.favorite = !e.favorite; return d; });
+    basculerFavoriExercice(update, currentUser, id);
   };
   const toggleFavCategory = (id) => {
     if (!currentUser) { showToast("Désolé, il te faut un compte pour enregistrer tes créations !", { type: "notice" }); return; }
-    update((d) => { const c = d.categories.find((x) => x.id === id); if (c) c.favorite = !c.favorite; return d; });
+    basculerFavoriCategorie(update, currentUser, id);
   };
 
   return (
@@ -4161,8 +4266,8 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
   // ambassadeurs) et une colonne "le reste" (spectacles, catégories, favoris) — d'où l'alternance
   // ci-dessous, à conserver si on ajoute une tuile.
   const stats = [
-    { label: "Plans de cours enregistrés", n: data.coursePlans.length, icon: ClipboardList, tab: "plans" },
-    { label: "Spectacles enregistrés", n: data.spectaclePlans.length, icon: Theater, tab: "plans" },
+    { label: "Plans de cours enregistrés", n: mesPlans(data.coursePlans, currentUser, isAdmin).length, icon: ClipboardList, tab: "plans" },
+    { label: "Spectacles enregistrés", n: mesPlans(data.spectaclePlans, currentUser, isAdmin).length, icon: Theater, tab: "plans" },
     { label: "Exercices créés", n: data.exercises.filter((e) => e.creatorUsername === currentUser).length, icon: Users, tab: "exercices-crees" },
     { label: "Catégories créées", n: data.categories.filter((c) => c.creatorUsername === currentUser).length, icon: Tag, tab: "categories-crees" },
     ...(CONCEPTS_SPECTACLE_VISIBLES
@@ -5093,11 +5198,7 @@ function ExercicesTab({ data, update, isAdmin, currentUser, profile, onlyUserCre
   const [rejectReason, setRejectReason] = useState("");
   const toggleFavorite = (id) => {
     if (!currentUser) { showToast("Désolé, il te faut un compte pour enregistrer tes créations !", { type: "notice" }); return; }
-    update((d) => {
-      const ex = d.exercises.find((x) => x.id === id);
-      if (ex) ex.favorite = !ex.favorite;
-      return d;
-    });
+    basculerFavoriExercice(update, currentUser, id);
   };
 
   const renderCard = (ex) =>
@@ -5958,11 +6059,7 @@ function CategoriesTab({ data, update, isAdmin, currentUser, profile, onlyUserCr
 
   const toggleFavorite = (id) => {
     if (!currentUser) { showToast("Désolé, il te faut un compte pour enregistrer tes créations !", { type: "notice" }); return; }
-    update((d) => {
-      const c = d.categories.find((x) => x.id === id);
-      if (c) c.favorite = !c.favorite;
-      return d;
-    });
+    basculerFavoriCategorie(update, currentUser, id);
   };
 
   // Stampe les champs de modération/attribution : les créations Admin sont publiées directement,
@@ -9561,7 +9658,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
   };
   const toggleFavEx = (id) => {
     if (!currentUser) { showToast("Désolé, il te faut un compte pour enregistrer tes créations !", { type: "notice" }); return; }
-    update((d) => { const e = d.exercises.find((x) => x.id === id); if (e) e.favorite = !e.favorite; return d; });
+    basculerFavoriExercice(update, currentUser, id);
     setPlan((prev) => {
       if (!prev) return prev;
       const flip = (arr) => arr.map((e) => (e.id === id ? { ...e, favorite: !e.favorite } : e));
@@ -9570,7 +9667,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
   };
   const toggleFavCat = (id) => {
     if (!currentUser) { showToast("Désolé, il te faut un compte pour enregistrer tes créations !", { type: "notice" }); return; }
-    update((d) => { const c = d.categories.find((x) => x.id === id); if (c) c.favorite = !c.favorite; return d; });
+    basculerFavoriCategorie(update, currentUser, id);
     setPlan((prev) => {
       if (!prev) return prev;
       return { ...prev, impro: prev.impro.map((c) => (c.id === id ? { ...c, favorite: !c.favorite } : c)) };
@@ -10110,7 +10207,8 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
               <Btn variant="accent" disabled={!name} onClick={() => {
                 update((d) => {
                   d.coursePlans.push({
-                    id: uid(), name,
+                    // Signé : ce plan ne s'affichera que chez son auteur (voir `mesPlans`).
+                    id: uid(), name, creatorUsername: currentUser || "",
                     exerciseIds: items.filter((it) => it.kind === "exercise").map((it) => it.ex.id),
                     categoryIds: items.filter((it) => it.kind === "category").map((it) => it.cat.id),
                     ambassadeurMancheIds,
@@ -10490,7 +10588,7 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
 
   const toggleFavCat = (id) => {
     if (!currentUser) { showToast("Désolé, il te faut un compte pour enregistrer tes créations !", { type: "notice" }); return; }
-    update((d) => { const c = d.categories.find((x) => x.id === id); if (c) c.favorite = !c.favorite; return d; });
+    basculerFavoriCategorie(update, currentUser, id);
     setResult((prev) => {
       if (!prev) return prev;
       const flip = (arr) => arr.map((c) => (c.id === id ? { ...c, favorite: !c.favorite } : c));
@@ -10832,7 +10930,8 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
               <Btn variant="accent" disabled={!name} onClick={() => {
                 update((d) => {
                   d.spectaclePlans.push({
-                    id: uid(), name, format, duree,
+                    // Signé : ce déroulé ne s'affichera que chez son auteur (voir `mesPlans`).
+                    id: uid(), name, format, duree, creatorUsername: currentUser || "",
                     categoryIds: allCats.map((c) => c.id),
                     durationsById,
                     matchModeById,
@@ -10958,7 +11057,7 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
   const handleCardTap = (id) => setExpandedId(expandedId === id ? null : id);
   const toggleFavorite = (id) => {
     if (!currentUser) { showToast("Désolé, il te faut un compte pour enregistrer tes créations !", { type: "notice" }); return; }
-    update((d) => { const e = d.exercises.find((x) => x.id === id); if (e) e.favorite = !e.favorite; return d; });
+    basculerFavoriExercice(update, currentUser, id);
     setList((prev) => prev.map((e) => (e.id === id ? { ...e, favorite: !e.favorite } : e)));
   };
   const remove = (idx) => setList((prev) => prev.filter((_, i) => i !== idx));
@@ -12632,6 +12731,12 @@ function PlansTab({ data, allData, update, setTab, currentUser, isAdmin, profile
   const exportSpectaclePlan = (plan) => exportSpectaclePlanPDF(plan, allData || data);
 
 
+  /* Chacun ne voit que ses plans — jusqu'au 2026-11-11, cet écran montrait ceux de tout le monde,
+     et le spectacle d'une troupe s'ouvrait chez une autre. Voir `mesPlans` pour le sort des plans
+     d'avant, qui n'ont pas d'auteur. */
+  const coursePlans = mesPlans(data.coursePlans, currentUser, isAdmin);
+  const spectaclePlans = mesPlans(data.spectaclePlans, currentUser, isAdmin);
+
   const totalCours = (plan) => {
     const ex = (plan.exerciseIds || []).map((id) => data.exercises.find((e) => e.id === id)).filter(Boolean);
     const cats = (plan.categoryIds || []).map((id) => data.categories.find((c) => c.id === id)).filter(Boolean);
@@ -12642,8 +12747,8 @@ function PlansTab({ data, allData, update, setTab, currentUser, isAdmin, profile
     <div>
       {setTab && <LibraryBackBtn onClick={() => setTab("bibliotheque")} />}
       <SectionHeader icon={ClipboardList} title="Plans de cours" subtitle="Retrouve, ajuste et exporte les plans enregistrés. Touche un plan pour l'ouvrir." />
-      {data.coursePlans.length === 0 && <Empty text="Aucun plan de cours enregistré pour l'instant." />}
-      {data.coursePlans.map((plan) => {
+      {coursePlans.length === 0 && <Empty text="Aucun plan de cours enregistré pour l'instant." />}
+      {coursePlans.map((plan) => {
         const ouvert = ouvertCours === plan.id;
         return (
           <IndexCard key={plan.id}>
@@ -12693,8 +12798,8 @@ function PlansTab({ data, allData, update, setTab, currentUser, isAdmin, profile
       })}
 
       <SectionHeader icon={Theater} title="Spectacles enregistrés" subtitle="Les déroulés de spectacle que tu as sauvegardés. Touche un spectacle pour l'ouvrir." />
-      {data.spectaclePlans.length === 0 && <Empty text="Aucun spectacle enregistré pour l'instant." />}
-      {data.spectaclePlans.map((plan) => {
+      {spectaclePlans.length === 0 && <Empty text="Aucun spectacle enregistré pour l'instant." />}
+      {spectaclePlans.map((plan) => {
         const ouvert = ouvertSpectacle === plan.id;
         return (
           <IndexCard key={plan.id}>
