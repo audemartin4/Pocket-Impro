@@ -292,10 +292,18 @@ Distinctions à respecter, elles pilotent les générateurs :
   (les 4 exercices et 2 manches qui la portaient la portaient toujours en plus d'« Adultes ») et
   allongeait un menu qui doit rester court. Le nettoyage des données se fait au chargement, sans
   flag `_…V1` — un `some()` suffit, comme pour le niveau « Expert ».
-  Côté ambassadeur, le tri et le filtre par âge du catalogue existent mais restent cachés derrière
-  `RECHERCHE_PAR_AGE_VISIBLE` (à `false` depuis le 2026-09-15), le temps que les âges soient
-  renseignés — sur une bibliothèque à moitié remplie, filtrer fait disparaître les manches qu'on n'a
-  pas encore cochées.
+  Côté ambassadeur, la tranche s'appelle `tranchesAge` et vit sur la **manche**, avec la même règle
+  (`convientAuPublicAmbassadeur()` : liste vide = tous publics, ce qui est le cas de 200 manches sur
+  211). Depuis le 2026-11-11, l'assembleur « Monter un ambassadeur » a son menu **Tranche d'âge**
+  à côté du thème et du niveau : il filtre la banque **en amont** (`banque`, d'où dérivent tous les
+  pools), contrairement au thème et au niveau qu'une partie trop maigre peut sacrifier — un public,
+  ça ne se sacrifie pas. Le menu ne s'affiche que si au moins une manche porte une tranche, sinon
+  il ne trierait rien. Le bouton « Piocher un ambassadeur » d'un plan de cours applique de son côté
+  la tranche choisie **pour le cours**, avant le niveau.
+  Le tri et le filtre par âge du **catalogue** de manches, eux, existent mais restent cachés
+  derrière `RECHERCHE_PAR_AGE_VISIBLE` (à `false` depuis le 2026-09-15), le temps que les âges
+  soient renseignés — sur une bibliothèque à moitié remplie, filtrer fait disparaître les manches
+  qu'on n'a pas encore cochées.
 - **Ambassadeur** (jeu de mime) : une **manche** (`ambassadeurManches`) est la brique réutilisable —
   un thème général, un titre, un niveau, des tranches d'âge, 5 mots ; c'est elle qui passe par la
   modération. Classement sur deux niveaux : `themeGeneral` vient de la liste **fermée**
@@ -331,13 +339,18 @@ Distinctions à respecter, elles pilotent les générateurs :
 Deux onglets, deux sources bien distinctes — et c'est la seule chose à retenir avant d'y toucher :
 
 - **Normal** tire dans six listes constantes du code (`IDEES_THEMES`, `IDEES_LIEUX`…). Depuis le
-  2026-11-11, l'Admin peut y ajouter des entrées : elles vont dans `data.ideesAjoutees`
-  (`{ [clé de catégorie]: string[] }`, dans le document partagé), **par-dessus** les constantes,
-  jamais dedans. Le tirage lit la concaténation des deux ; seules les idées ajoutées se retirent.
+  2026-11-11, l'Admin peut y ajouter et en retirer, via **deux** listes du document partagé, toutes
+  deux de forme `{ [clé de catégorie]: string[] }` : `data.ideesAjoutees` vient **par-dessus** les
+  constantes, `data.ideesRetirees` les masque. Le tirage lit `constantes + ajoutées − retirées`.
+  On ne peut pas supprimer une ligne d'une constante : retirer une idée d'origine la met donc de
+  côté (réversible d'un clic), tandis que retirer une idée ajoutée l'efface pour de bon. Corollaire
+  à ne pas oublier : retaper une idée mise de côté doit la **remettre en jeu** plutôt que la
+  dupliquer dans `ideesAjoutees` — c'est ce que fait `enregistrerIdees` avec sa liste `aRemettre`.
 - **Univers** tire dans la **fiche de la catégorie** choisie : `lieux`, `archetypes` (objets
   `{ id, name, desc }`) et `vocabulaireUnivers.lexique` (une chaîne séparée par des virgules, pas
   une liste). Le « + » de l'Admin écrit donc dans la fiche elle-même, ce qui se voit aussi dans la
-  bibliothèque — d'où son absence sur « Tous », où il n'y aurait pas de fiche où écrire.
+  bibliothèque — d'où son absence sur « Tous », où il n'y aurait pas de fiche où écrire. Ici, pas
+  de mise de côté : la fiche **est** la source, un retrait y est une vraie suppression.
 
 Dans les deux cas les doublons sont ignorés, accents et majuscules compris (`normalize`), et le
 tri se fait **hors** du `update()` : React peut appeler sa fonction de mise à jour plus tard, un

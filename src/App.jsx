@@ -405,6 +405,10 @@ const convientAuPublic = (f, tranche) => !tranche || !(f.publics || []).length |
    explicitement la tranche demandée ; celles qui n'ont aucun public coché ne servent que de
    complément, quand les premières manquent. Même idiome que le filtre de niveau des générateurs
    (`prioritized.length === 0 ? pool : prioritized`) : une priorité, jamais une exclusion. */
+/* Même règle côté ambassadeur, où la tranche s'appelle `tranchesAge` et non `publics` : une manche
+   sans tranche cochée vaut « tous publics ». C'est le cas de 200 manches sur 211 — un filtre strict
+   viderait la banque. */
+const convientAuPublicAmbassadeur = (m, tranche) => !tranche || !(m.tranchesAge || []).length || m.tranchesAge.includes(tranche);
 const prefereLePublic = (liste, tranche) => {
   if (!tranche) return liste;
   const exactes = liste.filter((f) => (f.publics || []).includes(tranche));
@@ -3178,15 +3182,23 @@ function GenererIdeesTab({ setTab, data, update, isAdmin }) {
   // `universUsed` plus bas, pour le mode Univers.
   const [ideesVues, setIdeesVues] = useState({}); // { [cat.key]: Set<string> }
 
-  /* Idées ajoutées par l'Admin, enregistrées dans le document partagé (`ideesAjoutees`, une liste
-     par catégorie). Les six listes d'origine restent des constantes du code : les ajouts viennent
-     par-dessus, personne ne peut casser le fonds commun en se trompant de champ. */
+  /* Idées ajoutées par l'Admin (`ideesAjoutees`) et idées mises de côté (`ideesRetirees`), une
+     liste par catégorie dans le document partagé. Les six listes d'origine restent des constantes
+     du code : on ne peut pas en retirer une ligne, on note donc à côté celles qui ne doivent plus
+     sortir. Rien n'est perdu — « remettre » les ramène, et personne ne peut casser le fonds commun
+     en se trompant de champ. */
   const [edition, setEdition] = useState(null); // clé de la catégorie dont l'Admin ouvre le formulaire
   const [ajout, setAjout] = useState("");
+  const [recherche, setRecherche] = useState(""); // pour retrouver une idée à retirer parmi 200
   const [toastMsg, showToast] = useToast();
   const ajoutsDe = (key) => (data?.ideesAjoutees || {})[key] || [];
-  const listeIdees = (cat) => [...(cat.list || []), ...ajoutsDe(cat.key)];
-  const ouvrirEdition = (key) => { setEdition(edition === key ? null : key); setAjout(""); };
+  const retireesDe = (key) => (data?.ideesRetirees || {})[key] || [];
+  const toutesLesIdees = (cat) => [...(cat.list || []), ...ajoutsDe(cat.key)];
+  const listeIdees = (cat) => {
+    const retirees = new Set(retireesDe(cat.key).map(normalize));
+    return toutesLesIdees(cat).filter((v) => !retirees.has(normalize(v)));
+  };
+  const ouvrirEdition = (key) => { setEdition(edition === key ? null : key); setAjout(""); setRecherche(""); };
   const enregistrerIdees = (cat) => {
     const proposees = ajout.split("\n").map((s) => s.trim()).filter(Boolean);
     if (proposees.length === 0) return;
@@ -3194,35 +3206,73 @@ function GenererIdeesTab({ setTab, data, update, isAdmin }) {
     // plus tard, et le message annoncerait alors toujours « rien d'ajouté ».
     // Doublons ignorés en silence, accents et majuscules compris : la liste d'origine compte
     // déjà des centaines d'entrées, personne ne peut la relire avant de coller la sienne.
-    const deja = new Set([...(cat.list || []), ...ajoutsDe(cat.key)].map(normalize));
+    const visibles = new Set(listeIdees(cat).map(normalize));
+    const connues = new Set(toutesLesIdees(cat).map(normalize));
     const nouvelles = [];
+    const aRemettre = []; // déjà dans la liste d'origine, mais mise de côté : on la ramène
     for (const mot of proposees) {
-      if (deja.has(normalize(mot))) continue;
-      deja.add(normalize(mot));
+      const n = normalize(mot);
+      if (visibles.has(n)) continue;
+      visibles.add(n);
+      if (connues.has(n)) { aRemettre.push(n); continue; }
+      connues.add(n);
       nouvelles.push(mot);
     }
-    if (nouvelles.length > 0) {
+    if (nouvelles.length > 0 || aRemettre.length > 0) {
       update((d) => {
-        d.ideesAjoutees = d.ideesAjoutees || {};
-        d.ideesAjoutees[cat.key] = [...(d.ideesAjoutees[cat.key] || []), ...nouvelles];
+        if (nouvelles.length > 0) {
+          d.ideesAjoutees = d.ideesAjoutees || {};
+          d.ideesAjoutees[cat.key] = [...(d.ideesAjoutees[cat.key] || []), ...nouvelles];
+        }
+        if (aRemettre.length > 0) {
+          d.ideesRetirees = d.ideesRetirees || {};
+          d.ideesRetirees[cat.key] = (d.ideesRetirees[cat.key] || []).filter((v) => !aRemettre.includes(normalize(v)));
+        }
         return d;
       });
     }
-    const ignorees = proposees.length - nouvelles.length;
+    const faites = nouvelles.length + aRemettre.length;
+    const ignorees = proposees.length - faites;
+    const bouts = [];
+    if (nouvelles.length > 0) bouts.push(`${nouvelles.length} ajoutée${nouvelles.length > 1 ? "s" : ""}`);
+    if (aRemettre.length > 0) bouts.push(`${aRemettre.length} remise${aRemettre.length > 1 ? "s" : ""} en jeu`);
+    if (ignorees > 0) bouts.push(`${ignorees} déjà présente${ignorees > 1 ? "s" : ""}`);
     showToast(
-      nouvelles.length === 0
-        ? "Rien d'ajouté : ces idées existent déjà."
-        : `${nouvelles.length} idée${nouvelles.length > 1 ? "s" : ""} ajoutée${nouvelles.length > 1 ? "s" : ""}${ignorees > 0 ? ` · ${ignorees} déjà présente${ignorees > 1 ? "s" : ""}` : ""}`,
-      nouvelles.length === 0 ? { type: "notice" } : undefined
+      faites === 0 ? "Rien d'ajouté : ces idées existent déjà." : bouts.join(" · "),
+      faites === 0 ? { type: "notice" } : undefined
     );
     setAjout("");
   };
+  // Retirer une idée ajoutée, c'est l'effacer ; retirer une idée d'origine, c'est la mettre de côté.
   const retirerIdee = (cat, mot) => {
+    const estUnAjout = ajoutsDe(cat.key).includes(mot);
     update((d) => {
-      d.ideesAjoutees = d.ideesAjoutees || {};
-      d.ideesAjoutees[cat.key] = (d.ideesAjoutees[cat.key] || []).filter((v) => v !== mot);
+      if (estUnAjout) {
+        d.ideesAjoutees = d.ideesAjoutees || {};
+        d.ideesAjoutees[cat.key] = (d.ideesAjoutees[cat.key] || []).filter((v) => v !== mot);
+      } else {
+        d.ideesRetirees = d.ideesRetirees || {};
+        const deja = d.ideesRetirees[cat.key] || [];
+        if (!deja.includes(mot)) d.ideesRetirees[cat.key] = [...deja, mot];
+      }
       return d;
     });
+  };
+  const remettreIdee = (cat, mot) => {
+    update((d) => {
+      d.ideesRetirees = d.ideesRetirees || {};
+      d.ideesRetirees[cat.key] = (d.ideesRetirees[cat.key] || []).filter((v) => v !== mot);
+      return d;
+    });
+  };
+  // Au-delà d'une quarantaine d'idées, on ne déroule pas la liste entière : on cherche.
+  // `null` veut dire « tape quelques lettres », et se distingue d'une recherche sans résultat.
+  const IDEES_SANS_RECHERCHE = 40;
+  const ideesARetirer = (cat) => {
+    const liste = listeIdees(cat);
+    const q = normalize(recherche.trim());
+    if (!q) return liste.length <= IDEES_SANS_RECHERCHE ? liste : null;
+    return liste.filter((v) => normalize(v).includes(q)).slice(0, 60);
   };
 
   const draw = (cat) => {
@@ -3327,6 +3377,25 @@ function GenererIdeesTab({ setTab, data, update, isAdmin }) {
     );
     setAjoutUnivers("");
   };
+  /* Retirer, côté Univers, c'est une vraie suppression dans la fiche — pas une mise de côté comme
+     en mode Normal : ici il n'y a pas de liste d'origine dans le code à protéger, la fiche EST la
+     source. Les listes font une dizaine d'entrées, on les affiche donc en entier, sans recherche. */
+  const retirerUnivers = (type, valeur) => {
+    if (!selectedUnivers) return;
+    const cibleId = selectedUnivers.id;
+    update((d) => {
+      const c = (d.categories || []).find((x) => x.id === cibleId);
+      if (!c) return d;
+      if (type === "lieu") c.lieux = (c.lieux || []).filter((v) => v !== valeur);
+      else if (type === "personnage") c.archetypes = (c.archetypes || []).filter((a) => a.name !== valeur);
+      else {
+        c.vocabulaireUnivers = c.vocabulaireUnivers || {};
+        c.vocabulaireUnivers.lexique = (c.vocabulaireUnivers.lexique || "")
+          .split(",").map((s) => s.trim()).filter((s) => s && s !== valeur).join(", ");
+      }
+      return d;
+    });
+  };
 
   return (
     <div>
@@ -3401,19 +3470,65 @@ function GenererIdeesTab({ setTab, data, update, isAdmin }) {
                       <Plus size={13} /> Ajouter
                     </Btn>
                   </div>
-                  {ajoutsDe(cat.key).length > 0 && (
-                    <div className="mt-2">
+
+                  {/* Retirer : la croix d'une pastille sort l'idée du tirage, qu'elle vienne de la
+                      liste d'origine ou d'un ajout. Rien n'est perdu — tout ce qui sort se retrouve
+                      juste en dessous, et se remet d'un clic. */}
+                  <div className="mt-3 pt-2" style={{ borderTop: `1px solid ${COLORS.cardEdge}` }}>
+                    <div style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase mb-1">
+                      Retirer une idée ({listeIdees(cat).length} en jeu)
+                    </div>
+                    {listeIdees(cat).length > IDEES_SANS_RECHERCHE && (
+                      <input
+                        className={inputClass}
+                        style={{ ...inputStyle, marginBottom: 6 }}
+                        value={recherche}
+                        onChange={(e) => setRecherche(e.target.value)}
+                        placeholder="Chercher une idée…"
+                      />
+                    )}
+                    {ideesARetirer(cat) === null ? (
+                      <p className="text-xs italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+                        Tape quelques lettres pour retrouver l'idée à retirer.
+                      </p>
+                    ) : ideesARetirer(cat).length === 0 ? (
+                      <p className="text-xs italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+                        Aucune idée ne correspond.
+                      </p>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5">
+                        {ideesARetirer(cat).map((mot) => (
+                          <TagPill
+                            key={mot}
+                            label={mot}
+                            color={ajoutsDe(cat.key).includes(mot) ? COLORS.brass : COLORS.textSoft}
+                            onRemove={() => retirerIdee(cat, mot)}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {retireesDe(cat.key).length > 0 && (
+                    <div className="mt-3 pt-2" style={{ borderTop: `1px solid ${COLORS.cardEdge}` }}>
                       <div style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase mb-1">
-                        Idées ajoutées ({ajoutsDe(cat.key).length})
+                        Retirées du tirage ({retireesDe(cat.key).length})
                       </div>
                       <div className="flex flex-wrap gap-1.5">
-                        {ajoutsDe(cat.key).map((mot) => (
-                          <TagPill key={mot} label={mot} color={COLORS.brass} onRemove={() => retirerIdee(cat, mot)} />
+                        {retireesDe(cat.key).map((mot) => (
+                          <button
+                            key={mot}
+                            onClick={() => remettreIdee(cat, mot)}
+                            title={`Remettre « ${mot} » dans le tirage`}
+                            className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs"
+                            style={{ fontFamily: FONT_BODY, background: "transparent", border: `1px dashed ${COLORS.textSoft}`, color: COLORS.textSoft }}
+                          >
+                            <Plus size={11} /> {mot}
+                          </button>
                         ))}
                       </div>
                       <p className="text-xs mt-1 italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-                        Seules les idées ajoutées ici peuvent être retirées : les {(cat.list || []).length} idées
-                        d'origine font partie de l'appli.
+                        Clique pour la remettre dans le tirage.
                       </p>
                     </div>
                   )}
@@ -3492,9 +3607,22 @@ function GenererIdeesTab({ setTab, data, update, isAdmin }) {
                     <Btn small variant="accent" disabled={!ajoutUnivers.trim()} onClick={() => enregistrerUnivers(btn.key)}>
                       <Plus size={13} /> Ajouter
                     </Btn>
+                    {listForType(selectedUnivers, btn.key).length > 0 && (
+                      <div className="mt-3 pt-2" style={{ borderTop: `1px solid ${COLORS.cardEdge}` }}>
+                        <div style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase mb-1">
+                          Retirer ({listForType(selectedUnivers, btn.key).length})
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {listForType(selectedUnivers, btn.key).map((v) => (
+                            <TagPill key={v} label={v} color={COLORS.brass} onRemove={() => retirerUnivers(btn.key, v)} />
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     <p className="text-xs mt-2 italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-                      L'ajout va directement dans la fiche de la catégorie « {selectedUnivers.name} » :
-                      il s'affiche aussi dans la bibliothèque, et se retire depuis la fiche.
+                      Ajouts et retraits vont directement dans la fiche de la catégorie
+                      « {selectedUnivers.name} » : ils se voient aussi dans la bibliothèque. Ici, un
+                      retrait est une vraie suppression — il faudra retaper l'entrée pour la remettre.
                     </p>
                   </IndexCard>
                 )}
@@ -7088,6 +7216,11 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditMa
   // d'un même ambassadeur à partager leur thème.
   const [themeFiltre, setThemeFiltre] = useState("");
   const [niveauFiltre, setNiveauFiltre] = useState("");
+  // Tranche d'âge visée, même vocabulaire et même règle que les générateurs : une manche sans
+  // tranche cochée vaut « tous publics » et reste proposée — c'est le cas de 200 manches sur 211,
+  // le filtre ne doit donc rien vider. Contrairement au thème et au niveau, il s'applique en amont,
+  // sur la banque elle-même : un public, ça ne se sacrifie pas pour compléter une partie.
+  const [ageFiltre, setAgeFiltre] = useState("");
   // Ce que la dernière proposition a dû concéder, à dire au maître du jeu.
   const [noteProposition, setNoteProposition] = useState(null);
 
@@ -7099,19 +7232,24 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditMa
   // manche pour jouer, enregistrer ou rattacher à un cours.
   const auMoinsUneManche = manchesChoisies.length > 0;
   const complet = slots.every(Boolean);
-  const manchesFiltrees = manchesDispo
+  // La banque vue à travers la tranche d'âge demandée. `manchesDispo` reste la référence pour
+  // retrouver une manche déjà posée : changer de tranche ne doit pas faire disparaître de l'écran
+  // les manches qu'on a choisies avant.
+  const banque = manchesDispo.filter((m) => convientAuPublicAmbassadeur(m, ageFiltre));
+  const manchesFiltrees = banque
     .filter((m) => !themeFiltre || m.themeGeneral === themeFiltre)
     .filter((m) => !niveauFiltre || m.level === niveauFiltre);
   // On peut toujours changer une manche tant qu'il en existe une autre, même si le filtre courant
   // est épuisé : le sélecteur montre alors toute la banque plutôt qu'une liste vide.
-  const resteAPiocher = manchesDispo.some((m) => !slots.includes(m.id));
-  const vivierDuSelecteur = manchesFiltrees.some((m) => !slots.includes(m.id)) ? manchesFiltrees : manchesDispo;
+  const resteAPiocher = banque.some((m) => !slots.includes(m.id));
+  const vivierDuSelecteur = manchesFiltrees.some((m) => !slots.includes(m.id)) ? manchesFiltrees : banque;
   const themesDisponibles = AMBASSADEUR_THEMES_GENERAUX.filter((t) => manchesDispo.some((m) => m.themeGeneral === t));
   const niveauxDisponibles = NIVEAUX.filter((n) => manchesDispo.some((m) => m.level === n));
+  const agesDisponibles = TRANCHES_AGE.filter((a) => manchesDispo.some((m) => (m.tranchesAge || []).includes(a)));
   // Deux propositions distinctes, et le THÈME PRIME : demander un thème ratisse tous les niveaux —
   // un ambassadeur « Cinéma » reste un ambassadeur Cinéma —, tandis que demander un niveau reste à
   // l'intérieur du thème choisi s'il y en a un. C'est le niveau qu'on sacrifie, jamais le thème.
-  const poolParTheme = themeFiltre ? manchesDispo.filter((m) => m.themeGeneral === themeFiltre) : [];
+  const poolParTheme = themeFiltre ? banque.filter((m) => m.themeGeneral === themeFiltre) : [];
   const poolParNiveau = niveauFiltre ? manchesFiltrees : [];
 
   const setSlot = (i, id) => setSlots((prev) => prev.map((v, j) => (j === i ? id : v)));
@@ -7129,7 +7267,7 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditMa
     const exactes = shuffleArray(poolParTheme).slice(0, AMBASSADEUR_MANCHES_PAR_PARTIE);
     const manque = AMBASSADEUR_MANCHES_PAR_PARTIE - exactes.length;
     if (manque <= 0) { setNoteProposition(null); poser(exactes); return; }
-    const voisines = shuffleArray(manchesVoisines(themeFiltre, manchesDispo)).slice(0, manque);
+    const voisines = shuffleArray(manchesVoisines(themeFiltre, banque)).slice(0, manque);
     setNoteProposition(
       voisines.length === 0
         ? `Seulement ${exactes.length} manche(s) en ${themeFiltre} : la partie sera plus courte.`
@@ -7148,7 +7286,7 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditMa
     if (manque <= 0) { setNoteProposition(null); poser(exactes); return; }
     const dejaPris = new Set(exactes.map((m) => m.id));
     // On élargit d'abord aux autres niveaux du thème, puis aux rayons voisins par le sujet.
-    const autourDuTheme = themeFiltre ? [...poolParTheme, ...manchesVoisines(themeFiltre, manchesDispo)] : manchesDispo;
+    const autourDuTheme = themeFiltre ? [...poolParTheme, ...manchesVoisines(themeFiltre, banque)] : banque;
     const complement = shuffleArray(autourDuTheme.filter((m) => !dejaPris.has(m.id) && m.level !== niveauFiltre)).slice(0, manque);
     const niveauxAjoutes = [...new Set(complement.map((m) => m.level).filter(Boolean))];
     setNoteProposition(
@@ -7204,6 +7342,16 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditMa
                 {niveauxDisponibles.map((n) => <option key={n}>{n}</option>)}
               </select>
             </Field>
+            {/* Le menu d'âge ne s'affiche que si au moins une manche porte une tranche : tant que la
+                banque n'est pas renseignée, il n'écarterait rien et ferait croire à un tri. */}
+            {agesDisponibles.length > 0 && (
+              <Field label="Tranche d'âge (facultatif)">
+                <select className={inputClass} style={inputStyle} value={ageFiltre} onChange={(e) => setAgeFiltre(e.target.value)}>
+                  <option value="">Tous les âges</option>
+                  {agesDisponibles.map((a) => <option key={a}>{a}</option>)}
+                </select>
+              </Field>
+            )}
           </div>
           {/* Une proposition par critère posé. */}
           {(themeFiltre || niveauFiltre) && (
@@ -7215,7 +7363,7 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditMa
                 <Btn
                   small
                   variant="accent"
-                  disabled={poolParTheme.length === 0 && manchesVoisines(themeFiltre, manchesDispo).length === 0}
+                  disabled={poolParTheme.length === 0 && manchesVoisines(themeFiltre, banque).length === 0}
                   onClick={proposerParTheme}
                 >
                   <Shuffle size={13} /> {AMBASSADEUR_MANCHES_PAR_PARTIE} manches · {themeFiltre}
@@ -7226,7 +7374,7 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditMa
                 <div>
                   {/* Actif même s'il manque des manches de ce niveau : il complètera avec d'autres
                       niveaux du même thème et le signalera. */}
-                  <Btn small variant="accent" disabled={(themeFiltre ? poolParTheme : manchesDispo).length === 0} onClick={proposerParNiveau}>
+                  <Btn small variant="accent" disabled={(themeFiltre ? poolParTheme : banque).length === 0} onClick={proposerParNiveau}>
                     <Shuffle size={13} /> {AMBASSADEUR_MANCHES_PAR_PARTIE} manches · {niveauFiltre}
                     {themeFiltre ? ` · ${themeFiltre}` : ""}
                   </Btn>
@@ -8008,7 +8156,7 @@ function AmbassadeursTab({ data, update, setTab, currentUser, isAdmin, profile, 
 
 /* Carte affichée sous l'exercice "Ambassadeur" dans un plan de cours : rattache une partie au cours
    et permet de la lancer sans quitter l'écran. */
-function AmbassadeurPlanCard({ data, mancheIds, onChange, currentUser, isAdmin, profile, update, niveau, lecture }) {
+function AmbassadeurPlanCard({ data, mancheIds, onChange, currentUser, isAdmin, profile, update, niveau, publicVise, lecture }) {
   const [playing, setPlaying] = useState(false);
   const [themesVisibles, setThemesVisibles] = useState(false);
   const [creation, setCreation] = useState(false);
@@ -8111,8 +8259,13 @@ function AmbassadeurPlanCard({ data, mancheIds, onChange, currentUser, isAdmin, 
   // Tirage au niveau du cours quand il en a un ; on élargit à toute la bibliothèque s'il n'y a pas
   // assez de manches de ce niveau pour monter les trois manches.
   const piocher = () => {
-    const memeNiveau = niveau ? dispo.filter((m) => m.level === niveau) : [];
-    const pool = memeNiveau.length >= AMBASSADEUR_MANCHES_PAR_PARTIE ? memeNiveau : dispo;
+    // La tranche d'âge du cours s'applique d'abord : on ne pioche pas une manche réservée aux
+    // adultes pour un cours d'enfants. Comme ailleurs, une manche sans tranche cochée vaut
+    // « tous publics » et reste tirable.
+    const pourCeCours = dispo.filter((m) => convientAuPublicAmbassadeur(m, publicVise));
+    const base = pourCeCours.length >= AMBASSADEUR_MANCHES_PAR_PARTIE ? pourCeCours : dispo;
+    const memeNiveau = niveau ? base.filter((m) => m.level === niveau) : [];
+    const pool = memeNiveau.length >= AMBASSADEUR_MANCHES_PAR_PARTIE ? memeNiveau : base;
     onChange(shuffleArray(pool).slice(0, AMBASSADEUR_MANCHES_PAR_PARTIE).map((m) => m.id));
   };
 
@@ -9868,6 +10021,7 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
                 profile={profile}
                 update={update}
                 niveau={niveau}
+                publicVise={publicVise}
               />
             ) : null;
             if (!listKey) return <React.Fragment key={it.cle}>{prefixButtons}{card}{ambassadeurCard}{inlinePicker}</React.Fragment>;
