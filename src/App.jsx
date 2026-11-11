@@ -7046,6 +7046,21 @@ function AmbassadeurMancheForm({ initial, data, onSave, onCancel, saveLabel = "E
   // Date d'ouverture à la communauté : deux semaines après la création. À la modification, on garde
   // la date de création d'origine — partager une vieille manche ne relance pas le compte à rebours.
   const ouvertureCommunaute = (initial?.createdAt || Date.now()) + AMBASSADEUR_EMBARGO_JOURS * 24 * 3600 * 1000;
+  /* Dit en relatif, pas par une date. Une date absolue vieillit mal dans ce formulaire : l'embargo
+     court depuis la CRÉATION de la manche, alors en rouvrant une vieille manche pour la partager,
+     on lisait « visible à partir du 12 septembre » — une date déjà passée depuis deux mois, qui ne
+     veut plus rien dire. Pour une manche dont l'embargo est écoulé, c'est le contraire qu'il faut
+     annoncer : elle s'ouvrira dès sa validation. */
+  const joursAvantOuverture = Math.ceil((ouvertureCommunaute - Date.now()) / (24 * 3600 * 1000));
+  const delaiOuverture =
+    joursAvantOuverture <= 0 ? null
+    : joursAvantOuverture === 1 ? "demain"
+    // « Quinze jours », c'est la quinzaine : la façon normale de dire deux semaines en français.
+    : joursAvantOuverture >= AMBASSADEUR_EMBARGO_JOURS ? "dans 15 jours"
+    : `dans ${joursAvantOuverture} jours`;
+  const phraseEmbargo = delaiOuverture
+    ? `elle ne sera visible par la communauté que ${delaiOuverture}, afin d'éviter les risques de triches, parce que les improvisateurs sont des filous !`
+    : "elle sera visible par la communauté aussitôt.";
 
   const setMot = (i, v) => setMots((prev) => prev.map((m, j) => (j === i ? v : m)));
   // Seuls les mots sont obligatoires : ce sont eux qu'on mime. Le thème, le titre, le niveau et les
@@ -7115,8 +7130,8 @@ function AmbassadeurMancheForm({ initial, data, onSave, onCancel, saveLabel = "E
           <LigneOuiNon premiere label="Partager cette manche avec la communauté" value={partage} onChange={setPartage} />
           <p className="text-xs mb-2 italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
             {partage
-              ? `Si ta manche est validée, elle ne sera visible par la communauté qu'à partir du ${formatJour(ouvertureCommunaute)}, afin d'éviter les risques de triches, parce que les improvisateurs sont des filous !`
-              : `Elle restera visible de toi seul(e), et ne passera pas par la modération, mais si tu la partages et qu'elle est validée par la modération, elle ne sera visible par la communauté qu'à partir du ${formatJour(ouvertureCommunaute)}, afin d'éviter les risques de triches, parce que les improvisateurs sont des filous !`}
+              ? `Si ta manche est validée, ${phraseEmbargo}`
+              : `Elle restera visible de toi seul(e), et ne passera pas par la modération, mais si tu la partages et qu'elle est validée par la modération, ${phraseEmbargo}`}
           </p>
         </>
       )}
