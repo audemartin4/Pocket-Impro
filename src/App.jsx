@@ -3836,9 +3836,6 @@ function Accueil({ setTab, hasCoursPlan, hasSpectaclePlan, hasEchauffementPlan, 
           </button>
         ))}
       </div>
-      <p className="text-xs text-center mt-6" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-        Prochainement : Choix par tranche d'âge
-      </p>
     </div>
   );
 }
