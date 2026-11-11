@@ -266,11 +266,22 @@ Distinctions à respecter, elles pilotent les générateurs :
   retenues gardent leurs voisines, donc la règle des fiches proches reste vérifiée. Sa probabilité
   d'être tirée ne change pas ; seule sa place change. Repérée par son titre, comme « Ambassadeur ».
 - **`publics`** : tranches d'âge d'une fiche d'exercice **ou de catégorie**
-  (`"Enfants" | "Ados" | "Adultes" | "Senior"`, même vocabulaire que `TRANCHES_AGE`). Se saisit dans
-  les deux formulaires (`ChoixPublics`, quatre pastilles à cocher) et s'affiche sur la fiche dépliée
-  de la bibliothèque. **Liste vide = tous publics** : c'est l'état de la quasi-totalité des fiches en
-  base, aucun écran ne doit donc les traiter comme « sans public ». Aucun générateur ne s'en sert
-  encore : il attend le « choix par tranche d'âge » annoncé sur l'accueil.
+  (`"Enfants" | "Ados" | "Adultes"`, même vocabulaire que `TRANCHES_AGE`). Se saisit dans
+  les deux formulaires (`ChoixPublics`, trois pastilles à cocher) et s'affiche sur la fiche dépliée
+  de la bibliothèque. **Liste vide = tous publics** : 37 exercices et 30 catégories sont dans ce
+  cas, aucun écran ne doit donc les traiter comme « sans public ». Les **trois générateurs** s'en
+  servent depuis le 2026-11-11 : un menu « Tranche d'âge » (par défaut **Adultes**,
+  `PUBLIC_PAR_DEFAUT`) écarte du tirage les fiches dont les `publics` ne contiennent pas la tranche
+  choisie — `convientAuPublic()`, branché sur `warmupAll` / `middlePool` / `categoriesDispo` dans
+  `buildCours`, sur `categoriesNiveau` dans `buildSpectacle`, et sur le `warmupAll` de
+  `GenerateurEchauffementTab`. Les boutons « Aléatoire » d'une carte, eux, restent libres, comme
+  ils le sont déjà du niveau et de l'effectif. À « Adultes », le filtre ne retire presque rien
+  (388 exercices sur 389, toutes les catégories) ; à « Enfants » il retire 164 exercices et
+  45 catégories.
+  La tranche **`"Senior"` a été retirée le 2026-11-11** : elle ne distinguait rien d'« Adultes »
+  (les 4 exercices et 2 manches qui la portaient la portaient toujours en plus d'« Adultes ») et
+  allongeait un menu qui doit rester court. Le nettoyage des données se fait au chargement, sans
+  flag `_…V1` — un `some()` suffit, comme pour le niveau « Expert ».
   Côté ambassadeur, le tri et le filtre par âge du catalogue existent mais restent cachés derrière
   `RECHERCHE_PAR_AGE_VISIBLE` (à `false` depuis le 2026-09-15), le temps que les âges soient
   renseignés — sur une bibliothèque à moitié remplie, filtrer fait disparaître les manches qu'on n'a
