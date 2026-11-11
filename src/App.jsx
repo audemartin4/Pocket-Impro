@@ -402,8 +402,11 @@ const DEBRIEF_MIN = 15;
    et elle allongeait un menu qui doit rester court dans les générateurs. Les fiches et manches
    déjà enregistrées sont nettoyées au chargement (voir mergeMissingCategories). */
 const TRANCHES_AGE = ["Enfants", "Ados", "Adultes"];
-// Le public visé par défaut dans les trois générateurs : c'est celui de la quasi-totalité des cours.
-const PUBLIC_PAR_DEFAUT = "Adultes";
+/* Le public visé par défaut dans les trois générateurs. Chaîne vide = « Tous » : on ne restreint
+   rien tant que l'utilisateur n'a pas choisi sa tranche. Le réglage a d'abord été « Adultes »
+   (2026-11-11), mais un défaut qui filtre fait disparaître des fiches sans qu'on ait rien demandé —
+   mieux vaut proposer toute la bibliothèque et laisser choisir. */
+const PUBLIC_PAR_DEFAUT = "";
 /* Une fiche sans `publics` vaut « tous publics » — c'est l'état de 37 exercices et 30 catégories,
    elles ne doivent pas disparaître des générateurs du jour au lendemain. */
 const convientAuPublic = (f, tranche) => !tranche || !(f.publics || []).length || f.publics.includes(tranche);
@@ -7131,17 +7134,19 @@ function AmbassadeurMancheForm({ initial, data, onSave, onCancel, saveLabel = "E
           ))}
         </div>
       </Field>
-      {/* Sans compte, la manche ne quitte pas le navigateur : la question du partage ne se pose pas. */}
-      {peutPartager && (
+      {/* Sans compte, la manche ne quitte pas le navigateur : la question du partage ne se pose pas.
+          Et sur une manche déjà publiée, elle ne se pose plus : le choix a été fait, la manche est
+          dans la bibliothèque de toute la troupe. L'interrupteur et sa note disparaissent donc tous
+          les deux — `partage` garde sa valeur de départ (true) et la manche reste publiée à
+          l'enregistrement. Pour la retirer, il reste la corbeille et la modération. */}
+      {peutPartager && !dejaDansLaBibliotheque && (
         <>
           <LigneOuiNon premiere label="Partager cette manche avec la communauté" value={partage} onChange={setPartage} />
-          {!dejaDansLaBibliotheque && (
-            <p className="text-xs mb-2 italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-              {partage
-                ? `Si ta manche est validée, ${phraseEmbargo}`
-                : `Elle restera visible de toi seul(e), et ne passera pas par la modération, mais si tu la partages et qu'elle est validée par la modération, ${phraseEmbargo}`}
-            </p>
-          )}
+          <p className="text-xs mb-2 italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+            {partage
+              ? `Si ta manche est validée, ${phraseEmbargo}`
+              : `Elle restera visible de toi seul(e), et ne passera pas par la modération, mais si tu la partages et qu'elle est validée par la modération, ${phraseEmbargo}`}
+          </p>
         </>
       )}
       <div className="flex gap-2 mt-2">

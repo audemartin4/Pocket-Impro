@@ -271,7 +271,10 @@ Distinctions à respecter, elles pilotent les générateurs :
   de la bibliothèque. **Liste vide = tous publics** : 37 exercices et 30 catégories sont dans ce
   cas, aucun écran ne doit donc les traiter comme « sans public ». Les **trois générateurs** s'en
   servent depuis le 2026-11-11 : un menu « Tranche d'âge » (Tous / Enfants / Ados / Adultes, par
-  défaut **Adultes**, `PUBLIC_PAR_DEFAUT`) qui agit à **deux niveaux**.
+  défaut **Tous**, `PUBLIC_PAR_DEFAUT = ""`) qui agit à **deux niveaux**. Le défaut a été
+  « Adultes » quelques heures le 2026-11-11 : un défaut qui filtre écarte des fiches sans que
+  personne l'ait demandé, on laisse donc toute la bibliothèque tant que la tranche n'est pas
+  choisie. Les chiffres ci-dessous valent quand une tranche l'est.
   1. `convientAuPublic()` **écarte** du tirage les fiches dont les `publics` ne contiennent pas la
      tranche choisie — branché sur `warmupAll` / `middlePool` / `categoriesDispo` dans `buildCours`,
      sur `categoriesNiveau` dans `buildSpectacle`, et sur le `warmupAll` de
