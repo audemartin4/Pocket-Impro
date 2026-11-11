@@ -316,11 +316,17 @@ const MIN_CARD_DURATION = 2;
 // — sans rien supprimer. Les fiches restent en base, la modération et la page "Validés" de l'Admin
 // continuent de les voir, et repasser cette constante à `true` remet tout en place.
 const CONCEPTS_SPECTACLE_VISIBLES = false;
-// Recherche par tranche d'âge dans le catalogue des manches d'ambassadeur : le tri et le filtre
-// existent et fonctionnent, mais ils restent cachés tant qu'Aude n'a pas renseigné les âges des
-// fiches (2026-09-15). Les montrer sur une bibliothèque à moitié remplie ferait passer pour absente
-// toute manche dont personne n'a encore coché la tranche. Repasser à `true` les remet en place ;
-// ils continuent par ailleurs de ne s'afficher que si au moins une manche porte un âge.
+// Tranche d'âge côté AMBASSADEUR : tout est écrit et fonctionne, mais rien ne s'affiche tant
+// qu'Aude n'a pas renseigné les âges des manches (11 sur 211 au 2026-11-11). Sur une banque à
+// peine cochée, un filtre ne trierait presque rien tout en laissant croire qu'il trie — et un
+// menu qui ne change rien se retourne contre l'appli. Ce drapeau couvre trois choses :
+//   - le tri et le filtre par âge du catalogue de manches (depuis le 2026-09-15) ;
+//   - le menu « Tranche d'âge » de l'assembleur « Monter un ambassadeur » ;
+//   - la tranche du cours appliquée par « Piocher un ambassadeur ».
+// Repasser à `true` remet le tout en place d'un coup. Les deux premiers continuent par ailleurs de
+// ne s'afficher que si au moins une manche porte un âge.
+// Rien à voir avec les tranches d'âge des EXERCICES et CATÉGORIES (champ `publics`), elles, bien
+// renseignées et actives dans les trois générateurs.
 const RECHERCHE_PAR_AGE_VISIBLE = false;
 const SECTIONS_EXERCICE = ["Échauffement", "Pré-impro", "Impro"];
 const FORMATS_JEU = ["Solo simultané", "En groupe simultané", "Tour à tour avec spectateur", "En cercle", "Déambulation"];
@@ -7042,7 +7048,6 @@ function AmbassadeurMancheForm({ initial, data, onSave, onCancel, saveLabel = "E
   const ouvertureCommunaute = (initial?.createdAt || Date.now()) + AMBASSADEUR_EMBARGO_JOURS * 24 * 3600 * 1000;
 
   const setMot = (i, v) => setMots((prev) => prev.map((m, j) => (j === i ? v : m)));
-  const toggleAge = (a) => setTranchesAge((prev) => (prev.includes(a) ? prev.filter((x) => x !== a) : [...prev, a]));
   // Seuls les mots sont obligatoires : ce sont eux qu'on mime. Le thème, le titre, le niveau et les
   // tranches d'âge servent à ranger et à filtrer — on peut les remplir plus tard, ou jamais.
   const complet = mots.every((m) => m.trim());
@@ -7084,31 +7089,19 @@ function AmbassadeurMancheForm({ initial, data, onSave, onCancel, saveLabel = "E
           proposerAvantSaisie={false}
         />
       </Field>
-      <div className="grid grid-cols-2 gap-2">
-        <Field label="Niveau">
-          <select className={inputClass} style={inputStyle} value={level} onChange={(e) => setLevel(e.target.value)}>
-            <option value="">Choisir…</option>
-            {NIVEAUX.map((n) => <option key={n}>{n}</option>)}
-          </select>
-        </Field>
-        <Field label="Tranches d'âge">
-          {/* Plusieurs choix possibles : le menu déroulant ajoute, les pastilles retirent. */}
-          <select
-            className={inputClass}
-            style={inputStyle}
-            value=""
-            onChange={(e) => { if (e.target.value) toggleAge(e.target.value); }}
-          >
-            <option value="">{tranchesAge.length > 0 ? "Ajouter…" : "Choisir…"}</option>
-            {TRANCHES_AGE.filter((a) => !tranchesAge.includes(a)).map((a) => <option key={a}>{a}</option>)}
-          </select>
-          {tranchesAge.length > 0 && (
-            <div className="flex flex-wrap mt-1">
-              {tranchesAge.map((a) => <TagPill key={a} label={a} color={COLORS.brass} onRemove={() => toggleAge(a)} />)}
-            </div>
-          )}
-        </Field>
-      </div>
+      <Field label="Niveau">
+        <select className={inputClass} style={inputStyle} value={level} onChange={(e) => setLevel(e.target.value)}>
+          <option value="">Choisir…</option>
+          {NIVEAUX.map((n) => <option key={n}>{n}</option>)}
+        </select>
+      </Field>
+      {/* Même contrôle et même libellé que les fiches d'exercice et de catégorie (ChoixPublics) :
+          c'est la même question, elle doit se poser de la même façon d'un formulaire à l'autre.
+          Avant, la manche demandait un menu déroulant qui ajoutait et des pastilles qui retiraient —
+          deux gestes différents pour le même choix. */}
+      <Field label="Tranches d'âge (vide = tous publics)">
+        <ChoixPublics value={tranchesAge} onChange={setTranchesAge} />
+      </Field>
       <Field label={`Les ${AMBASSADEUR_MOTS_PAR_MANCHE} mots ou phrases à mimer`}>
         <div>
           {mots.map((m, i) => (
@@ -7245,7 +7238,9 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditMa
   const vivierDuSelecteur = manchesFiltrees.some((m) => !slots.includes(m.id)) ? manchesFiltrees : banque;
   const themesDisponibles = AMBASSADEUR_THEMES_GENERAUX.filter((t) => manchesDispo.some((m) => m.themeGeneral === t));
   const niveauxDisponibles = NIVEAUX.filter((n) => manchesDispo.some((m) => m.level === n));
-  const agesDisponibles = TRANCHES_AGE.filter((a) => manchesDispo.some((m) => (m.tranchesAge || []).includes(a)));
+  const agesDisponibles = RECHERCHE_PAR_AGE_VISIBLE
+    ? TRANCHES_AGE.filter((a) => manchesDispo.some((m) => (m.tranchesAge || []).includes(a)))
+    : [];
   // Deux propositions distinctes, et le THÈME PRIME : demander un thème ratisse tous les niveaux —
   // un ambassadeur « Cinéma » reste un ambassadeur Cinéma —, tandis que demander un niveau reste à
   // l'intérieur du thème choisi s'il y en a un. C'est le niveau qu'on sacrifie, jamais le thème.
@@ -8262,7 +8257,7 @@ function AmbassadeurPlanCard({ data, mancheIds, onChange, currentUser, isAdmin, 
     // La tranche d'âge du cours s'applique d'abord : on ne pioche pas une manche réservée aux
     // adultes pour un cours d'enfants. Comme ailleurs, une manche sans tranche cochée vaut
     // « tous publics » et reste tirable.
-    const pourCeCours = dispo.filter((m) => convientAuPublicAmbassadeur(m, publicVise));
+    const pourCeCours = RECHERCHE_PAR_AGE_VISIBLE ? dispo.filter((m) => convientAuPublicAmbassadeur(m, publicVise)) : dispo;
     const base = pourCeCours.length >= AMBASSADEUR_MANCHES_PAR_PARTIE ? pourCeCours : dispo;
     const memeNiveau = niveau ? base.filter((m) => m.level === niveau) : [];
     const pool = memeNiveau.length >= AMBASSADEUR_MANCHES_PAR_PARTIE ? memeNiveau : base;
