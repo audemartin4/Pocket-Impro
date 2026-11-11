@@ -2734,7 +2734,7 @@ const TABS = [
 ];
 // Onglets qui relèvent de la Bibliothèque (hub + toutes ses sous-pages) — sert à n'afficher
 // le bouton "Remonter en haut" que sur ces pages-là.
-const LIBRARY_TABS = ["bibliotheque", "exercices", "exercices-crees", "categories", "categories-crees", "spectacles", "spectacles-crees", "ambassadeurs", "ambassadeurs-crees", "ambassadeurs-liste", "plans", "favoris", "moderation", "messages", "mes-messages", "messages-envoyes", "comptes", "valides", "parametres"];
+const LIBRARY_TABS = ["bibliotheque", "exercices", "exercices-crees", "categories", "categories-crees", "spectacles", "spectacles-crees", "ambassadeurs", "ambassadeurs-crees", "ambassadeurs-liste", "plans", "spectacles-enregistres", "favoris", "moderation", "messages", "mes-messages", "messages-envoyes", "comptes", "valides", "parametres"];
 
 /* Bouton "← Bibliothèque" (ou autre cible), en haut à gauche des sous-pages de la Bibliothèque —
    même style visuel que les BackBtn internes utilisés pour la navigation par famille/tag. */
@@ -3141,6 +3141,7 @@ export default function ImproApp() {
         {tab === "ambassadeurs-liste" && <AmbassadeursTab data={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} brouillon={ambassadeurBrouillon} setBrouillon={setAmbassadeurBrouillon} catalogue />}
         {tab === "entrainement" && <EntrainementTab data={publicData} />}
         {tab === "plans" && <PlansTab data={publicData} allData={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} />}
+        {tab === "spectacles-enregistres" && <PlansTab section="spectacles" data={publicData} allData={data} update={update} setTab={setTab} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} />}
         {tab === "moderation" && <ModerationTab data={data} update={update} setTab={setTab} isAdmin={isAdmin} />}
         {tab === "messages" && <MessagesTab data={data} update={update} setTab={setTab} isAdmin={isAdmin} />}
         {tab === "comptes" && <ComptesTab data={data} update={update} isAdmin={isAdmin} setTab={setTab} />}
@@ -4276,7 +4277,7 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
   // ci-dessous, à conserver si on ajoute une tuile.
   const stats = [
     { label: "Plans de cours enregistrés", n: mesPlans(data.coursePlans, currentUser).length, icon: ClipboardList, tab: "plans" },
-    { label: "Spectacles enregistrés", n: mesPlans(data.spectaclePlans, currentUser).length, icon: Theater, tab: "plans" },
+    { label: "Spectacles enregistrés", n: mesPlans(data.spectaclePlans, currentUser).length, icon: Theater, tab: "spectacles-enregistres" },
     { label: "Exercices créés", n: data.exercises.filter((e) => e.creatorUsername === currentUser).length, icon: Users, tab: "exercices-crees" },
     { label: "Catégories créées", n: data.categories.filter((c) => c.creatorUsername === currentUser).length, icon: Tag, tab: "categories-crees" },
     ...(CONCEPTS_SPECTACLE_VISIBLES
@@ -12719,7 +12720,7 @@ function PlanSpectacleDetail({ plan, data, update, currentUser }) {
   );
 }
 
-function PlansTab({ data, allData, update, setTab, currentUser, isAdmin, profile }) {
+function PlansTab({ data, allData, update, setTab, currentUser, isAdmin, profile, section = "cours" }) {
   // Plan actuellement déplié (un seul à la fois, la page serait sinon interminable).
   const [ouvertCours, setOuvertCours] = useState(null);
   const [ouvertSpectacle, setOuvertSpectacle] = useState(null);
@@ -12765,12 +12766,18 @@ function PlansTab({ data, allData, update, setTab, currentUser, isAdmin, profile
     return [...ex, ...cats].reduce((s, it) => s + Number(plan.durationsById?.[it.id] ?? it.duration ?? 5), 0) + DEBRIEF_MIN;
   };
 
+  /* Deux pages depuis le 2026-11-11, et non plus deux sections l'une sous l'autre : préparer un
+     cours et monter un spectacle sont deux moments séparés, et la liste de l'un n'a rien à faire
+     sous celle de l'autre quand on vient chercher la sienne. Le composant reste commun — mêmes
+     cartes, même export PDF, même corbeille —, `section` choisit laquelle des deux s'affiche. */
+  const spectacles = section === "spectacles";
+
   return (
     <div>
       {setTab && <LibraryBackBtn onClick={() => setTab("bibliotheque")} />}
-      <SectionHeader icon={ClipboardList} title="Plans de cours" subtitle="Retrouve, ajuste et exporte les plans enregistrés. Touche un plan pour l'ouvrir." />
-      {coursePlans.length === 0 && <Empty text="Aucun plan de cours enregistré pour l'instant." />}
-      {coursePlans.map((plan) => {
+      {!spectacles && <SectionHeader icon={ClipboardList} title="Plans de cours" subtitle="Retrouve, ajuste et exporte les plans de cours enregistrés. Touche un plan pour l'ouvrir." />}
+      {!spectacles && coursePlans.length === 0 && <Empty text="Aucun plan de cours enregistré pour l'instant." />}
+      {!spectacles && coursePlans.map((plan) => {
         const ouvert = ouvertCours === plan.id;
         return (
           <IndexCard key={plan.id}>
@@ -12819,9 +12826,9 @@ function PlansTab({ data, allData, update, setTab, currentUser, isAdmin, profile
         );
       })}
 
-      <SectionHeader icon={Theater} title="Spectacles enregistrés" subtitle="Les déroulés de spectacle que tu as sauvegardés. Touche un spectacle pour l'ouvrir." />
-      {spectaclePlans.length === 0 && <Empty text="Aucun spectacle enregistré pour l'instant." />}
-      {spectaclePlans.map((plan) => {
+      {spectacles && <SectionHeader icon={Theater} title="Spectacles enregistrés" subtitle="Les déroulés de spectacle que tu as sauvegardés. Touche un spectacle pour l'ouvrir." />}
+      {spectacles && spectaclePlans.length === 0 && <Empty text="Aucun spectacle enregistré pour l'instant." />}
+      {spectacles && spectaclePlans.map((plan) => {
         const ouvert = ouvertSpectacle === plan.id;
         return (
           <IndexCard key={plan.id}>
