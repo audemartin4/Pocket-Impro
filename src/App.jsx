@@ -6497,6 +6497,9 @@ const AMBASSADEUR_EMBARGO_JOURS = 14;
 const mancheOuverteALaCommunauteLe = (m) =>
   m.creatorUsername && m.createdAt ? m.createdAt + AMBASSADEUR_EMBARGO_JOURS * 24 * 3600 * 1000 : 0;
 const mancheSousEmbargo = (m) => Date.now() < mancheOuverteALaCommunauteLe(m);
+// Une manche « déjà dans la bibliothèque » : partagée, validée, sortie d'embargo — donc visible de
+// toute la troupe, maintenant. À distinguer de mancheVisiblePar(), qui répond pour UNE personne.
+const mancheDansLaBibliotheque = (m) => !!m && !m.prive && !m.pending && !m.rejected && !mancheSousEmbargo(m);
 // Le titre (champ `theme`) est facultatif : partout où une manche s'affiche par son nom, il faut un
 // repli, sinon la carte, le sélecteur ou le PDF montrent une ligne vide.
 const titreManche = (m) => (m && m.theme) || "Manche sans titre";
@@ -7061,6 +7064,10 @@ function AmbassadeurMancheForm({ initial, data, onSave, onCancel, saveLabel = "E
   const phraseEmbargo = delaiOuverture
     ? `elle ne sera visible par la communauté que ${delaiOuverture}, afin d'éviter les risques de triches, parce que les improvisateurs sont des filous !`
     : "elle sera visible par la communauté aussitôt.";
+  // Sur une manche déjà en bibliothèque, toute cette note parle d'une mise en ligne qui a eu lieu :
+  // elle n'apprend plus rien et fait douter de l'état de la manche. L'interrupteur de partage, lui,
+  // reste — on doit pouvoir la retirer de la bibliothèque.
+  const dejaDansLaBibliotheque = mancheDansLaBibliotheque(initial);
 
   const setMot = (i, v) => setMots((prev) => prev.map((m, j) => (j === i ? v : m)));
   // Seuls les mots sont obligatoires : ce sont eux qu'on mime. Le thème, le titre, le niveau et les
@@ -7128,11 +7135,13 @@ function AmbassadeurMancheForm({ initial, data, onSave, onCancel, saveLabel = "E
       {peutPartager && (
         <>
           <LigneOuiNon premiere label="Partager cette manche avec la communauté" value={partage} onChange={setPartage} />
-          <p className="text-xs mb-2 italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-            {partage
-              ? `Si ta manche est validée, ${phraseEmbargo}`
-              : `Elle restera visible de toi seul(e), et ne passera pas par la modération, mais si tu la partages et qu'elle est validée par la modération, ${phraseEmbargo}`}
-          </p>
+          {!dejaDansLaBibliotheque && (
+            <p className="text-xs mb-2 italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+              {partage
+                ? `Si ta manche est validée, ${phraseEmbargo}`
+                : `Elle restera visible de toi seul(e), et ne passera pas par la modération, mais si tu la partages et qu'elle est validée par la modération, ${phraseEmbargo}`}
+            </p>
+          )}
         </>
       )}
       <div className="flex gap-2 mt-2">
