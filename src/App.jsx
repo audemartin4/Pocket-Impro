@@ -3127,7 +3127,7 @@ export default function ImproApp() {
         {tab === "gen-cours" && <GenerateurCoursTab data={publicData} allData={data} update={update} plan={coursPlan} setPlan={setCoursPlan} currentUser={currentUser} isAdmin={isAdmin} profile={auth.profile} ambassadeurMancheIds={coursAmbassadeurManches} setAmbassadeurMancheIds={setCoursAmbassadeurManches} />}
         {tab === "gen-spectacle" && <GenerateurSpectacleTab data={publicData} allData={data} update={update} plan={spectaclePlan} setPlan={setSpectaclePlan} currentUser={currentUser} />}
         {tab === "gen-echauffement" && <GenerateurEchauffementTab data={publicData} update={update} plan={echauffementPlan} setPlan={setEchauffementPlan} currentUser={currentUser} />}
-        {tab === "gen-idees" && <GenererIdeesTab setTab={setTab} data={publicData} update={update} isAdmin={isAdmin} />}
+        {tab === "gen-idees" && <GenererIdeesTab setTab={setTab} data={publicData} update={update} isAdmin={isAdmin} currentUser={currentUser} />}
         {tab === "bibliotheque" && <BibliothequeTab data={publicData} update={update} setTab={setTab} isAdmin={isAdmin} currentUser={currentUser} goToLibrarySection={goToLibrarySection} />}
         {tab === "exercices" && <ExercicesTab data={data} update={update} isAdmin={isAdmin} currentUser={currentUser} profile={auth.profile} initialSearchQuery={librarySearchSeed} setTab={setTab} />}
         {tab === "exercices-crees" && <ExercicesTab data={data} update={update} isAdmin={isAdmin} currentUser={currentUser} profile={auth.profile} onlyUserCreated setTab={setTab} />}
@@ -3287,7 +3287,7 @@ const IDEE_CATEGORIES = [
   { key: "mots", label: "Mots", list: IDEES_MOTS },
 ];
 
-function GenererIdeesTab({ setTab, data, update, isAdmin }) {
+function GenererIdeesTab({ setTab, data, update, isAdmin, currentUser }) {
   // Un tirage par catégorie, indépendant des autres (objet plutôt qu'une seule valeur) : cliquer sur
   // une catégorie ne doit plus effacer le tirage déjà affiché pour une autre — chacun reste visible
   // jusqu'à ce qu'on le ferme explicitement avec sa croix.
@@ -3298,6 +3298,9 @@ function GenererIdeesTab({ setTab, data, update, isAdmin }) {
   // Un tirage par bouton (Personnage/Lieu/Vocabulaire), indépendant des autres — même principe que
   // "picked" ci-dessus : chacun reste affiché sous son propre bouton jusqu'à sa croix.
   const [universResults, setUniversResults] = useState({}); // { [type]: value }
+  /* La fiche de l'univers choisi, dépliée ou non. Repliée par défaut : on vient ici pour tirer des
+     idées, la fiche est un recours, pas le sujet de la page. */
+  const [ficheUniversOuverte, setFicheUniversOuverte] = useState(false);
 
   // Idées déjà sorties, par catégorie : une proposition ne revient qu'une fois toutes les autres
   // vues. Sans cet historique, le hasard pur ramène la même idée au bout de quelques clics, ce qui
@@ -3458,6 +3461,10 @@ function GenererIdeesTab({ setTab, data, update, isAdmin }) {
     setUniversResults((prev) => ({ ...prev, [type]: value }));
   };
   const dismissUnivers = (type) => setUniversResults((prev) => { const next = { ...prev }; delete next[type]; return next; });
+  const basculerFavoriUnivers = (id) => {
+    if (!currentUser) { showToast("Désolé, il te faut un compte pour enregistrer tes créations !", { type: "notice" }); return; }
+    basculerFavoriCategorie(update, currentUser, id);
+  };
 
   /* Même « + » que dans l'onglet Normal, mais ici l'ajout va dans la FICHE de la catégorie (ses
      lieux, ses archétypes, son lexique) et pas dans une liste à part : c'est de là que le mode
@@ -3687,6 +3694,21 @@ function GenererIdeesTab({ setTab, data, update, isAdmin }) {
               <option value={UNIVERS_ALL_ID}>Tous</option>
             </select>
           </Field>
+          {/* La fiche complète de l'univers choisi, la même que dans la Bibliothèque. C'est elle qui
+              alimente les tirages — lieux, archétypes, lexique — et on vient souvent y relire les
+              thèmes fréquents ou les phrases classiques en pleine préparation ; jusqu'au 2026-11-12
+              il fallait quitter la page pour aller la chercher. Rien sur « Tous » : il n'y a pas
+              d'univers à montrer. */}
+          {selectedUnivers && (
+            <FicheBibliothequeCategorie
+              cat={selectedUnivers}
+              ouverte={ficheUniversOuverte}
+              onToggle={() => setFicheUniversOuverte((o) => !o)}
+              onToggleFavori={() => basculerFavoriUnivers(selectedUnivers.id)}
+            >
+              <DetailCategorie cat={selectedUnivers} ouverte={ficheUniversOuverte} thematiquesList={data.thematiques} />
+            </FicheBibliothequeCategorie>
+          )}
           <div className="flex flex-col gap-3 mt-3 mb-4">
             {UNIVERS_BUTTONS.map((btn) => (
               <div key={btn.key}>
@@ -7352,13 +7374,13 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditMa
       {themesDisponibles.length > 0 && (
         <>
           <div className="grid grid-cols-2 gap-2">
-            <Field label="Thème général (facultatif)">
+            <Field label="Thème général">
               <select className={inputClass} style={inputStyle} value={themeFiltre} onChange={(e) => setThemeFiltre(e.target.value)}>
                 <option value="">Tous les thèmes</option>
                 {themesDisponibles.map((t) => <option key={t}>{t}</option>)}
               </select>
             </Field>
-            <Field label="Niveau (facultatif)">
+            <Field label="Niveau">
               <select className={inputClass} style={inputStyle} value={niveauFiltre} onChange={(e) => setNiveauFiltre(e.target.value)}>
                 <option value="">Tous les niveaux</option>
                 {niveauxDisponibles.map((n) => <option key={n}>{n}</option>)}
@@ -7367,7 +7389,7 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditMa
             {/* Le menu d'âge ne s'affiche que si au moins une manche porte une tranche : tant que la
                 banque n'est pas renseignée, il n'écarterait rien et ferait croire à un tri. */}
             {agesDisponibles.length > 0 && (
-              <Field label="Tranche d'âge (facultatif)">
+              <Field label="Tranche d'âge">
                 <select className={inputClass} style={inputStyle} value={ageFiltre} onChange={(e) => setAgeFiltre(e.target.value)}>
                   <option value="">Tous les âges</option>
                   {agesDisponibles.map((a) => <option key={a}>{a}</option>)}
