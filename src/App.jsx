@@ -7376,13 +7376,13 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditMa
           <div className="grid grid-cols-2 gap-2">
             <Field label="Thème général">
               <select className={inputClass} style={inputStyle} value={themeFiltre} onChange={(e) => setThemeFiltre(e.target.value)}>
-                <option value="">Tous les thèmes</option>
+                <option value="">Tous</option>
                 {themesDisponibles.map((t) => <option key={t}>{t}</option>)}
               </select>
             </Field>
             <Field label="Niveau">
               <select className={inputClass} style={inputStyle} value={niveauFiltre} onChange={(e) => setNiveauFiltre(e.target.value)}>
-                <option value="">Tous les niveaux</option>
+                <option value="">Tous</option>
                 {niveauxDisponibles.map((n) => <option key={n}>{n}</option>)}
               </select>
             </Field>
@@ -7391,7 +7391,7 @@ function AmbassadeurPartieBuilder({ data, manchesDispo, onCreateManche, onEditMa
             {agesDisponibles.length > 0 && (
               <Field label="Tranche d'âge">
                 <select className={inputClass} style={inputStyle} value={ageFiltre} onChange={(e) => setAgeFiltre(e.target.value)}>
-                  <option value="">Tous les âges</option>
+                  <option value="">Tous</option>
                   {agesDisponibles.map((a) => <option key={a}>{a}</option>)}
                 </select>
               </Field>
