@@ -48,6 +48,19 @@ Conséquences pratiques :
   `set` renvoie la valeur réellement écrite, que `useAppData` adopte pour ne pas la réécraser.
 - Un canal **Supabase Realtime** (`postgres_changes` sur `app_data`) resynchronise les autres
   navigateurs. `lastSentRef` sert à ignorer l'écho de sa propre écriture.
+- **Un garde-fou côté base refuse les écritures destructrices** (migration `20261112164500`). La
+  base ne connaît qu'une permission — « ce compte peut modifier la ligne » — et les règles de
+  l'appli se contournent depuis la console ; surtout, un bug du client a déjà effacé trois fois la
+  banque de manches. Le déclencheur `app_data_garde_fou` ne regarde pas qui écrit mais ce que
+  l'écriture ferait : une clé principale qui disparaît, une liste qui perd plus de 5 éléments **et**
+  plus d'un cinquième de sa taille, un document qui n'est plus un objet ou qui perd la moitié de son
+  poids → refus. Il ne s'applique qu'aux écritures du rôle `authenticated` : depuis l'éditeur SQL,
+  rien n'est bridé, pour que réparer reste toujours possible.
+  **Si une opération légitime est refusée** (un grand ménage voulu, une migration de données), c'est
+  normal : la passer en SQL, ou relever le seuil le temps de l'opération. Le message d'erreur dit
+  exactement quelle liste et de combien.
+  Le même déclencheur signe chaque écriture dans `app_data.modifie_par` / `modifie_le` — colonnes
+  sans grant client, une signature qu'on choisit soi-même ne signant rien.
 - Toute donnée métier se modifie via le helper `update((d) => …)`, qui fait un `structuredClone` du
   blob complet — on mute donc librement le clone.
 
