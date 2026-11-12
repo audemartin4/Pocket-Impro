@@ -4214,6 +4214,34 @@ function ResetPasswordScreen({ onDone }) {
   );
 }
 
+/* Traduit une erreur de connexion. Jusqu'au 2026-11-12, les six cas possibles tombaient tous sous
+   la même phrase : « Email ou mot de passe incorrect ». Un métro sans réseau, Supabase qui tousse,
+   trop de tentatives — et la personne lisait que son mot de passe était faux. Elle le changeait
+   alors pour rien, et recommençait. C'est le genre de panne qui fait perdre un compte sans qu'il
+   n'y ait jamais eu le moindre problème de compte.
+   On n'accuse donc les identifiants QUE lorsque la base les a explicitement refusés ; dans tous les
+   autres cas on dit ce qui s'est passé, et on précise que le mot de passe n'y est pour rien. */
+const messageDeConnexion = (error) => {
+  const code = error?.code || "";
+  const texte = (error?.message || "").toLowerCase();
+  const statut = error?.status;
+  if (code === "email_not_confirmed" || texte.includes("email not confirmed")) {
+    return "Confirme d'abord ton adresse mail (lien reçu par email) avant de te connecter.";
+  }
+  if (code === "invalid_credentials" || texte.includes("invalid login credentials")) {
+    return "Email ou mot de passe incorrect.";
+  }
+  if (code === "over_request_rate_limit" || statut === 429 || texte.includes("rate limit")) {
+    return "Trop de tentatives récentes. Attends quelques minutes — ton mot de passe n'est pas en cause.";
+  }
+  /* Réseau coupé : le client n'a reçu aucune réponse, donc aucun statut HTTP. C'est le cas le plus
+     fréquent des cinq, et c'était le plus mal dit. */
+  if (!statut || error?.name === "AuthRetryableFetchError" || texte.includes("fetch") || texte.includes("network") || texte.includes("load failed")) {
+    return "Impossible de joindre Pocket Impro. Vérifie ta connexion et réessaie — ton mot de passe n'est pas en cause.";
+  }
+  return `La connexion n'a pas abouti (${error?.message || "erreur inconnue"}). Ton mot de passe n'est pas en cause : réessaie dans un moment.`;
+};
+
 function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIsAdmin, simulateMember, setSimulateMember, inscriptionDemandee, setInscriptionDemandee }) {
   // `inscriptionDemandee` : on arrive d'un « Crée un compte » posé ailleurs dans l'appli (sous un
   // cours généré, par exemple). On ouvre alors directement le formulaire d'inscription au lieu de
@@ -4366,16 +4394,14 @@ function ProfilTab({ data, update, setTab, currentUser, isAdmin, profile, realIs
     const email = loginEmail.trim();
     if (!email || !password) { setLoginError("Merci de remplir les 2 champs."); return; }
     setLoginBusy(true);
-    const { error } = await signIn({ email, password });
+    const { data: reponse, error } = await signIn({ email, password });
     setLoginBusy(false);
-    if (error) {
-      setLoginError(
-        error.message === "Email not confirmed"
-          ? "Confirme d'abord ton adresse mail (lien reçu par email) avant de te connecter."
-          : "Email ou mot de passe incorrect."
-      );
-      return;
-    }
+    /* Une session est revenue : c'est gagné, quoi que dise l'erreur. Supabase peut renvoyer un
+       avertissement — un mot de passe jugé faible, par exemple — EN MÊME TEMPS qu'une session
+       parfaitement valable. Traiter cet avertissement comme un échec enfermerait dehors quelqu'un
+       qui vient pourtant d'entrer. */
+    if (reponse?.session) { setLoginError(""); setPassword(""); return; }
+    if (error) { setLoginError(messageDeConnexion(error)); return; }
     setLoginError("");
     setPassword("");
   };
