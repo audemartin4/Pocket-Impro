@@ -3861,6 +3861,10 @@ function BibliothequeTab({ data, update, setTab, isAdmin, currentUser, goToLibra
 
   const [editingExerciseId, setEditingExerciseId] = useState(null);
   const [editingCategoryId, setEditingCategoryId] = useState(null);
+  /* La fiche dépliée parmi les résultats de recherche. Une seule à la fois, comme dans les rayons
+     Exercices et Catégories — et ce sont les mêmes cartes qu'eux : chercher « Requin » ici donne
+     désormais la fiche complète, pas un résumé qu'il fallait aller relire ailleurs. */
+  const [ficheOuverte, setFicheOuverte] = useState(null);
   const [toastMsg, showToast] = useToast();
 
   const toggleFavExercise = (id) => {
@@ -3963,29 +3967,17 @@ function BibliothequeTab({ data, update, setTab, isAdmin, currentUser, goToLibra
                 onCancel={() => setEditingExerciseId(null)}
               />
             ) : (
-              <IndexCard key={ex.id}>
-                <div className="flex justify-between items-start">
-                  <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">Exercice · {ex.phase}</span>
-                  <div className="flex gap-1">
-                    <button onClick={() => toggleFavExercise(ex.id)} title="Favori">
-                      <Star size={22} color={ex.favorite ? COLORS.brass : COLORS.textSoft} fill={ex.favorite ? COLORS.brass : "none"} />
-                    </button>
-                    {isAdmin && <Btn small variant="ghost" onClick={() => setEditingExerciseId(ex.id)}>Modifier</Btn>}
-                    {isAdmin && (
-                      <BoutonSupprimer texte onDelete={() => update((d) => { d.exercises = d.exercises.filter((x) => x.id !== ex.id); return d; })} />
-                    )}
-                  </div>
-                </div>
-                <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-lg font-medium">{ex.title}</h3>
-                <p style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }} className="text-sm my-1">{ex.summary}</p>
-                <div className="flex flex-wrap gap-1 text-xs" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
-                  <span>{ex.level}</span>·<span>{texteEffectif(ex)}</span>·<span>{ex.duration} min</span>
-                  {ex.energy && <span>· énergie {ex.energy}</span>}
-                  {ex.material && ex.material !== "Aucun" && <span>· {ex.material}</span>}
-                  {ex.objectives?.length > 0 && <span>· {ex.objectives.join(", ")}</span>}
-                  {ex.thematiques?.length > 0 && <span>· Thématique : {ex.thematiques.join(", ")}</span>}
-                </div>
-              </IndexCard>
+              <FicheBibliothequeExercice
+                key={ex.id}
+                ex={ex}
+                ouverte={ficheOuverte === ex.id}
+                onToggle={() => setFicheOuverte(ficheOuverte === ex.id ? null : ex.id)}
+                onToggleFavori={() => toggleFavExercise(ex.id)}
+                actions={isAdmin ? <Btn small variant="ghost" onClick={() => setEditingExerciseId(ex.id)}>Modifier</Btn> : null}
+                footerRight={isAdmin ? (
+                  <BoutonSupprimer cadre onDelete={() => update((d) => { d.exercises = d.exercises.filter((x) => x.id !== ex.id); return d; })} />
+                ) : null}
+              />
             )
           )}
           {matchedCategories.map((c) =>
@@ -4002,37 +3994,19 @@ function BibliothequeTab({ data, update, setTab, isAdmin, currentUser, goToLibra
                 onCancel={() => setEditingCategoryId(null)}
               />
             ) : (
-              <IndexCard key={c.id}>
-                <div className="flex justify-between items-start">
-                  <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">Catégorie</span>
-                  <div className="flex gap-1">
-                    <button onClick={() => toggleFavCategory(c.id)} title="Favori">
-                      <Star size={22} color={c.favorite ? COLORS.brass : COLORS.textSoft} fill={c.favorite ? COLORS.brass : "none"} />
-                    </button>
-                    {isAdmin && <Btn small variant="ghost" onClick={() => setEditingCategoryId(c.id)}>Modifier</Btn>}
-                    {isAdmin && (
-                      <BoutonSupprimer texte onDelete={() => update((d) => { d.categories = d.categories.filter((x) => x.id !== c.id); return d; })} />
-                    )}
-                  </div>
-                </div>
-                <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-lg font-medium">{c.name}</h3>
-                <p style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }} className="text-sm my-1">{c.summary}</p>
-                <div className="flex flex-wrap gap-1 text-xs mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
-                  <span>{c.durationLabel || `${c.duration || 5} min`}</span>
-                  {c.level && <span>· {c.level}</span>}
-                  {c.playersMin && <span>· {playersLabel(c)}</span>}
-                  {c.energy && <span>· énergie {c.energy}</span>}
-                  {c.material && c.material !== "Aucun" && <span>· {c.material}</span>}
-                </div>
-                <div className="flex flex-wrap">
-                  {c.thematiques.map((t) => <TagPill key={t} label={t} color={themeColor(t, data.thematiques)} />)}
-                </div>
-                {c.archetypes.length > 0 && (
-                  <div className="mt-1 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-                    <span style={{ fontFamily: FONT_MONO }}>Archétypes : </span>{c.archetypes.map((a) => a.name).join(" · ")}
-                  </div>
-                )}
-              </IndexCard>
+              <FicheBibliothequeCategorie
+                key={c.id}
+                cat={c}
+                ouverte={ficheOuverte === c.id}
+                onToggle={() => setFicheOuverte(ficheOuverte === c.id ? null : c.id)}
+                onToggleFavori={() => toggleFavCategory(c.id)}
+                actions={isAdmin ? <Btn small variant="ghost" onClick={() => setEditingCategoryId(c.id)}>Modifier</Btn> : null}
+                footerRight={isAdmin ? (
+                  <BoutonSupprimer cadre onDelete={() => update((d) => { d.categories = d.categories.filter((x) => x.id !== c.id); return d; })} />
+                ) : null}
+              >
+                <DetailCategorie cat={c} ouverte={ficheOuverte === c.id} thematiquesList={data.thematiques} />
+              </FicheBibliothequeCategorie>
             )
           )}
         </div>
@@ -6160,88 +6134,7 @@ function CategoriesTab({ data, update, isAdmin, currentUser, profile, onlyUserCr
           ) : null
         }
       >
-        {(c.publics || []).length > 0 || (c.material && c.material !== "Aucun") || c.creatorTroupe ? (
-          <div className="mt-1 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-            {(c.publics || []).length > 0 && <div>Public : {c.publics.join(", ")}</div>}
-            {c.material && c.material !== "Aucun" && <div>Matériel : {c.material}</div>}
-            {c.creatorTroupe && <div>{c.creatorUsername} — Troupe {c.creatorTroupe}</div>}
-          </div>
-        ) : null}
-        <div className="flex flex-wrap mt-1 empty:hidden">
-          {c.thematiques.map((t) => <TagPill key={t} label={t} color={themeColor(t, data.thematiques)} />)}
-        </div>
-        {(c.objectives || []).filter((o) => o !== "Univers").length > 0 && (
-          <div className="mt-1 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-            <span style={{ fontFamily: FONT_MONO }}>Tags précis : </span>
-            {c.objectives.filter((o) => o !== "Univers").join(" · ")}
-          </div>
-        )}
-        {(c.codes || []).length > 0 && (
-          <div className="mt-1 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-            <span style={{ fontFamily: FONT_MONO }}>Codes de jeu : </span>{c.codes.join(" · ")}
-          </div>
-        )}
-        {c.advice && (
-          <div className="mt-1 text-xs italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
-            {c.advice}
-          </div>
-        )}
-        {/* Pas de liste résumée des archétypes ici : la fiche complète, juste en dessous, les
-            redonne un par un avec leur description. */}
-        {fullSheetId === c.id && (
-          <div className="mt-2 text-sm" style={{ fontFamily: FONT_BODY, color: COLORS.text }}>
-            {c.themesFrequents && (
-              <div className="mb-2">
-                <div style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase mb-1">Thèmes fréquents</div>
-                <p style={{ color: COLORS.textSoft }}>{c.themesFrequents}</p>
-              </div>
-            )}
-            {c.archetypes.length > 0 && (
-              <div className="mb-2">
-                <div style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase mb-1">Archétypes de personnages</div>
-                {c.archetypes.map((a) => (
-                  <p key={a.id} className="mb-1" style={{ color: COLORS.textSoft }}>
-                    <b style={{ color: COLORS.ink }}>{a.name}</b> — {a.desc}
-                  </p>
-                ))}
-              </div>
-            )}
-            {(c.phrasesClassiques || []).length > 0 && (
-              <div className="mb-2">
-                <div style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase mb-1">Phrases classiques</div>
-                {c.phrasesClassiques.map((p, i) => (
-                  <p key={i} className="mb-1 italic" style={{ color: COLORS.textSoft }}>{p}</p>
-                ))}
-              </div>
-            )}
-            {c.universAssocies && (
-              <div className="mb-2">
-                <div style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase mb-1">Univers associés</div>
-                <p style={{ color: COLORS.textSoft }}>{c.universAssocies}</p>
-              </div>
-            )}
-            {c.vocabulaireUnivers && (
-              <div className="mb-2">
-                <div style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase mb-1">Vocabulaire de l'univers</div>
-                {c.vocabulaireUnivers.lexique && (
-                  <p className="mb-1" style={{ color: COLORS.textSoft }}><b style={{ color: COLORS.ink }}>Lexique : </b>{c.vocabulaireUnivers.lexique}</p>
-                )}
-                {c.vocabulaireUnivers.personnages && (
-                  <p className="mb-1" style={{ color: COLORS.textSoft, whiteSpace: "pre-line" }}><b style={{ color: COLORS.ink }}>Noms de personnages : </b>{c.vocabulaireUnivers.personnages}</p>
-                )}
-                {c.vocabulaireUnivers.expressions && (
-                  <p className="mb-1" style={{ color: COLORS.textSoft, whiteSpace: "pre-line" }}><b style={{ color: COLORS.ink }}>Expressions : </b>{c.vocabulaireUnivers.expressions}</p>
-                )}
-                {c.vocabulaireUnivers.styleDiscours && (
-                  <p className="mb-1 font-semibold" style={{ color: COLORS.ink }}>{c.vocabulaireUnivers.styleDiscours}</p>
-                )}
-                {c.vocabulaireUnivers.tips && (
-                  <p className="mb-1 italic" style={{ color: COLORS.textSoft, whiteSpace: "pre-line" }}><b style={{ color: COLORS.ink, fontStyle: "normal" }}>Tips : </b>{c.vocabulaireUnivers.tips}</p>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+        <DetailCategorie cat={c} ouverte={fullSheetId === c.id} thematiquesList={data.thematiques} />
       </FicheBibliothequeCategorie>
     );
 
@@ -9096,6 +8989,99 @@ function DragGhost({ x, y, title, subtitle }) {
         </div>
       </IndexCard>
     </div>
+  );
+}
+
+/* Le détail d'une fiche catégorie : ce que la carte ajoute sous le résumé, et ce qu'elle déplie
+   quand on la touche. Vivait dans CategoriesTab ; extrait le 2026-11-12 pour que la recherche de la
+   Bibliothèque montre exactement la même fiche, et qu'il n'y ait pas deux versions à tenir à jour.
+   L'écran appelant fournit la palette des thématiques, qu'il est seul à connaître. */
+function DetailCategorie({ cat: c, ouverte, thematiquesList }) {
+  return (
+    <>
+    {(c.publics || []).length > 0 || (c.material && c.material !== "Aucun") || c.creatorTroupe ? (
+      <div className="mt-1 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+        {(c.publics || []).length > 0 && <div>Public : {c.publics.join(", ")}</div>}
+        {c.material && c.material !== "Aucun" && <div>Matériel : {c.material}</div>}
+        {c.creatorTroupe && <div>{c.creatorUsername} — Troupe {c.creatorTroupe}</div>}
+      </div>
+    ) : null}
+    <div className="flex flex-wrap mt-1 empty:hidden">
+      {c.thematiques.map((t) => <TagPill key={t} label={t} color={themeColor(t, thematiquesList)} />)}
+    </div>
+    {(c.objectives || []).filter((o) => o !== "Univers").length > 0 && (
+      <div className="mt-1 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+        <span style={{ fontFamily: FONT_MONO }}>Tags précis : </span>
+        {c.objectives.filter((o) => o !== "Univers").join(" · ")}
+      </div>
+    )}
+    {(c.codes || []).length > 0 && (
+      <div className="mt-1 text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+        <span style={{ fontFamily: FONT_MONO }}>Codes de jeu : </span>{c.codes.join(" · ")}
+      </div>
+    )}
+    {c.advice && (
+      <div className="mt-1 text-xs italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+        {c.advice}
+      </div>
+    )}
+    {/* Pas de liste résumée des archétypes ici : la fiche complète, juste en dessous, les
+        redonne un par un avec leur description. */}
+    {ouverte && (
+      <div className="mt-2 text-sm" style={{ fontFamily: FONT_BODY, color: COLORS.text }}>
+        {c.themesFrequents && (
+          <div className="mb-2">
+            <div style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase mb-1">Thèmes fréquents</div>
+            <p style={{ color: COLORS.textSoft }}>{c.themesFrequents}</p>
+          </div>
+        )}
+        {c.archetypes.length > 0 && (
+          <div className="mb-2">
+            <div style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase mb-1">Archétypes de personnages</div>
+            {c.archetypes.map((a) => (
+              <p key={a.id} className="mb-1" style={{ color: COLORS.textSoft }}>
+                <b style={{ color: COLORS.ink }}>{a.name}</b> — {a.desc}
+              </p>
+            ))}
+          </div>
+        )}
+        {(c.phrasesClassiques || []).length > 0 && (
+          <div className="mb-2">
+            <div style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase mb-1">Phrases classiques</div>
+            {c.phrasesClassiques.map((p, i) => (
+              <p key={i} className="mb-1 italic" style={{ color: COLORS.textSoft }}>{p}</p>
+            ))}
+          </div>
+        )}
+        {c.universAssocies && (
+          <div className="mb-2">
+            <div style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase mb-1">Univers associés</div>
+            <p style={{ color: COLORS.textSoft }}>{c.universAssocies}</p>
+          </div>
+        )}
+        {c.vocabulaireUnivers && (
+          <div className="mb-2">
+            <div style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase mb-1">Vocabulaire de l'univers</div>
+            {c.vocabulaireUnivers.lexique && (
+              <p className="mb-1" style={{ color: COLORS.textSoft }}><b style={{ color: COLORS.ink }}>Lexique : </b>{c.vocabulaireUnivers.lexique}</p>
+            )}
+            {c.vocabulaireUnivers.personnages && (
+              <p className="mb-1" style={{ color: COLORS.textSoft, whiteSpace: "pre-line" }}><b style={{ color: COLORS.ink }}>Noms de personnages : </b>{c.vocabulaireUnivers.personnages}</p>
+            )}
+            {c.vocabulaireUnivers.expressions && (
+              <p className="mb-1" style={{ color: COLORS.textSoft, whiteSpace: "pre-line" }}><b style={{ color: COLORS.ink }}>Expressions : </b>{c.vocabulaireUnivers.expressions}</p>
+            )}
+            {c.vocabulaireUnivers.styleDiscours && (
+              <p className="mb-1 font-semibold" style={{ color: COLORS.ink }}>{c.vocabulaireUnivers.styleDiscours}</p>
+            )}
+            {c.vocabulaireUnivers.tips && (
+              <p className="mb-1 italic" style={{ color: COLORS.textSoft, whiteSpace: "pre-line" }}><b style={{ color: COLORS.ink, fontStyle: "normal" }}>Tips : </b>{c.vocabulaireUnivers.tips}</p>
+            )}
+          </div>
+        )}
+      </div>
+    )}
+    </>
   );
 }
 
