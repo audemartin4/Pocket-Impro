@@ -3,7 +3,7 @@ import {
   Sparkles, Shuffle, Clock, BookOpen, Users, Flame, ClipboardList,
   Plus, Trash2, Tag, ChevronRight, ChevronUp, ChevronDown, ChevronLeft, Download,
   Save, X, Check, Home, Theater, Pencil, Library, UserCircle, Pointer, Star, LogIn, LogOut, AlertTriangle, Mail, Eye, EyeOff, Contact,
-  Facebook, Instagram, Play, Hand, MoveVertical, Minus, Heart, User
+  Facebook, Instagram, Play, Hand, MoveVertical, Minus, Heart, User, ShieldCheck
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
 import { APP_DATA_ROW_ID } from "./appDataRow.js";
@@ -11550,6 +11550,27 @@ function MessagesTab({ data, update, setTab, isAdmin }) {
 function ComptesTab({ data, update, isAdmin, setTab }) {
   const [profiles, setProfiles] = useState(null); // null = chargement en cours
   const [error, setError] = useState("");
+  /* Nommer un administrateur ne passe pas par une écriture ordinaire : la colonne `is_admin` est
+     fermée aux comptes connectés depuis le 2026-08-20, parce qu'elle permettait de se promouvoir
+     soi-même depuis la console du navigateur. Elle s'écrit par la fonction `definir_admin`, qui
+     tourne côté base avec les droits du propriétaire et vérifie elle-même qui appelle.
+     `peut_nommer_admin` dit si ce compte-ci a le droit de nommer — un seul l'a. On le demande à la
+     base plutôt que de recopier l'identifiant ici : une seule source de vérité, et pas de bouton
+     affiché à quelqu'un qui se ferait refouler au clic. */
+  const [peutNommer, setPeutNommer] = useState(false);
+  const [nominationEnCours, setNominationEnCours] = useState(null); // id du compte en cours d'appel
+  const [confirmeNomination, setConfirmeNomination] = useState(null); // id armé, en attente de confirmation
+  const [toastMsg, showToast] = useToast();
+
+  const definirAdmin = async (p, valeur) => {
+    setNominationEnCours(p.id);
+    const { error: err } = await supabase.rpc("definir_admin", { cible: p.id, valeur });
+    setNominationEnCours(null);
+    setConfirmeNomination(null);
+    if (err) { showToast(err.message || "La base a refusé cette modification.", { type: "notice" }); return; }
+    setProfiles((prev) => (prev || []).map((x) => (x.id === p.id ? { ...x, is_admin: valeur } : x)));
+    showToast(valeur ? `${p.username} est maintenant Admin ✓` : `${p.username} n'est plus Admin ✓`);
+  };
   const [messageOpenFor, setMessageOpenFor] = useState(null); // username en cours de composition
   const [messageText, setMessageText] = useState("");
   const [messageSentFor, setMessageSentFor] = useState(null);
@@ -11578,9 +11599,10 @@ function ComptesTab({ data, update, isAdmin, setTab }) {
   useEffect(() => {
     if (!isAdmin) return;
     let cancelled = false;
+    supabase.rpc("peut_nommer_admin").then(({ data: oui }) => { if (!cancelled) setPeutNommer(oui === true); });
     supabase
       .from("profiles")
-      .select("username, troupe")
+      .select("id, username, troupe, is_admin")
       .order("username")
       .then(({ data: rows, error: err }) => {
         if (cancelled) return;
@@ -11601,6 +11623,7 @@ function ComptesTab({ data, update, isAdmin, setTab }) {
 
   return (
     <div>
+      <Toast toast={toastMsg} />
       {setTab && <LibraryBackBtn label="Mon profil" onClick={() => setTab("profil")} />}
       <SectionHeader
         icon={Contact}
@@ -11619,7 +11642,17 @@ function ComptesTab({ data, update, isAdmin, setTab }) {
           <IndexCard key={p.username}>
             <div className="flex items-center justify-between">
               <div>
-                <div style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{p.username}</div>
+                <div className="flex items-center gap-2">
+                  <div style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="font-medium">{p.username}</div>
+                  {p.is_admin && (
+                    <span
+                      className="text-xs px-2 py-0.5 rounded-full"
+                      style={{ fontFamily: FONT_MONO, background: COLORS.accent, color: "#fff" }}
+                    >
+                      Admin
+                    </span>
+                  )}
+                </div>
                 <div style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs uppercase">
                   {p.troupe ? `Troupe ${p.troupe}` : "Sans troupe renseignée"}
                 </div>
@@ -11643,6 +11676,30 @@ function ComptesTab({ data, update, isAdmin, setTab }) {
                 </Btn>
                 {messageSentFor === p.username && (
                   <span className="text-xs ml-2" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>Message envoyé.</span>
+                )}
+                {/* Nommer en deux temps, comme la corbeille : donner les droits d'Admin, c'est
+                    confier la bibliothèque entière — modifier et supprimer n'importe quelle fiche,
+                    valider ou refuser les propositions. Ça ne se fait pas d'un appui distrait. */}
+                {peutNommer && (
+                  <div className="mt-2">
+                    {confirmeNomination === p.id ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs" style={{ fontFamily: FONT_BODY, color: COLORS.text }}>
+                          {p.is_admin
+                            ? `${p.username} ne pourra plus modifier la bibliothèque ni traiter la modération.`
+                            : `${p.username} pourra modifier et supprimer toutes les fiches, et traiter la modération.`}
+                        </span>
+                        <Btn small variant="accent" disabled={nominationEnCours === p.id} onClick={() => definirAdmin(p, !p.is_admin)}>
+                          <Check size={13} /> {nominationEnCours === p.id ? "…" : "Confirmer"}
+                        </Btn>
+                        <Btn small variant="ghost" onClick={() => setConfirmeNomination(null)}><X size={13} /> Annuler</Btn>
+                      </div>
+                    ) : (
+                      <Btn small variant="ghost" onClick={() => setConfirmeNomination(p.id)}>
+                        <ShieldCheck size={13} /> {p.is_admin ? "Retirer les droits Admin" : "Donner les droits Admin"}
+                      </Btn>
+                    )}
+                  </div>
                 )}
               </div>
             ) : (

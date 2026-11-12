@@ -187,6 +187,18 @@ Les fiches créées par la communauté ont des drapeaux `pending` / `rejected`. 
 
 Choisir le mauvais des deux est le piège classique de ce fichier.
 
+### 4 ter. Nommer un administrateur
+
+`is_admin` reste fermée aux comptes connectés (grant de colonne, migration `20260820234319`) : la
+le navigateur n'écrit que username, troupe et ville. Depuis le 2026-11-12, la colonne s'écrit par la
+fonction `public.definir_admin(cible, valeur)`, `security definer`, propriétaire `postgres`, exécutable
+par `authenticated` seulement. Elle refuse tout appelant autre que le compte d'Aude (uid écrit en dur),
+refuse de destituer le dernier administrateur, et écrit une ligne dans `admin_journal` (RLS active,
+aucune policy : invisible côté client).
+`public.peut_nommer_admin()` dit à l'appli s'il faut afficher le bouton — une seule source de vérité,
+pas d'uid recopié dans le front. Écran **Bibliothèque → Comptes**, action en deux temps.
+Un administrateur nommé hérite de la modération, **pas** du pouvoir de nommer.
+
 ### 4 bis. Ce qui appartient à un compte, et pas à la communauté
 
 Le blob est commun : par défaut, tout ce qu'on y écrit s'affiche chez les 23 comptes. Jusqu'au
