@@ -548,10 +548,23 @@ const basculerFavoriCategorie = basculerFavori("categories");
    mais le geste ne les efface que pour lui (`masquePour`), sinon le premier qui range le plan le
    ferait disparaître chez celui qui l'a écrit. Voir `supprimerPlan` dans PlansTab.
    Sans compte, aucun plan : un visiteur n'a pas de « mes plans ». */
+/* Un plan peut être partagé avec d'autres comptes, nommément. C'est né du match, qui se prépare à
+   deux — un improvisateur et un arbitre — chacun chez soi, sans savoir quand l'autre y touche.
+   La personne avec qui on partage voit le plan dans sa propre liste et le modifie comme son auteur ;
+   elle ne peut pas le supprimer, seulement quitter le partage.
+   On partage avec des COMPTES et jamais avec une troupe : le champ troupe est du texte libre, et
+   « Les Idephiles » et « Les idéphiles » y cohabitent déjà comme deux troupes différentes. */
+const partageDuPlan = (p) => p.partageAvec || [];
+const planPartageAvecMoi = (p, currentUser) => !!currentUser && partageDuPlan(p).includes(currentUser);
+/* Signature posée à chaque retouche. C'est elle qui répond à la seule question que se posent deux
+   personnes qui préparent un spectacle chacune de son côté : est-ce que ça a bougé depuis ma
+   dernière visite, et de qui ? */
+const signerPlan = (p, currentUser) => { p.modifiePar = currentUser || ""; p.modifieLe = Date.now(); };
+
 const mesPlans = (liste, currentUser) =>
   (liste || []).filter((p) => {
     if (!currentUser) return false;
-    if (p.creatorUsername) return p.creatorUsername === currentUser;
+    if (p.creatorUsername) return p.creatorUsername === currentUser || partageDuPlan(p).includes(currentUser);
     return !(p.masquePour || []).includes(currentUser);
   });
 
@@ -6532,6 +6545,13 @@ const detailManche = (m) => [m.themeGeneral, m.level, (m.tranchesAge || []).join
 // Valeur interne du rayon « Sans thème » dans le catalogue : un thème général vide voulant déjà dire
 // « tous les rayons », il faut un marqueur distinct.
 const SANS_THEME = "__sans-theme__";
+// "12 novembre à 21h04" : le jour seul ne suffit pas pour « qu'est-ce qui a bougé depuis hier soir ».
+const formatJourHeure = (ts) => {
+  const d = new Date(ts);
+  const memeAnnee = d.getFullYear() === new Date().getFullYear();
+  const jour = d.toLocaleDateString("fr-FR", memeAnnee ? { day: "numeric", month: "long" } : { day: "numeric", month: "long", year: "numeric" });
+  return `${jour} à ${d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }).replace(":", "h")}`;
+};
 // "11 septembre" ; l'année n'apparaît que si elle diffère de l'année en cours (fin décembre).
 const formatJour = (ts) => {
   const d = new Date(ts);
@@ -12258,6 +12278,7 @@ function PlanCoursDetail({ plan, data, allData, update, currentUser, isAdmin, pr
     update((d) => {
       const p = (d.coursePlans || []).find((x) => x.id === planIdRef.current);
       if (!p) return d;
+      signerPlan(p, currentUser);
       const champ = listKey === "cat" ? "categoryIds" : "exerciseIds";
       const liste = [...(p[champ] || [])];
       const nouveaux = reorderArray(positions.map((i) => liste[i]), from, insertAt);
@@ -12265,11 +12286,11 @@ function PlanCoursDetail({ plan, data, allData, update, currentUser, isAdmin, pr
       p[champ] = liste;
       return d;
     });
-  }, [update]);
+  }, [update, currentUser]);
 
   const majPlan = (fn) => update((d) => {
     const p = (d.coursePlans || []).find((x) => x.id === plan.id);
-    if (p) { if (!p.durationsById) p.durationsById = {}; fn(p); }
+    if (p) { if (!p.durationsById) p.durationsById = {}; signerPlan(p, currentUser); fn(p); }
     return d;
   });
   const dureeDe = (item, parDefaut) => plan.durationsById?.[item.id] ?? item.duration ?? parDefaut;
@@ -12564,17 +12585,18 @@ function PlanSpectacleDetail({ plan, data, update, currentUser }) {
     update((d) => {
       const p = (d.spectaclePlans || []).find((x) => x.id === planIdRef.current);
       if (!p) return d;
+      signerPlan(p, currentUser);
       const liste = [...(p.categoryIds || [])];
       const nouveaux = reorderArray(positions.map((i) => liste[i]), from, insertAt);
       positions.forEach((pos, k) => { liste[pos] = nouveaux[k]; });
       p.categoryIds = liste;
       return d;
     });
-  }, [update]);
+  }, [update, currentUser]);
 
   const majPlan = (fn) => update((d) => {
     const p = (d.spectaclePlans || []).find((x) => x.id === plan.id);
-    if (p) { if (!p.durationsById) p.durationsById = {}; if (!p.matchModeById) p.matchModeById = {}; fn(p); }
+    if (p) { if (!p.durationsById) p.durationsById = {}; if (!p.matchModeById) p.matchModeById = {}; signerPlan(p, currentUser); fn(p); }
     return d;
   });
 
@@ -12783,10 +12805,125 @@ function PlanSpectacleDetail({ plan, data, update, currentUser }) {
   );
 }
 
+/* La ligne d'état d'un plan partagé, sous son titre. Trois choses à dire, jamais plus d'une à la
+   fois de trop : avec qui je partage (si je suis l'auteur), qui me l'a partagé (sinon), et ce qui a
+   bougé depuis. La signature ne s'affiche que si c'est quelqu'un d'autre qui a touché au plan —
+   s'afficher à soi-même « modifié par toi » n'apprend rien. */
+function LignePartage({ plan, currentUser }) {
+  const partages = partageDuPlan(plan);
+  const jeSuisLAuteur = plan.creatorUsername === currentUser;
+  const autre = plan.modifiePar && plan.modifiePar !== currentUser && plan.modifieLe;
+  if (!partages.length && !autre) return null;
+  return (
+    <div style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs mt-0.5">
+      {partages.length > 0 && (jeSuisLAuteur
+        ? `Partagé avec ${partages.join(", ")}`
+        : `Partagé par ${plan.creatorUsername}`)}
+      {partages.length > 0 && autre && " · "}
+      {autre && `Modifié par ${plan.modifiePar} le ${formatJourHeure(plan.modifieLe)}`}
+    </div>
+  );
+}
+
+/* Partager un plan, réservé à son auteur. On cherche le pseudo dans `profiles` au lieu d'offrir la
+   liste des comptes : personne n'a à savoir qui est inscrit pour partager avec la personne qu'il
+   connaît. La recherche ignore la casse, pas les accents — un pseudo reste un pseudo. */
+function PartageDuPlan({ plan, cle, currentUser, update, showToast }) {
+  const [ouvert, setOuvert] = useState(false);
+  const [pseudo, setPseudo] = useState("");
+  const [occupe, setOccupe] = useState(false);
+  const partages = partageDuPlan(plan);
+
+  const majCePlan = (fn) => update((d) => {
+    const p = (d[cle] || []).find((x) => x.id === plan.id);
+    if (p) fn(p, d);
+    return d;
+  });
+
+  const ajouter = async () => {
+    const nom = pseudo.trim();
+    if (!nom) return;
+    if (nom.toLowerCase() === (currentUser || "").toLowerCase()) { showToast("Ce plan est déjà le tien.", { type: "notice" }); return; }
+    if (partages.some((x) => x.toLowerCase() === nom.toLowerCase())) { showToast("Déjà partagé avec cette personne.", { type: "notice" }); return; }
+    setOccupe(true);
+    const { data: trouves, error: err } = await supabase.from("profiles").select("username").ilike("username", nom).limit(1);
+    setOccupe(false);
+    if (err) { showToast("Impossible de vérifier ce pseudo pour l'instant.", { type: "notice" }); return; }
+    const compte = trouves && trouves[0];
+    if (!compte) { showToast(`Aucun compte ne s'appelle « ${nom} ».`, { type: "notice" }); return; }
+    const quoi = cle === "coursePlans" ? "le plan de cours" : "le spectacle";
+    const ou = cle === "coursePlans" ? "« Plans de cours »" : "« Spectacles enregistrés »";
+    majCePlan((p, d) => {
+      p.partageAvec = [...(p.partageAvec || []), compte.username];
+      d.messages = d.messages || [];
+      d.messages.push({
+        id: uid(),
+        type: "notif",
+        to: compte.username,
+        troupe: "",
+        text: `🤝 ${currentUser} partage avec toi ${quoi} « ${plan.name} ». Tu le retrouves dans ${ou}, et tu peux le modifier.`,
+        createdAt: Date.now(),
+        seen: false,
+      });
+    });
+    setPseudo("");
+    showToast(`Partagé avec ${compte.username} ✓`);
+  };
+
+  const retirer = (nom) => majCePlan((p) => { p.partageAvec = (p.partageAvec || []).filter((x) => x !== nom); });
+
+  if (!ouvert) {
+    return (
+      <Btn small variant="ghost" onClick={() => setOuvert(true)}>
+        <Users size={13} /> {partages.length > 0 ? `Partagé avec ${partages.length}` : "Partager"}
+      </Btn>
+    );
+  }
+  return (
+    <div className="w-full">
+      <div className="flex items-center justify-between mb-1">
+        <span style={{ fontFamily: FONT_MONO, color: COLORS.accent }} className="text-xs uppercase">Partager</span>
+        <button onClick={() => setOuvert(false)} title="Fermer"><X size={16} color={COLORS.textSoft} /></button>
+      </div>
+      <p className="text-xs mb-2" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+        La personne le verra dans sa propre liste et pourra le modifier. Elle ne peut pas le supprimer.
+      </p>
+      <div className="flex gap-2">
+        <input
+          className={inputClass}
+          style={{ ...inputStyle, flex: 1 }}
+          value={pseudo}
+          onChange={(e) => setPseudo(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") ajouter(); }}
+          placeholder="Pseudo du compte…"
+        />
+        <Btn small variant="accent" disabled={occupe || !pseudo.trim()} onClick={ajouter}>
+          <Check size={13} /> {occupe ? "…" : "Partager"}
+        </Btn>
+      </div>
+      {partages.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {partages.map((nom) => (
+            <span
+              key={nom}
+              className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs"
+              style={{ fontFamily: FONT_BODY, background: "transparent", border: `1px solid ${COLORS.accent}`, color: COLORS.accent }}
+            >
+              {nom}
+              <button onClick={() => retirer(nom)} title={`Ne plus partager avec ${nom}`}><X size={12} /></button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PlansTab({ data, allData, update, setTab, currentUser, isAdmin, profile, section = "cours" }) {
   // Plan actuellement déplié (un seul à la fois, la page serait sinon interminable).
   const [ouvertCours, setOuvertCours] = useState(null);
   const [ouvertSpectacle, setOuvertSpectacle] = useState(null);
+  const [toastMsg, showToast] = useToast();
 
   useEffect(() => {
     if (window.jspdf) return;
@@ -12815,7 +12952,17 @@ function PlansTab({ data, allData, update, setTab, currentUser, isAdmin, profile
      et surtout chez celui qui l'a écrit, qui n'a aucune raison de le perdre parce qu'un inconnu a
      fait le ménage chez lui. */
   const planCommun = (plan) => !plan.creatorUsername;
+  const partageAvecMoi = (plan) => planPartageAvecMoi(plan, currentUser);
+  /* Trois gestes derrière la même corbeille, et c'est voulu : on veut se débarrasser de ce plan-ci,
+     la bonne façon de le faire dépend de ce qu'il est. Sur un plan reçu en partage, se retirer de
+     la liste suffit — l'effacer chez son auteur serait une catastrophe silencieuse. */
   const supprimerPlan = (cle, plan) => update((d) => {
+    if (partageAvecMoi(plan)) {
+      d[cle] = (d[cle] || []).map((x) => (x.id === plan.id
+        ? { ...x, partageAvec: (x.partageAvec || []).filter((n) => n !== currentUser) }
+        : x));
+      return d;
+    }
     if (!planCommun(plan)) { d[cle] = (d[cle] || []).filter((x) => x.id !== plan.id); return d; }
     d[cle] = (d[cle] || []).map((x) => (x.id === plan.id
       ? { ...x, masquePour: [...new Set([...(x.masquePour || []), currentUser])] }
@@ -12837,6 +12984,7 @@ function PlansTab({ data, allData, update, setTab, currentUser, isAdmin, profile
 
   return (
     <div>
+      <Toast toast={toastMsg} />
       {/* Retour vers le profil, d'où l'on vient : ces deux pages ne contiennent que les plans du
           compte, elles ne sont listées nulle part dans la Bibliothèque. Même règle que « Exercices
           créés » et « Catégories créées ». */}
@@ -12854,6 +13002,7 @@ function PlansTab({ data, allData, update, setTab, currentUser, isAdmin, profile
                   {(plan.exerciseIds || []).length} exercice(s) · {(plan.categoryIds || []).length} catégorie(s) · {totalCours(plan)} min
                   {(plan.ambassadeurMancheIds || []).length > 0 ? " · ambassadeur prévu" : ""}
                 </span>
+                <LignePartage plan={plan} currentUser={currentUser} />
               </div>
               <button onClick={() => setOuvertCours(ouvert ? null : plan.id)} title={ouvert ? "Replier" : "Ouvrir"} className="p-1 -m-1 shrink-0">
                 {ouvert ? <ChevronUp size={22} color={COLORS.ink} /> : <ChevronDown size={22} color={COLORS.ink} />}
@@ -12877,13 +13026,18 @@ function PlansTab({ data, allData, update, setTab, currentUser, isAdmin, profile
                 bien qu'un visiteur arrivé sur « #plans » pouvait en effacer un pour tout le monde.
                 Suppression à deux temps, comme partout ailleurs : un seul appui effaçait un plan
                 sans rien demander. */}
+            {plan.creatorUsername === currentUser && (
+              <div className="mt-2">
+                <PartageDuPlan plan={plan} cle="coursePlans" currentUser={currentUser} update={update} showToast={showToast} />
+              </div>
+            )}
             <div className="flex justify-between items-center mt-2">
               <button onClick={() => exportPlan(plan)} title="Télécharger en PDF" className="p-1 -m-1">
                 <Download size={22} color={COLORS.ink} />
               </button>
               {currentUser && (
                 <BoutonSupprimer
-                  titre={planCommun(plan) ? "Retirer ce plan de ma liste" : "Supprimer ce plan"}
+                  titre={partageAvecMoi(plan) ? "Quitter ce partage" : planCommun(plan) ? "Retirer ce plan de ma liste" : "Supprimer ce plan"}
                   onDelete={() => supprimerPlan("coursePlans", plan)}
                 />
               )}
@@ -12904,19 +13058,25 @@ function PlansTab({ data, allData, update, setTab, currentUser, isAdmin, profile
                 <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs">
                   {plan.format} · {plan.duree} min · {(plan.categoryIds || []).length} catégorie(s)
                 </span>
+                <LignePartage plan={plan} currentUser={currentUser} />
               </div>
               <button onClick={() => setOuvertSpectacle(ouvert ? null : plan.id)} title={ouvert ? "Replier" : "Ouvrir"} className="p-1 -m-1 shrink-0">
                 {ouvert ? <ChevronUp size={22} color={COLORS.ink} /> : <ChevronDown size={22} color={COLORS.ink} />}
               </button>
             </div>
             {ouvert && <PlanSpectacleDetail plan={plan} data={data} update={update} currentUser={currentUser} />}
+            {plan.creatorUsername === currentUser && (
+              <div className="mt-2">
+                <PartageDuPlan plan={plan} cle="spectaclePlans" currentUser={currentUser} update={update} showToast={showToast} />
+              </div>
+            )}
             <div className="flex justify-between items-center mt-2">
               <button onClick={() => exportSpectaclePlan(plan)} title="Télécharger en PDF" className="p-1 -m-1">
                 <Download size={22} color={COLORS.ink} />
               </button>
               {currentUser && (
                 <BoutonSupprimer
-                  titre={planCommun(plan) ? "Retirer ce spectacle de ma liste" : "Supprimer ce spectacle"}
+                  titre={partageAvecMoi(plan) ? "Quitter ce partage" : planCommun(plan) ? "Retirer ce spectacle de ma liste" : "Supprimer ce spectacle"}
                   onDelete={() => supprimerPlan("spectaclePlans", plan)}
                 />
               )}

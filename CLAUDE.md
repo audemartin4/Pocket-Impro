@@ -216,6 +216,13 @@ s'affichait chez tout le monde, et le spectacle d'une troupe s'ouvrait chez une 
   fiche telle qu'il l'a reçue, étoile comprise. C'est le piège du mécanisme.
   Poser/retirer une étoile passe par `basculerFavoriExercice` / `basculerFavoriCategorie`, jamais en
   écrivant `favorite` sur une fiche.
+- **Plans partagés** : un plan porte `partageAvec`, une liste de pseudos. Né du match, qui se prépare
+  à deux (un improvisateur, un arbitre), chacun chez soi, sans savoir quand l'autre y touche — d'où
+  `signerPlan()`, appelé dans les quatre points de passage des retouches (`majPlan` et `reordonner`,
+  côté cours et côté spectacle), qui pose `modifiePar`/`modifieLe` et nourrit la ligne « Modifié par X
+  le … ». Le destinataire modifie tout mais ne supprime rien : sa corbeille dit « Quitter ce partage »
+  et le retire de `partageAvec`. On partage avec des COMPTES, jamais avec une troupe : le champ
+  troupe est du texte libre, et « Les Idephiles » / « Les idéphiles » y cohabitent déjà.
 - **Plans enregistrés** : `creatorUsername` à l'enregistrement, `mesPlans()` à la lecture (écran
   « Plans » et compteurs du profil). **Aucune exception pour l'Admin** : un compte sert à s'organiser,
   voir la préparation des autres profs ajouterait du bruit. Les plans d'avant n'ont pas d'auteur (le
