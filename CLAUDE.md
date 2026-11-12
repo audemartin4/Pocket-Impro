@@ -325,15 +325,17 @@ Distinctions à respecter, elles pilotent les générateurs :
   allongeait un menu qui doit rester court. Le nettoyage des données se fait au chargement, sans
   flag `_…V1` — un `some()` suffit, comme pour le niveau « Expert ».
   Côté ambassadeur, la tranche s'appelle `tranchesAge` et vit sur la **manche**, avec la même règle
-  (`convientAuPublicAmbassadeur()` : liste vide = tous publics, ce qui est le cas de 200 manches sur
-  211). Elle se saisit avec le **même `ChoixPublics` et le même libellé** que les fiches d'exercice
+  (`convientAuPublicAmbassadeur()` : liste vide = tous publics — plus aucune manche dans ce cas
+  depuis le 2026-11-12, où les 211 ont été taguées : 211 Adultes, 131 Ados, 101 Enfants). Elle se saisit avec le **même `ChoixPublics` et le même libellé** que les fiches d'exercice
   et de catégorie : c'est la même question, elle se pose pareil partout (avant le 2026-11-11, la
   manche demandait un menu déroulant qui ajoutait et des pastilles qui retiraient — deux gestes
   pour un seul choix).
-  **Tout ce qui s'en sert est en attente derrière `RECHERCHE_PAR_AGE_VISIBLE`** (à `false`), le
-  temps qu'Aude coche les manches : le tri et le filtre du catalogue, le menu « Tranche d'âge » de
-  l'assembleur, et la tranche du cours appliquée par « Piocher un ambassadeur ». Le code est écrit
-  et vérifié ; repasser le drapeau à `true` rallume les trois d'un coup. Le filtre de l'assembleur
+  **Tout ce qui s'en sert tient derrière `RECHERCHE_PAR_AGE_VISIBLE`**, resté à `false` du
+  2026-09-15 au 2026-11-12 le temps qu'Aude coche les manches — sur une banque à peine taguée, un
+  filtre n'aurait presque rien trié tout en laissant croire qu'il triait. Le drapeau est allumé
+  depuis, et couvre : le tri et le filtre du catalogue, le menu « Tranche d'âge » de l'assembleur,
+  et la tranche du cours appliquée par « Piocher un ambassadeur ». Le repasser à `false` éteint les
+  trois d'un coup. Le filtre de l'assembleur
   agit **en amont**, sur la banque (`banque`, d'où dérivent tous les pools), contrairement au thème
   et au niveau qu'une partie trop maigre peut sacrifier — un public, ça ne se sacrifie pas.
 - **Ambassadeur** (jeu de mime) : une **manche** (`ambassadeurManches`) est la brique réutilisable —

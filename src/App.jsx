@@ -316,18 +316,19 @@ const MIN_CARD_DURATION = 2;
 // — sans rien supprimer. Les fiches restent en base, la modération et la page "Validés" de l'Admin
 // continuent de les voir, et repasser cette constante à `true` remet tout en place.
 const CONCEPTS_SPECTACLE_VISIBLES = false;
-// Tranche d'âge côté AMBASSADEUR : tout est écrit et fonctionne, mais rien ne s'affiche tant
-// qu'Aude n'a pas renseigné les âges des manches (11 sur 211 au 2026-11-11). Sur une banque à
-// peine cochée, un filtre ne trierait presque rien tout en laissant croire qu'il trie — et un
-// menu qui ne change rien se retourne contre l'appli. Ce drapeau couvre trois choses :
-//   - le tri et le filtre par âge du catalogue de manches (depuis le 2026-09-15) ;
+// Tranche d'âge côté AMBASSADEUR. Le code était écrit depuis le 2026-09-15 mais resté éteint : sur
+// une banque à peine cochée (11 manches sur 211 au 2026-11-11), un filtre n'aurait presque rien
+// trié tout en laissant croire qu'il triait, et un menu qui ne change rien se retourne contre
+// l'appli. Les 211 manches sont taguées depuis le 2026-11-12 — 211 Adultes, 131 Ados, 101 Enfants,
+// aucune sans tranche —, le drapeau est donc allumé. Il couvre trois choses :
+//   - le tri et le filtre par âge du catalogue de manches ;
 //   - le menu « Tranche d'âge » de l'assembleur « Monter un ambassadeur » ;
 //   - la tranche du cours appliquée par « Piocher un ambassadeur ».
-// Repasser à `true` remet le tout en place d'un coup. Les deux premiers continuent par ailleurs de
-// ne s'afficher que si au moins une manche porte un âge.
-// Rien à voir avec les tranches d'âge des EXERCICES et CATÉGORIES (champ `publics`), elles, bien
-// renseignées et actives dans les trois générateurs.
-const RECHERCHE_PAR_AGE_VISIBLE = false;
+// Le repasser à `false` les éteint toutes les trois d'un coup. Les deux premiers ne s'affichent de
+// toute façon que si au moins une manche porte un âge.
+// Rien à voir avec les tranches d'âge des EXERCICES et CATÉGORIES (champ `publics`), elles aussi
+// actives dans les trois générateurs.
+const RECHERCHE_PAR_AGE_VISIBLE = true;
 const SECTIONS_EXERCICE = ["Échauffement", "Pré-impro", "Impro"];
 const FORMATS_JEU = ["Solo simultané", "En groupe simultané", "Tour à tour avec spectateur", "En cercle", "Déambulation"];
 
