@@ -189,7 +189,7 @@ Choisir le mauvais des deux est le piège classique de ce fichier.
 
 ### 4 ter. Nommer un administrateur
 
-`is_admin` reste fermée aux comptes connectés (grant de colonne, migration `20260820234319`) : la
+`is_admin` reste fermée aux comptes connectés (grant de colonne, migration `20260820234319`) :
 le navigateur n'écrit que username, troupe et ville. Depuis le 2026-11-12, la colonne s'écrit par la
 fonction `public.definir_admin(cible, valeur)`, `security definer`, propriétaire `postgres`, exécutable
 par `authenticated` seulement. Elle refuse tout appelant autre que le compte d'Aude (uid écrit en dur),
