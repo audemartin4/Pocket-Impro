@@ -12991,6 +12991,12 @@ function PlansTab({ data, allData, update, setTab, currentUser, isAdmin, profile
       {setTab && <LibraryBackBtn label="Mon profil" onClick={() => setTab("profil")} />}
       {!spectacles && <SectionHeader icon={ClipboardList} title="Plans de cours" subtitle="Retrouve, ajuste et exporte les plans de cours enregistrés. Touche un plan pour l'ouvrir." />}
       {!spectacles && coursePlans.length === 0 && <Empty text="Aucun plan de cours enregistré pour l'instant." />}
+      {!spectacles && coursePlans.length > 0 && (
+        <p className="text-xs mb-3 italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+          Tu prépares un cours à plusieurs ? « Partager » l'ouvre à quelqu'un de ta troupe : le plan
+          apparaît dans sa liste à elle, et vous le construisez tous les deux, chacun quand vous pouvez.
+        </p>
+      )}
       {!spectacles && coursePlans.map((plan) => {
         const ouvert = ouvertCours === plan.id;
         return (
@@ -13048,6 +13054,13 @@ function PlansTab({ data, allData, update, setTab, currentUser, isAdmin, profile
 
       {spectacles && <SectionHeader icon={Theater} title="Spectacles enregistrés" subtitle="Les déroulés de spectacle que tu as sauvegardés. Touche un spectacle pour l'ouvrir." />}
       {spectacles && spectaclePlans.length === 0 && <Empty text="Aucun spectacle enregistré pour l'instant." />}
+      {spectacles && spectaclePlans.length > 0 && (
+        <p className="text-xs mb-3 italic" style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }}>
+          Un match se monte à deux ? « Partager » ouvre le déroulé à quelqu'un de ta troupe —
+          l'arbitre, par exemple : il le retrouve dans sa liste et l'enrichit quand il peut, et tu
+          vois d'un coup d'œil ce qu'il a changé depuis ta dernière visite.
+        </p>
+      )}
       {spectacles && spectaclePlans.map((plan) => {
         const ouvert = ouvertSpectacle === plan.id;
         return (
