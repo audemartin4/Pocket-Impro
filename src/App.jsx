@@ -5207,6 +5207,9 @@ function ExercicesTab({ data, update, isAdmin, currentUser, profile, onlyUserCre
       pending: !isAdmin,
       creatorUsername: isAdmin ? "" : (currentUser || ""),
       creatorTroupe: !isAdmin && showTroupeOnCard && profile?.troupe ? profile.troupe : "",
+      // Date de proposition : en modération, « reçu il y a trois semaines » ne se lit nulle part
+      // sans elle. Les fiches d'avant le 2026-11-23 n'en ont pas, l'écran s'en passe alors.
+      createdAt: Date.now(),
       approvalSeen: isAdmin,
     };
   };
@@ -6115,6 +6118,8 @@ function CategoriesTab({ data, update, isAdmin, currentUser, profile, onlyUserCr
       pending: !isAdmin,
       creatorUsername: isAdmin ? "" : (currentUser || ""),
       creatorTroupe: !isAdmin && showTroupeOnCard && profile?.troupe ? profile.troupe : "",
+      // Voir stampNewExercise : la date sert à la modération.
+      createdAt: Date.now(),
       approvalSeen: isAdmin,
     };
   };
@@ -8965,7 +8970,7 @@ function FicheBibliothequeExercice({ ex, ouverte, onToggle, onToggleFavori, aver
     <IndexCard onClick={onToggle} style={{ cursor: "pointer" }}>
       <div className="flex items-start justify-between gap-2">
         <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-lg font-semibold leading-snug">{ex.title}</h3>
-        <CoinTitre star={<EtoileFavori actif={ex.favorite} onToggle={onToggleFavori} />} />
+        <CoinTitre star={onToggleFavori ? <EtoileFavori actif={ex.favorite} onToggle={onToggleFavori} /> : null} />
       </div>
       {/* Même repli que sur les cartes de programme : sans famille d'objectifs, la section de
           bibliothèque prend sa place, pour que toutes les cartes d'une liste aient la même hauteur. */}
@@ -9011,7 +9016,7 @@ function FicheBibliothequeCategorie({ cat, ouverte, onToggle, onToggleFavori, av
     <IndexCard onClick={onToggle} style={{ cursor: "pointer" }}>
       <div className="flex items-start justify-between gap-2">
         <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-lg font-semibold leading-snug">{cat.name}</h3>
-        <CoinTitre star={<EtoileFavori actif={cat.favorite} onToggle={onToggleFavori} />} />
+        <CoinTitre star={onToggleFavori ? <EtoileFavori actif={cat.favorite} onToggle={onToggleFavori} /> : null} />
       </div>
       <SousTitreCarte>{(cat.tags || []).join(" · ")}</SousTitreCarte>
       {cat.pending && (
@@ -11325,7 +11330,26 @@ function EntrainementTab({ data }) {
 
 
 /* ---------- Modération : exercices et catégories proposés par la communauté ---------- */
+/* Qui a proposé cette fiche, et quand. Sur la carte publique l'auteur n'apparaît que s'il a choisi
+   d'afficher sa troupe — c'est son droit. En modération il doit TOUJOURS apparaître : on ne valide
+   pas une proposition sans savoir d'où elle vient, ne serait-ce que pour pouvoir en parler à la
+   personne. */
+function LigneProposePar({ item }) {
+  return (
+    <p className="text-xs mb-1" style={{ fontFamily: FONT_MONO, color: COLORS.brass }}>
+      Proposé par {item.creatorUsername || "auteur inconnu"}
+      {item.creatorTroupe ? ` — Troupe ${item.creatorTroupe}` : ""}
+      {item.createdAt ? ` · le ${formatJour(item.createdAt)}` : ""}
+    </p>
+  );
+}
+
 function ModerationTab({ data, update, setTab, isAdmin }) {
+  /* La fiche dépliée, une à la fois. Les cartes de modération sont désormais les mêmes que celles
+     de la bibliothèque : on voit la fiche ENTIÈRE avant de valider — public, objectifs, matériel,
+     format, et pour une catégorie ses archétypes, ses phrases classiques et son vocabulaire
+     d'univers. Jusqu'au 2026-11-23 on validait sur un résumé et cinq chiffres. */
+  const [ficheOuverte, setFicheOuverte] = useState(null);
   const [rejectingExId, setRejectingExId] = useState(null);
   const [rejectingCatId, setRejectingCatId] = useState(null);
   const [rejectingConceptId, setRejectingConceptId] = useState(null);
@@ -11404,29 +11428,31 @@ function ModerationTab({ data, update, setTab, isAdmin }) {
         <>
           <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs uppercase">Exercices ({pendingExercises.length})</span>
           {pendingExercises.map((ex) => (
-            <IndexCard key={ex.id}>
-              <div className="flex justify-between items-start">
-                <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-lg font-medium">{ex.title}</h3>
-                <div className="flex gap-1">
+            <FicheBibliothequeExercice
+              key={ex.id}
+              ex={ex}
+              ouverte={ficheOuverte === ex.id}
+              onToggle={() => setFicheOuverte(ficheOuverte === ex.id ? null : ex.id)}
+              avertissement={
+                <>
+                  <LigneProposePar item={ex} />
+                  {rejectingExId === ex.id && (
+                    <RejectReasonBox
+                      reason={rejectReason}
+                      setReason={setRejectReason}
+                      onConfirm={() => { rejectExercise(ex.id, rejectReason.trim()); setRejectingExId(null); setRejectReason(""); }}
+                      onCancel={() => { setRejectingExId(null); setRejectReason(""); }}
+                    />
+                  )}
+                </>
+              }
+              actions={
+                <>
                   <Btn small variant="ghost" onClick={() => approveExercise(ex.id)}><Check size={13} /> Valider</Btn>
                   <Btn small variant="ghost" onClick={() => { setRejectingExId(ex.id); setRejectReason(""); }}><X size={13} /> Refuser</Btn>
-                </div>
-              </div>
-              {rejectingExId === ex.id && (
-                <RejectReasonBox
-                  reason={rejectReason}
-                  setReason={setRejectReason}
-                  onConfirm={() => { rejectExercise(ex.id, rejectReason.trim()); setRejectingExId(null); setRejectReason(""); }}
-                  onCancel={() => { setRejectingExId(null); setRejectReason(""); }}
-                />
-              )}
-              <p style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }} className="text-sm my-1">{ex.summary}</p>
-              <div className="flex flex-wrap gap-1 mt-1 text-xs" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
-                <span>{ex.level}</span>·<span>{texteEffectif(ex)}</span>·<span>{ex.duration} min</span>
-                {ex.phase && <span>· {ex.phase}</span>}
-                {ex.creatorTroupe && <span>· {ex.creatorUsername} — Troupe {ex.creatorTroupe}</span>}
-              </div>
-            </IndexCard>
+                </>
+              }
+            />
           ))}
         </>
       )}
@@ -11435,31 +11461,33 @@ function ModerationTab({ data, update, setTab, isAdmin }) {
         <>
           <span style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }} className="text-xs uppercase mt-3 block">Catégories ({pendingCategories.length})</span>
           {pendingCategories.map((c) => (
-            <IndexCard key={c.id}>
-              <div className="flex justify-between items-start">
-                <h3 style={{ fontFamily: FONT_DISPLAY, color: COLORS.ink }} className="text-lg font-medium">{c.name}</h3>
-                <div className="flex gap-1">
+            <FicheBibliothequeCategorie
+              key={c.id}
+              cat={c}
+              ouverte={ficheOuverte === c.id}
+              onToggle={() => setFicheOuverte(ficheOuverte === c.id ? null : c.id)}
+              avertissement={
+                <>
+                  <LigneProposePar item={c} />
+                  {rejectingCatId === c.id && (
+                    <RejectReasonBox
+                      reason={rejectReason}
+                      setReason={setRejectReason}
+                      onConfirm={() => { rejectCategory(c.id, rejectReason.trim()); setRejectingCatId(null); setRejectReason(""); }}
+                      onCancel={() => { setRejectingCatId(null); setRejectReason(""); }}
+                    />
+                  )}
+                </>
+              }
+              actions={
+                <>
                   <Btn small variant="ghost" onClick={() => approveCategory(c.id)}><Check size={13} /> Valider</Btn>
                   <Btn small variant="ghost" onClick={() => { setRejectingCatId(c.id); setRejectReason(""); }}><X size={13} /> Refuser</Btn>
-                </div>
-              </div>
-              {rejectingCatId === c.id && (
-                <RejectReasonBox
-                  reason={rejectReason}
-                  setReason={setRejectReason}
-                  onConfirm={() => { rejectCategory(c.id, rejectReason.trim()); setRejectingCatId(null); setRejectReason(""); }}
-                  onCancel={() => { setRejectingCatId(null); setRejectReason(""); }}
-                />
-              )}
-              <p style={{ fontFamily: FONT_BODY, color: COLORS.textSoft }} className="text-sm my-1">{c.summary}</p>
-              <div className="flex flex-wrap items-center gap-2 text-xs" style={{ fontFamily: FONT_MONO, color: COLORS.textSoft }}>
-                <span>{c.durationLabel || `${c.duration || 5} min`}</span>
-                {c.level && <span>· {c.level}</span>}
-                {c.playersMin && <span>· {playersLabel(c)}</span>}
-                {c.material && c.material !== "Aucun" && <span>· {c.material}</span>}
-                {c.creatorTroupe && <span>· {c.creatorUsername} — Troupe {c.creatorTroupe}</span>}
-              </div>
-            </IndexCard>
+                </>
+              }
+            >
+              <DetailCategorie cat={c} ouverte={ficheOuverte === c.id} thematiquesList={data.thematiques} />
+            </FicheBibliothequeCategorie>
           ))}
         </>
       )}
