@@ -10358,6 +10358,49 @@ function computeSpectacleSchedule(firstDurations, secondDurations, entracteOn, s
   return { firstTimes, secondTimes, entracteStart, salutStart: cursor, stageWarmupStart, introStart };
 }
 
+/* Quelle catégorie proposer pour remplacer celle d'un créneau de spectacle. Partagée par le
+   générateur et par un spectacle enregistré : « Aléatoire » doit tirer pareil des deux côtés.
+
+   Le créneau d'ouverture était le point noir. Seules 7 catégories sur 127 sont cochées « peut
+   ouvrir un spectacle » : sans mémoire, trois appuis sur Aléatoire ramenaient fatalement les mêmes,
+   en boucle. On tient donc `dejaVus`, la liste de ce qui a déjà été proposé, et on descend les
+   priorités une à une :
+     1. les ouvreuses — ou les clôturantes — pas encore vues ;
+     2. tout le reste de la bibliothèque pas encore vu : c'est le repli voulu, une fois le petit
+        vivier épuisé mieux vaut une catégorie quelconque qu'une redite ;
+     3. si vraiment tout a été vu, on repart d'une ardoise neuve plutôt que de laisser le bouton
+        sans effet.
+   `dejaVus` est un Set que la fonction complète elle-même : l'appelant n'a qu'à le garder d'un clic
+   à l'autre et à le vider quand il génère un nouveau spectacle. */
+const tirerCategorieSpectacle = (categories, { used, dejaVus, creneau, niveau, format }) => {
+  const NIVEAUX_SPECTACLE = ["Débutant", "Confirmé", "Avancé"];
+  let base = (categories || []).filter((c) => !used.has(c.id));
+  /* « Best-of » est un medley de ce qui vient d'être joué : elle n'a de sens qu'en clôture, et
+     l'appli ne doit jamais la proposer ailleurs, même par Aléatoire. */
+  if (creneau !== "cloture") base = base.filter((c) => c.name !== "Best-of");
+  if (niveau) {
+    const i = NIVEAUX_SPECTACLE.indexOf(niveau);
+    base = base.filter((c) => !c.level || NIVEAUX_SPECTACLE.indexOf(c.level) === -1 || Math.abs(NIVEAUX_SPECTACLE.indexOf(c.level) - i) <= 1);
+  }
+  if (base.length === 0) return null;
+
+  // Tour complet : on relance un cycle au lieu de ne plus rien proposer.
+  if (base.every((c) => dejaVus.has(c.id))) dejaVus.clear();
+
+  const neuves = (liste) => liste.filter((c) => !dejaVus.has(c.id));
+  const specialistes = creneau === "ouverture" ? base.filter((c) => c.canOpenShow)
+    : creneau === "cloture" ? base.filter((c) => c.canCloseShow)
+    : [];
+  const source = [neuves(specialistes), neuves(base)].find((p) => p.length > 0) || base;
+
+  // Le format reste un filtre souple, appliqué en dernier : on préfère une catégorie du bon format,
+  // mais on ne renonce pas à tirer s'il n'y en a plus.
+  const parFormat = format ? source.filter((c) => c.showTypes?.includes(format)) : [];
+  const pick = pickRandom(parFormat.length > 0 ? parFormat : source);
+  if (pick) dejaVus.add(pick.id);
+  return pick;
+};
+
 function buildSpectacle(categories, { format, niveau, duree, entracteOn, integrerFavoris, publicVise, stageWarmupMinutes = 0 }) {
   // Le niveau coché est prioritaire, mais un niveau adjacent reste autorisé (Débutant coché →
   // Confirmé accepté, pas Avancé ; Avancé coché → Confirmé accepté, pas Débutant). Les fiches
@@ -10627,6 +10670,9 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
     const stageWarmup = commencerEchauffementScene ? pickRandom(stageWarmupPool) : null;
     const built = buildSpectacle(data.categories, { format, niveau, duree, entracteOn, integrerFavoris, publicVise, stageWarmupMinutes: stageWarmup?.duration || 0 });
     const withMode = (arr) => arr.map((c) => ({ ...c, matchMode: "Mixte" }));
+    // Nouveau spectacle, ardoise neuve : les catégories déjà vues sur le précédent n'ont pas à
+    // être écartées de celui-ci.
+    vusRef.current = new Set();
     setResult({ ...built, first: withMode(built.first), second: withMode(built.second), stageWarmup });
   };
 
@@ -10669,29 +10715,21 @@ function GenerateurSpectacleTab({ data, allData, update, plan, setPlan, currentU
     setResult(copy);
   };
   const NIVEAU_ORDER = ["Débutant", "Confirmé", "Avancé"];
+  /* Ce qu'« Aléatoire » a déjà proposé, tous créneaux confondus, depuis la génération en cours.
+     Sans cette mémoire, le créneau d'ouverture tournait en rond sur six ou sept catégories. */
+  const vusRef = useRef(new Set());
   const replaceCat = (part, idx) => {
     if (!result) return;
     const used = new Set([...result.first, ...result.second].map((c) => c.id));
-    // "Best-of" ne doit jamais être proposée par l'appli ailleurs qu'en clôture de spectacle ou
-    // d'entracte (dernière catégorie de la 2e partie s'il y a un entracte, ou dernière catégorie
-    // de l'unique partie sinon) — jamais sur un autre créneau, même via "Aléatoire".
+    /* Le dernier créneau du spectacle (2e partie s'il y a un entracte, partie unique sinon) est le
+       seul où « Best-of » a un sens, et celui où l'on privilégie les catégories de clôture. */
     const isCloserSlot = part === "second"
       ? entracteOn && idx === result.second.length - 1
       : !entracteOn && idx === result.first.length - 1;
-    let pool = data.categories.filter((c) => !used.has(c.id) && (isCloserSlot || c.name !== "Best-of"));
-    if (niveau) {
-      const niveauIdx = NIVEAU_ORDER.indexOf(niveau);
-      pool = pool.filter((c) => !c.level || NIVEAU_ORDER.indexOf(c.level) === -1 || Math.abs(NIVEAU_ORDER.indexOf(c.level) - niveauIdx) <= 1);
-    }
-    // La toute première catégorie de chaque partie priorise les catégories cochées "peut ouvrir un
-    // spectacle" ; une fois ce vivier épuisé, on retombe sur le reste de la bibliothèque (Best-of
-    // reste de toute façon exclue ici, ce n'est jamais un créneau de clôture).
-    if (idx === 0) {
-      const openerPool = pool.filter((c) => c.canOpenShow);
-      if (openerPool.length > 0) pool = openerPool;
-    }
-    const byFormat = format ? pool.filter((c) => c.showTypes?.includes(format)) : [];
-    const pick = pickRandom(byFormat.length > 0 ? byFormat : pool);
+    const creneau = idx === 0 ? "ouverture" : isCloserSlot ? "cloture" : "milieu";
+    const pick = tirerCategorieSpectacle(data.categories, {
+      used, dejaVus: vusRef.current, creneau, niveau, format,
+    });
     if (!pick) return;
     // On garde le temps réservé pour ce créneau (resserré pour tenir dans la durée du spectacle),
     // plutôt que la durée brute de la fiche tirée, pour ne pas faire dériver le total affiché.
@@ -12700,6 +12738,24 @@ function PlanSpectacleDetail({ plan, data, update, currentUser }) {
     if (avantEntracte && p.entracte) p.entracte.firstCount = (p.entracte.firstCount ?? 0) + 1;
   });
 
+  /* « Aléatoire » sur un spectacle enregistré : même règle que dans le générateur, mémoire comprise
+     (voir tirerCategorieSpectacle). Elle vit le temps où le plan reste ouvert. */
+  const vusRef = useRef(new Set());
+  const creneauDe = (idx) => {
+    const total = (plan.categoryIds || []).length;
+    // Début du spectacle, et début de la seconde partie quand il y a un entracte.
+    if (idx === 0 || (plan.entracte && idx === firstCount)) return "ouverture";
+    if (idx === total - 1) return "cloture";
+    return "milieu";
+  };
+  const tirerAleatoire = (idx) => {
+    const used = new Set(plan.categoryIds || []);
+    const pick = tirerCategorieSpectacle(data.categories, {
+      used, dejaVus: vusRef.current, creneau: creneauDe(idx), niveau: null, format: plan.format,
+    });
+    if (pick) remplacerCategorie(idx, pick);
+  };
+
   const heure = (min) => (schedule && min !== null && min !== undefined ? ` — ${minutesToTime(min)}` : "");
   const carte = (mode, id) => picker && picker.mode === mode && picker.id === id;
   const fermerPicker = () => setPicker(null);
@@ -12739,6 +12795,7 @@ function PlanSpectacleDetail({ plan, data, update, currentUser }) {
           actions={
             modeEdition || plan.format === "Match" ? (
               <div className="flex flex-wrap items-center gap-2">
+                {modeEdition && <Btn small variant="ghost" onClick={() => tirerAleatoire(idx)}>Aléatoire</Btn>}
                 {modeEdition && <Btn small variant="ghost" onClick={() => setPicker({ mode: "replace", id: idx })}>Choisir</Btn>}
                 {plan.format === "Match" && (
                   <SelecteurMatchMode

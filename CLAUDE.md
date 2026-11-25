@@ -294,6 +294,12 @@ Distinctions à respecter, elles pilotent les générateurs :
   deux…) n'étaient tirables nulle part. Ce n'était pas un tri par durée — les non cochées sont même
   en moyenne plus courtes (6,0 min contre 7,3) — mais une irrégularité de saisie du seed.
 - **`canOpenShow` / `canCloseShow`** sur une catégorie : éligible pour ouvrir/terminer un spectacle.
+  Elles sont **rares** — 7 et 14 sur 127 — ce qui en fait un piège pour le bouton « Aléatoire » du
+  créneau d'ouverture : sans mémoire, il tournait en rond sur sept catégories. `tirerCategorieSpectacle()`
+  tient donc la liste de ce qui a déjà été proposé et descend les priorités : les ouvreuses (ou
+  clôturantes) pas encore vues, puis **tout le reste de la bibliothèque** pas encore vu, puis une
+  ardoise neuve. Elle est partagée par le générateur de spectacle et par un spectacle enregistré,
+  qui a le même bouton depuis le 2026-11-25 — « Aléatoire » doit tirer pareil des deux côtés.
 - **`groupe`** = famille d'objectifs (une seule) ; **`objectives`** = tags (plusieurs). La liste
   maîtresse des tags valides est `SEED.objectifs` — l'appli s'attend à ce que les tags viennent de là.
 - **`players` / `playersMax`** : bornes d'effectif d'une fiche d'exercice. `players` est un
