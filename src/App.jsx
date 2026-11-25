@@ -3092,12 +3092,24 @@ export default function ImproApp() {
         {/* Le titre doit tenir sur une seule ligne. À 18 px il mesure 330 px pour 343 px de barre
             sur un écran de 375 px : ça passe, mais de justesse. En dessous, la taille suit la
             largeur de l'écran (≈ 15 px sur un 320 px) plutôt que de repasser à la ligne. */}
-        <div className="flex items-center">
+        {/* Le nom seul, et la troupe en sous-titre. Jusqu'au 2026-11-25 l'en-tête disait « Pocket
+            impro, l'assistant des Idéphiles » sur chaque écran — c'était l'endroit le moins discret
+            de l'appli, et les vingt-deux comptes qui ne sont pas des Idéphiles le lisaient à chaque
+            page. Le lien reste, en petit, là où il ne prend la place de personne.
+            Les deux lignes gardent le corps calculé sur la largeur de l'écran plutôt que de
+            repasser à la ligne : sur un 320 px, le sous-titre tient encore d'un trait. */}
+        <div className="flex flex-col">
           <span
-            style={{ fontFamily: FONT_DISPLAY, color: COLORS.paper, fontSize: "min(1.125rem, calc(5.3vw - 2px))" }}
-            className="font-semibold whitespace-nowrap"
+            style={{ fontFamily: FONT_DISPLAY, color: COLORS.paper, fontSize: "min(1.25rem, calc(6vw - 2px))" }}
+            className="font-semibold whitespace-nowrap leading-tight"
           >
-            Pocket impro, l'assistant des Idéphiles
+            Pocket Impro
+          </span>
+          <span
+            style={{ fontFamily: FONT_MONO, color: COLORS.brass, fontSize: "min(0.6875rem, calc(2.85vw - 1px))" }}
+            className="whitespace-nowrap"
+          >
+            l'assistant des improvisateurs, par les Idéphiles
           </span>
         </div>
         <div className="flex gap-1 mt-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
