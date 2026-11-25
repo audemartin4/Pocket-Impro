@@ -1,0 +1,13 @@
+# En-têtes HTTP servis par Netlify (ce fichier est copié tel quel à la racine du site).
+#
+# Netlify ne connaît pas l'extension .webmanifest : il sert le fichier en
+# `application/octet-stream`, et Chrome refuse alors parfois de l'installer comme appli. On lui
+# donne le type correct à la main. Constaté en ligne le 2026-11-25 : sans cette règle, la réponse
+# était bien `application/octet-stream`.
+#
+# Rien d'autre ici, et surtout pas de cache long sur les icônes : leurs noms ne changent pas d'un
+# déploiement à l'autre, donc un `max-age` d'un an voudrait dire « je change l'icône et personne ne
+# la voit ». Le comportement par défaut de Netlify — revalider à chaque visite — coûte une requête
+# vide et reste juste.
+/manifest.webmanifest
+  Content-Type: application/manifest+json; charset=utf-8
