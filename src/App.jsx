@@ -3099,17 +3099,35 @@ export default function ImproApp() {
             Les deux lignes gardent le corps calculé sur la largeur de l'écran plutôt que de
             repasser à la ligne : sur un 320 px, le sous-titre tient encore d'un trait. */}
         <div className="flex flex-col">
+          {/* Le nom, la phrase et la troupe. Sur un écran assez large ils tiennent sur deux
+              lignes — « Pocket Impro » et sa phrase côte à côte, la troupe dessous ; sur un
+              téléphone la phrase passe à la ligne et on en compte trois.
+              C'est un choix contraint, pas une préférence : sur 343 px utiles (un écran de 375),
+              un titre lisible prend 130 px, il en reste 210 pour une phrase de trente caractères.
+              La tenir sur la même ligne imposait de la descendre à 10,5 px — trop petit pour une
+              phrase qu'on lit vraiment. On préfère donc trois lignes confortables à deux lignes
+              illisibles, et le retour à la ligne automatique s'en charge au pixel près.
+              Chaque fragment garde son whitespace-nowrap : la ligne se casse entre deux groupes,
+              jamais au milieu de l'un d'eux. */}
+          <div className="flex flex-wrap items-baseline gap-x-2 leading-tight">
+            <span
+              style={{ fontFamily: FONT_DISPLAY, color: COLORS.paper, fontSize: "min(1.5rem, calc(4.8vw + 7px))" }}
+              className="font-semibold whitespace-nowrap"
+            >
+              Pocket Impro
+            </span>
+            <span
+              style={{ fontFamily: FONT_MONO, color: COLORS.brass, fontSize: "0.8125rem" }}
+              className="whitespace-nowrap"
+            >
+              l'assistant des improvisateurs
+            </span>
+          </div>
           <span
-            style={{ fontFamily: FONT_DISPLAY, color: COLORS.paper, fontSize: "min(1.25rem, calc(6vw - 2px))" }}
-            className="font-semibold whitespace-nowrap leading-tight"
-          >
-            Pocket Impro
-          </span>
-          <span
-            style={{ fontFamily: FONT_MONO, color: COLORS.brass, fontSize: "min(0.6875rem, calc(2.85vw - 1px))" }}
+            style={{ fontFamily: FONT_MONO, color: COLORS.brass, fontSize: "0.8125rem" }}
             className="whitespace-nowrap"
           >
-            l'assistant des improvisateurs, par les Idéphiles
+            par les Idéphiles
           </span>
         </div>
         <div className="flex gap-1 mt-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
