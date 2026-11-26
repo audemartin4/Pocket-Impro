@@ -2196,6 +2196,43 @@ function LigneSelect({ label, precision, premiere, surEncart, value, onChange, c
   );
 }
 
+/* Même ligne que LigneSelect, mais pour un réglage qui accepte PLUSIEURS valeurs : le menu ajoute
+   au lieu de remplacer, et les choix s'alignent en pastilles sous la ligne, retirables une à une.
+   Il remplace, sur les écrans de génération, un champ de recherche avec liste déroulante : chercher
+   n'avait aucun intérêt dans une liste de 24 entrées qu'on ne connaît pas par cœur, et surtout ce
+   champ ne ressemblait à aucun autre réglage du formulaire. Les fiches, elles, gardent leur
+   recherche : leurs listes comptent des centaines de tags et on peut y en créer un à la volée.
+   Le menu revient toujours sur sa ligne vide : il ne sert qu'à ajouter, ce sont les pastilles qui
+   montrent l'état. Sa largeur est bornée, sinon le plus long libellé
+   (« Observation, mimétisme et complicité ») chasserait l'étiquette hors de l'écran. */
+function LigneChoixMultiple({ label, precision, premiere, options, selected, onChange, vide = "Aucun", ajouter = "En ajouter un…" }) {
+  const restantes = options.filter((o) => !selected.includes(o)).sort((a, b) => a.localeCompare(b, "fr"));
+  return (
+    <>
+      <LigneReglage label={label} precision={precision} premiere={premiere}>
+        <select
+          className="outline-none focus:ring-2 min-w-0"
+          style={{ ...CHAMP_REGLAGE, width: "auto", maxWidth: "min(56%, 200px)" }}
+          value=""
+          onChange={(e) => { if (e.target.value) onChange([...selected, e.target.value]); }}
+          disabled={restantes.length === 0}
+          aria-label={label}
+        >
+          <option value="">{selected.length > 0 ? ajouter : vide}</option>
+          {restantes.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+      </LigneReglage>
+      {selected.length > 0 && (
+        <div className="flex flex-wrap pt-0.5 pb-1">
+          {selected.map((o) => (
+            <TagPill key={o} label={o} color={COLORS.brass} onRemove={() => onChange(selected.filter((x) => x !== o))} />
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 /* Réglage oui/non : un interrupteur, précédé du mot en clair. La pastille à deux moitiés de la
    maquette prenait la moitié de la largeur de la ligne et laissait croire à deux boutons
    indépendants ; l'interrupteur dit d'un coup d'œil ce qui est activé, et le mot lève le doute sur
@@ -10053,12 +10090,14 @@ function GenerateurCoursTab({ data, allData, update, goTo, plan, setPlan, curren
           <CompteurReglage label="Nombre de catégories d'impro" value={nbImpro} onChange={setNbImpro} />
         </SectionReglages>
         <SectionReglages derniere>
-          <div className="uppercase" style={{ ...ETIQUETTE_SECTION }}>
-            Objectif pédagogique <span style={{ color: COLORS.textSoft, letterSpacing: "0.06em" }}>(optionnel)</span>
-          </div>
-          {/* Cinq objectifs à l'œil, le reste au défilement : la liste complète poussait le pied
-              du formulaire hors de l'écran sur téléphone. */}
-          <SearchableMultiSelect allOptions={familiesObjectifsWithCustom(data)} selected={objectifs} onChange={setObjectifs} maxVisible={5} />
+          <LigneChoixMultiple
+            premiere
+            label="Objectif pédagogique"
+            precision="optionnel, plusieurs possibles"
+            options={familiesObjectifsWithCustom(data)}
+            selected={objectifs}
+            onChange={setObjectifs}
+          />
         </SectionReglages>
         <PiedFormulaire duree={`${tempsTotal} min`} precision={`dont ${DEBRIEF_MIN} min de feedbacks`}>
           <BoutonCreation onClick={generate}>Créer le cours</BoutonCreation>
@@ -11280,10 +11319,14 @@ function GenerateurEchauffementTab({ data, update, plan, setPlan, currentUser })
           </div>
         </SectionReglages>
         <SectionReglages derniere>
-          <div className="uppercase" style={{ ...ETIQUETTE_SECTION }}>
-            Famille d'objectifs <span style={{ color: COLORS.textSoft, letterSpacing: "0.06em" }}>(optionnel)</span>
-          </div>
-          <SearchableMultiSelect allOptions={FAMILLES_ECHAUFFEMENT} selected={tags} onChange={setTags} placeholder="Chercher une famille d'objectifs…" />
+          <LigneChoixMultiple
+            premiere
+            label="Famille d'objectifs"
+            precision="optionnel, plusieurs possibles"
+            options={FAMILLES_ECHAUFFEMENT}
+            selected={tags}
+            onChange={setTags}
+          />
         </SectionReglages>
         <PiedFormulaire duree={`${temps} min`}>
           <BoutonCreation onClick={generate}>Créer l'échauffement</BoutonCreation>
